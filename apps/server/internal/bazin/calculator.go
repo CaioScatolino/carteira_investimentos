@@ -1,6 +1,7 @@
 package bazin
 
 import (
+	"carteira_investimentos/server/internal/domain"
 	"errors"
 )
 
@@ -20,4 +21,26 @@ func CalcularMargem(precoAtual float64, precoTeto float64) float64 {
 		return 0
 	}
 	return ((precoTeto - precoAtual) / precoAtual) * 100.0
+}
+
+// AnalisadorBazin implementa domain.Analisador
+type AnalisadorBazin struct {
+	YieldMinimo float64
+}
+
+func Novo(yieldMinimo float64) *AnalisadorBazin {
+	return &AnalisadorBazin{YieldMinimo: yieldMinimo}
+}
+
+func (b *AnalisadorBazin) Nome() string {
+	return "Décio Bazin"
+}
+
+func (b *AnalisadorBazin) Executar(ativo *domain.Ativo) error {
+	teto, err := Calcular(ativo.Dividendos12M, b.YieldMinimo)
+	if err != nil {
+		return err
+	}
+	ativo.PrecoTetoBazin = teto
+	return nil
 }

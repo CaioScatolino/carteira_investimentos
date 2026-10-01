@@ -2,90 +2,84 @@ package main
 
 import (
 	"fmt"
+	"time"
 
 	"carteira_investimentos/server/internal/bazin"
 	"carteira_investimentos/server/internal/domain"
+	"carteira_investimentos/server/internal/fii"
 	"carteira_investimentos/server/internal/graham"
+	"carteira_investimentos/server/internal/lynch"
+	"carteira_investimentos/server/internal/provider"
+	"carteira_investimentos/server/internal/storage"
+	"carteira_investimentos/server/internal/worker"
 )
 
 func main() {
 	fmt.Println("==================================================================")
-	fmt.Println("📊 AUDITORIA B3: SEMÁFORO INTELIGENTE (BAZIN + GRAHAM)")
-	fmt.Println("================================================================")
+	fmt.Println("🚀 PAINEL GERAL DE AUDITORIA B3 (SNAPSHOT CONSOLIDADO)")
+	fmt.Println("==================================================================")
 
-	carteira := []*domain.Ativo{
-		{
-			Ticker:        "PETR4",
-			Classe:        domain.ClasseAcao,
-			PrecoAtual:    38.50,
-			Dividendos12M: 5.20,
-			LPA:           8.10,
-			VPA:           31.40,
-		},
-		{
-			Ticker:        "VALE3",
-			Classe:        domain.ClasseAcao,
-			PrecoAtual:    62.00,
-			Dividendos12M: 4.80,
-			LPA:           7.20,
-			VPA:           42.50,
-		},
-		{
-			Ticker:        "MXRF11",
-			Classe:        domain.ClasseFII,
-			PrecoAtual:    10.15,
-			Dividendos12M: 1.10,
-		},
-		{
-			Ticker:        "CARO3", // Exemplo de ativo esticado/caro
-			Classe:        domain.ClasseAcao,
-			PrecoAtual:    95.00,
-			Dividendos12M: 1.50, // Yield muito baixo (~1.5%)
-			LPA:           2.00,
-			VPA:           15.00,
-		},
+	store := storage.NovoInMemoryStore()
+	provedor := provider.NovoYahooFinanceProvider()
+
+	motores := []domain.Analisador{
+		bazin.Novo(0.06),
+		graham.Novo(),
+		lynch.Novo(),
+		fii.Novo(0.065), // Taxa de referência Tesouro IPCA+: 6.5% a.a.
 	}
 
-	yieldBazin := 0.06 // 6% ao ano
+	sincronizador := worker.NovoMarketSyncWorker(provedor, store, motores, 15*time.Minute)
+	sincronizador.IniciarLoop()
 
-	for _, ativo := range carteira {
-		// 1. Motor Décio Bazin
-		tetoBazin, errBazin := bazin.Calcular(ativo.Dividendos12M, yieldBazin)
-		if errBazin == nil {
-			ativo.PrecoTetoBazin = tetoBazin
-		}
+	todosAtivos := store.ListarTodos()
 
-		// 2. Motor Benjamin Graham (apenas para ações)
-		if ativo.Classe == domain.ClasseAcao {
-			viGraham, errGraham := graham.Calcular(ativo.LPA, ativo.VPA)
-			if errGraham == nil {
-				ativo.ValorGraham = viGraham
-			}
-		}
-
-		// 3. Execução do Semáforo Decisório
-		ativo.AvaliarSemaforo()
-
-		// 4. Formatação Visual do Semáforo
-		var icone string
-		switch ativo.Status {
+	// Separação por categorias do Semáforo
+	var compras, manter, alerta []*domain.Ativo
+	for _, a := range todosAtivos {
+		switch a.Status {
 		case domain.StatusComprarMais:
-			icone = "✅"
+			compras = append(compras, a)
 		case domain.StatusManter:
-			icone = "⚠️"
+			manter = append(manter, a)
 		default:
-			icone = "🚨"
+			alerta = append(alerta, a)
 		}
-
-		fmt.Printf("[%s - %s] Cotação Atual: R$ %.2f\n", ativo.Ticker, ativo.Classe, ativo.PrecoAtual)
-		fmt.Printf("   Teto Bazin (6%%): R$ %.2f", ativo.PrecoTetoBazin)
-		if ativo.ValorGraham > 0 {
-			fmt.Printf(" | VI Graham: R$ %.2f", ativo.ValorGraham)
-		}
-		fmt.Println()
-		fmt.Printf("   Recomendação:    %s %s\n", icone, ativo.Status)
-		fmt.Println("----------------------------------------------------------------")
 	}
 
-	fmt.Println("================================================================")
+	// 1. OPORTUNIDADES: COMPRAR MAIS
+	fmt.Printf("\n🟢 [COMPRAR MAIS] - %d Ativos Qualificados com Margem de Segurança:\n", len(compras))
+	fmt.Println("------------------------------------------------------------------")
+	for _, a := range compras {
+		imprimirLinhaAtivo("✅", a)
+	}
+
+	// 2. MANTER / NEUTROS
+	fmt.Printf("\n🟡 [MANTER] - %d Ativos Neutros (Preço Próximo ao Justo):\n", len(manter))
+	fmt.Println("------------------------------------------------------------------")
+	for _, a := range manter {
+		imprimirLinhaAtivo("⚠️", a)
+	}
+
+	// 3. ALERTA / AGUARDAR
+	fmt.Printf("\n🔴 [ALERTA] - %d Ativos Caros / Sem Margem de Segurança:\n", len(alerta))
+	fmt.Println("------------------------------------------------------------------")
+	for _, a := range alerta {
+		imprimirLinhaAtivo("🚨", a)
+	}
+
+	fmt.Println("==================================================================")
+	fmt.Printf("📊 Total de Ativos Auditados: %d | Base de Dados 100%% Atualizada\n", len(todosAtivos))
+	fmt.Println("==================================================================")
+}
+
+func imprimirLinhaAtivo(icone string, a *domain.Ativo) {
+	fmt.Printf("%s %-6s (%-4s) | Cotação: R$ %6.2f | Proventos 12M: R$ %5.2f\n",
+		icone, a.Ticker, a.Classe, a.PrecoAtual, a.Dividendos12M)
+	fmt.Printf("   • Teto Bazin: R$ %6.2f", a.PrecoTetoBazin)
+	if a.Classe == domain.ClasseAcao {
+		fmt.Printf(" | VI Graham: R$ %6.2f | Lynch: R$ %6.2f\n", a.ValorGraham, a.PrecoJustoLynch)
+	} else {
+		fmt.Printf(" | P/VP: %4.2f | Spread NTN-B: %+.2f%%\n", a.PVP, a.SpreadNTNB)
+	}
 }
