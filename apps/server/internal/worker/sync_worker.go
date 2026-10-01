@@ -40,46 +40,53 @@ func (w *MarketSyncWorker) ExecutarSincronizacao() {
 
 	fmt.Printf("\n🔄 [WORKER] A iniciar sincronização de %d ativos da B3...\n", len(universo))
 
-	// 1. Busca cotações e proventos via Yahoo Finance (Goroutines concorrentes)
+	// 1. Busca cotações e proventos ao vivo (Yahoo Finance via Goroutines)
 	ativos := w.provedor.BuscarEmLote(universo)
 
-	// 2. Busca os VPs oficiais mais recentes do arquivo da CVM (Apenas UMA vez)
-	vpsCVM, errCVM := w.cvmClient.ObterValoresPatrimoniais()
-	if errCVM != nil {
-		fmt.Printf("⚠️ [CVM Warning] Falha ao ler informe da CVM: %s\n", errCVM)
+	// 2. Busca VPs oficiais de FIIs da CVM (em memória, 1x)
+	vpsCVM, errFII := w.cvmClient.ObterValoresPatrimoniais()
+	if errFII != nil {
+		fmt.Printf("⚠️ [CVM FII Warning] %s\n", errFII)
 	} else {
-		fmt.Printf("🏛️ [CVM Oficial] %d Fundos Imobiliários atualizados com dados oficiais da CVM!\n", len(vpsCVM))
+		fmt.Printf("🏛️ [CVM Oficial] %d FIIs com Valor Patrimonial oficial carregados!\n", len(vpsCVM))
 	}
 
-	// 3. Aplica os fundamentos reais a cada ativo e executa os motores
+	// 3. Busca Balanços Oficiais de Ações da CVM (LPA e VPA dinâmicos sem mocks)
+	fundamentosCVM, errAcoes := w.cvmClient.ObterFundamentosAcoes()
+	if errAcoes != nil {
+		fmt.Printf("⚠️ [CVM Ações Warning] %s\n", errAcoes)
+	} else {
+		fmt.Printf("🏛️ [CVM Oficial] %d Balanços contábeis de companhias abertas carregados!\n", len(fundamentosCVM))
+	}
+
+	// 4. Aplica os fundamentos calculados a cada ativo e executa os 4 motores
 	for _, a := range ativos {
 		if a.Classe == domain.ClasseFII {
 			if vpOficial, ok := vpsCVM[a.Ticker]; ok {
-				a.VPCota = vpOficial // Dado oficial direto da CVM
+				a.VPCota = vpOficial // Dado oficial da CVM
 			}
 		} else {
-			// Múltiplos contábeis das Ações (LPA, VPA e Crescimento)
-			switch a.Ticker {
-			case "PETR4":
-				a.LPA, a.VPA, a.CrescimentoLucro5A = 10.35, 37.32, 12.0
-			case "VALE3":
-				a.LPA, a.VPA, a.CrescimentoLucro5A = 7.15, 41.80, 5.0
-			case "BBAS3":
-				a.LPA, a.VPA, a.CrescimentoLucro5A = 5.90, 25.40, 11.5
-			case "ITUB4":
-				a.LPA, a.VPA, a.CrescimentoLucro5A = 3.85, 20.15, 14.0
-			case "BBDC4":
-				a.LPA, a.VPA, a.CrescimentoLucro5A = 1.95, 16.80, 4.0
-			case "WEGE3":
-				a.LPA, a.VPA, a.CrescimentoLucro5A = 1.45, 4.80, 22.0
-			case "TAEE11":
-				a.LPA, a.VPA, a.CrescimentoLucro5A = 3.60, 21.50, 7.5
-			case "CPLE3":
-				a.LPA, a.VPA, a.CrescimentoLucro5A = 0.95, 8.40, 8.0
-			case "CSAN3":
-				a.LPA, a.VPA, a.CrescimentoLucro5A = 0.20, 9.80, 2.0
-			case "RENT3":
-				a.LPA, a.VPA, a.CrescimentoLucro5A = 1.80, 21.00, 10.0
+			// Atribui LPA e VPA calculados dinamicamente das demonstrações da CVM
+			if len(fundamentosCVM) > 0 {
+				// Mapeamento dinâmico de CNPJs limpos das ações de referência
+				cnpjsLimpos := map[string]string{
+					"PETR4": "33000167000101", "VALE3": "33592510000154",
+					"BBAS3": "00000000000191", "ITUB4": "60872534000123",
+					"BBDC4": "60746948000112", "WEGE3": "84429695000111",
+					"TAEE11": "07859971000130", "CPLE3": "04368898000106",
+					"CSAN3": "50746577000115", "RENT3": "16670085000155",
+				}
+				if cnpj, ok := cnpjsLimpos[a.Ticker]; ok {
+					if f, encontrado := fundamentosCVM[cnpj]; encontrado {
+						if f.LPA > 0 {
+							a.LPA = f.LPA
+						}
+						if f.VPA > 0 {
+							a.VPA = f.VPA
+						}
+						a.CrescimentoLucro5A = 10.0 // Média de mercado para Lynch
+					}
+				}
 			}
 		}
 
@@ -92,10 +99,10 @@ func (w *MarketSyncWorker) ExecutarSincronizacao() {
 		a.AvaliarSemaforo()
 	}
 
-	// 4. Guarda tudo no Cache (Redis / In-Memory)
+	// 5. Guarda tudo no Cache (Redis / In-Memory)
 	_ = w.store.SalvarLote(ativos)
 
-	fmt.Printf("✅ [WORKER] Sincronização concluída com sucesso em %s! %d ativos em cache.\n",
+	fmt.Printf("✅ [WORKER] Sincronização concluída com sucesso em %s! %d ativos auditados.\n",
 		time.Since(inicio), len(ativos))
 }
 
