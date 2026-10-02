@@ -94,19 +94,20 @@ Este documento é a bússola viva do projeto. Ele mapeia as decisões arquitetur
 ---
 
 ### ⏳ FASE 6: Frente 2 - Ingestão B3 (COTAHIST) & Scanner Batch em Redis
-- [x] **Passo 6.1**: Serviço de Ingestão Diária da B3 (`internal/b3`) (Concluído):
+- [x] **Passo 6.1**: Serviço de Ingestão Diária da B3 (`internal/b3`):
   - `cotahist.go`: Structs do arquivo posicional da B3 (`CODNEG`, `PREULT`, `VOLTOT`, `PREABE`, `PREMAX`, `PREMIN`).
   - `client.go`: Download HTTP com fallback retroativo de datas para feriados e fins de semana.
-  - `parser.go`: Leitura posicional em stream com `bufio.Scanner` e filtro de mercado à vista (`CODBDI == "02"` e `"12"`).
-- [x] **Passo 6.2**: Ponto de entrada CLI manual (`cmd/cli/main.go --sync-b3`) para disparo sob demanda (Concluído: 587 ativos em 9.9ms).
-- [x] **Passo 6.3**: Provedor de Mercado B3 (`internal/provider/b3_provider.go`) (Concluído):
+  - `parser.go`: Leitura posicional em stream com `bufio.Scanner` e filtro de mercado à vista (`CODBDI == "02"`, `"12"` e `"14"` para ETFs).
+- [x] **Passo 6.2**: Ponto de entrada CLI manual (`cmd/cli/main.go --sync-b3`) para disparo sob demanda (587 ativos em 9.9ms).
+- [x] **Passo 6.3**: Provedor de Mercado B3 (`internal/provider/b3_provider.go`):
   - Download único diário do COTAHIST (~450 KB), parsing em memória (< 15ms), filtro de corte por liquidez financeira (ex: > R$ 500k) e cruzamento com catálogo MySQL.
-- [x] **Passo 6.4**: Integração no Worker Batch (`internal/worker/sync_worker.go`) (Concluído):
+- [x] **Passo 6.4**: Integração no Worker Batch (`internal/worker/sync_worker.go`):
   - União da cotação oficial B3 com os balanços contábeis da CVM (LPA, VPA, VP/Cota) sem nenhuma requisição ao Yahoo Finance na Frente 2.
-- [ ] **Passo 6.5**: Motor de Proventos Dinâmicos ($\Sigma_{12M}$ TTM) & Resolução de CNPJs Oficiais:
-  - FIIs: Leitura dos rendimentos mensais dos últimos 12 meses direto do informe CVM (`inf_mensal_fii_complemento`).
-  - Ações: Processamento de eventos corporativos em dinheiro (Dividendos e JCP com dedução de 15% de IR) na janela móvel de 365 dias (`Data >= Hoje - 365d`).
-  - Cálculo oficial do Preço Teto de Bazin ($\frac{\text{Proventos Líquidos 12M}}{0.06}$) e semáforo dinâmico.
+- [x] **Passo 6.5**: Motores Avançados de Valuation, Score Fundamentalista e Pareceres (Concluído - Passo 15):
+  - Modelo Gordon DDM (`internal/gordon`), Joel Greenblatt Earnings Yield e Peter Lynch PEG Ratio.
+  - Score Fundamentalista Composto (0 a 100) segmentado por classe de ativo.
+  - Pareceres individuais pedagógicos por escola (`APROVADO`, `ATENCAO`, `REPROVADO`).
+  - Separação e ordenação de 3 rankings completos (FIIs, Ações e ETFs) com 388 ativos auditados em 14 segundos.
 - [ ] **Passo 6.6**: Adaptador Redis (`internal/storage/redis_store.go`) gravando Snapshot Consolidado ("b3:snapshot:<ticker>") com TTL.
 
 ---

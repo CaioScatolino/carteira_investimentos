@@ -46,9 +46,9 @@ func ParseCOTAHIST(zipBytes []byte) (map[string]*CotacaoDiaria, error) {
 				continue
 			}
 
-			// CODBDI (Pos 10..12): "02" = Lote Padrão Ações/ETFs/BDRs, "12" = Fundos Imobiliários
+			// CODBDI (Pos 10..12): "02" = Lote Padrão Ações/Units, "12" = Fundos Imobiliários, "14" = ETFs
 			codbdi := strings.TrimSpace(linha[10:12])
-			if codbdi != "02" && codbdi != "12" {
+			if codbdi != "02" && codbdi != "12" && codbdi != "14" {
 				continue // Ignora opções, fracionários e leilões especiais
 			}
 

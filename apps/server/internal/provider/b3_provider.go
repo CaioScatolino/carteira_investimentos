@@ -110,21 +110,35 @@ func (p *B3MarketProvider) carregarMapaCatalogo() map[string]*catalog.Asset {
 func (p *B3MarketProvider) converterParaDominio(c *b3.CotacaoDiaria, cat *catalog.Asset) *domain.Ativo {
 	classe := domain.ClasseAcao
 	cnpj := ""
-	dividendos := 0.0 // Valor padrão caso não tenha no catálogo
+	dividendos := 0.0
 
+	// 1. Determinação da Classe pelo BDI oficial do pregão da B3
+	switch c.CodigoBDI {
+	case "14":
+		classe = domain.ClasseETF
+	case "12":
+		classe = domain.ClasseFII
+	default:
+		classe = domain.ClasseAcao
+	}
+
+	// 2. Validação cruzada com o catálogo
 	if cat != nil {
-		if cat.Classe == "FII" {
+		if cat.Classe == "ETF" || c.CodigoBDI == "14" {
+			classe = domain.ClasseETF
+		} else if cat.Classe == "FII" || c.CodigoBDI == "12" {
 			classe = domain.ClasseFII
 		}
 		cnpj = cat.CNPJ
-		dividendos = cat.Dividendos12M // <-- PUXA OS PROVENTOS DO MYSQL!
+		dividendos = cat.Dividendos12M
 	} else {
-		if c.CodigoBDI == "12" || strings.HasSuffix(c.Ticker, "11") {
+		// Fallback para códigos terminados em 11 sem BDI específico
+		if strings.HasSuffix(c.Ticker, "11") && c.CodigoBDI != "14" {
 			unitsAcoes := map[string]bool{
 				"TAEE11": true, "SAPR11": true, "KLBN11": true,
 				"ALUP11": true, "BPAC11": true, "SANB11": true,
 			}
-			if !unitsAcoes[c.Ticker] {
+			if !unitsAcoes[c.Ticker] && c.CodigoBDI != "02" {
 				classe = domain.ClasseFII
 			}
 		}
