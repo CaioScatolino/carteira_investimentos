@@ -14,11 +14,12 @@ Este documento é a bússola viva do projeto. Ele mapeia as decisões arquitetur
                                        │
                 ┌──────────────────────┴──────────────────────┐
                 ▼                                             ▼
-        FONTE 1: CVM                                   FONTE 2: YAHOO
-    (Balanços & Informes)                         (Cotação & Proventos)
-    • DFP/ITR: Lucro Líquido & PL                 • Cotações intradiárias
-    • Composição Acionária (Ações)                • Proventos acumulados (12M)
-    • INF_MENSAL: VP/Cota FIIs
+        FONTE 1: CVM                                   FONTE 2: B3 OFICIAL
+    (Balanços & Informes)                            (Boletim Diário COTAHIST)
+    • DFP/ITR: Lucro Líquido & PL                 • Cotações de Fechamento (PREULT)
+    • Composição Acionária (Ações)                • Volume Financeiro Real (VOLTOT)
+    • INF_MENSAL: VP/Cota FIIs                    • 1 único download diário (~450 KB)
+                │                                 • Zero risco de rate limit / ban
                 │                                             │
                 └──────────────────────┬──────────────────────┘
                                        │
@@ -37,13 +38,13 @@ Este documento é a bússola viva do projeto. Ele mapeia as decisões arquitetur
 ┌──────────────────────────────────────┴──────────────────────────────────────┐
 │                  FRENTE 1: CARTEIRA DO USUÁRIO (ON-DEMAND)                  │
 │                     (API REST & Server-Sent Events - SSE)                   │
-└─────────────────────────────────────────────────────────────────────────────┘
- • Entrada do Usuário: Ticker, Quantidade, Preço Médio.
- • Consulta instantânea no Cache Redis (com fallback sob demanda).
- • Emissão do Semáforo Consolidado:
-     🟢 COMPRAR MAIS (Cotação < Teto, margem de segurança favorável)
-     🟡 AGUARDAR / MANTER (Cotação > Teto, preservar ativos, aportar noutros)
-     🔴 REAVALIAR / ATENÇÃO (Fundamentos deteriorados, estouro de risco)
+└──────────────────────────────────────┬──────────────────────────────────────┘
+                                       │
+                                       ▼
+                       YAHOO FINANCE (Uso Restrito/Pontual)
+                • Apenas cotações intradiárias ao vivo sob demanda
+                • Poucos ativos da carteira do usuário (< 20 tickers)
+                • Previne bloqueio de IP por excesso de chamadas
 ```
 
 ---
@@ -82,20 +83,31 @@ Este documento é a bússola viva do projeto. Ele mapeia as decisões arquitetur
 
 ---
 
-### ⏳ FASE 5: Pipeline CVM Dinâmico para Ações (Eliminação Total de Mocks - EM ANDAMENTO)
-- [ ] **Passo 5.1**: Parser dos demonstrativos ITR/DFP da CVM em stream (`internal/cvm/dre_reader.go`):
-  - Extrair Lucro Líquido (DRE Con) e Patrimônio Líquido (BPP Con) do ZIP oficial da CVM.
-- [ ] **Passo 5.2**: Extrair composição acionária oficial (`composicao_capital`) e derivar:
+### ✅ FASE 5: Pipeline CVM Dinâmico para Ações (Eliminação Total de Mocks - Concluída)
+- [x] **Passo 5.1**: Parser dos demonstrativos ITR da CVM em stream (`internal/cvm/dre_reader.go`):
+  - Extrair Lucro Líquido (DRE Con) e Patrimônio Líquido (BPP Con) do ZIP oficial da CVM com `LazyQuotes: true` e suporte multi-ano.
+- [x] **Passo 5.2**: Extrair composição acionária oficial (`composicao_capital`) e derivar:
   - $LPA = \frac{\text{Lucro Líquido}}{\text{Total de Ações}}$
   - $VPA = \frac{\text{Patrimônio Líquido}}{\text{Total de Ações}}$
-- [ ] **Passo 5.3**: Remover definitivamente o `switch` estático de LPA/VPA do `sync_worker.go`.
+- [x] **Passo 5.3**: Remover definitivamente o `switch` estático de LPA/VPA do `sync_worker.go` e CNPJs oficiais em `fii_reader.go` (100% dos FIIs com VP/Cota e Ações com LPA/VPA dinâmicos).
 
 ---
 
-### ⏳ FASE 6: Frente 2 - Scanner de Mercado em Batch (Worker + Redis)
-- [ ] **Passo 6.1**: Adaptador Redis (`internal/storage/redis_store.go`) conectado ao Redis local ou `redis_central` na VPS.
-- [ ] **Passo 6.2**: Worker Pool com concorrência controlada (ex: semáforo de 5 a 10 goroutines simultâneas) para não sobrecarregar I/O.
-- [ ] **Passo 6.3**: Gravação do Snapshot Consolidado no Redis com TTL de expiração.
+### ⏳ FASE 6: Frente 2 - Ingestão B3 (COTAHIST) & Scanner Batch em Redis
+- [x] **Passo 6.1**: Serviço de Ingestão Diária da B3 (`internal/b3`) (Concluído):
+  - `cotahist.go`: Structs do arquivo posicional da B3 (`CODNEG`, `PREULT`, `VOLTOT`, `PREABE`, `PREMAX`, `PREMIN`).
+  - `client.go`: Download HTTP com fallback retroativo de datas para feriados e fins de semana.
+  - `parser.go`: Leitura posicional em stream com `bufio.Scanner` e filtro de mercado à vista (`CODBDI == "02"` e `"12"`).
+- [x] **Passo 6.2**: Ponto de entrada CLI manual (`cmd/cli/main.go --sync-b3`) para disparo sob demanda (Concluído: 587 ativos em 9.9ms).
+- [x] **Passo 6.3**: Provedor de Mercado B3 (`internal/provider/b3_provider.go`) (Concluído):
+  - Download único diário do COTAHIST (~450 KB), parsing em memória (< 15ms), filtro de corte por liquidez financeira (ex: > R$ 500k) e cruzamento com catálogo MySQL.
+- [x] **Passo 6.4**: Integração no Worker Batch (`internal/worker/sync_worker.go`) (Concluído):
+  - União da cotação oficial B3 com os balanços contábeis da CVM (LPA, VPA, VP/Cota) sem nenhuma requisição ao Yahoo Finance na Frente 2.
+- [ ] **Passo 6.5**: Motor de Proventos Dinâmicos ($\Sigma_{12M}$ TTM) & Resolução de CNPJs Oficiais:
+  - FIIs: Leitura dos rendimentos mensais dos últimos 12 meses direto do informe CVM (`inf_mensal_fii_complemento`).
+  - Ações: Processamento de eventos corporativos em dinheiro (Dividendos e JCP com dedução de 15% de IR) na janela móvel de 365 dias (`Data >= Hoje - 365d`).
+  - Cálculo oficial do Preço Teto de Bazin ($\frac{\text{Proventos Líquidos 12M}}{0.06}$) e semáforo dinâmico.
+- [ ] **Passo 6.6**: Adaptador Redis (`internal/storage/redis_store.go`) gravando Snapshot Consolidado ("b3:snapshot:<ticker>") com TTL.
 
 ---
 

@@ -2,6 +2,7 @@ package worker
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"carteira_investimentos/server/internal/cvm"
@@ -34,11 +35,15 @@ func NovoMarketSyncWorker(
 }
 
 // ExecutarSincronizacao busca os ativos, audita com os 4 motores e guarda no cache
-func (w *MarketSyncWorker) ExecutarSincronizacao() {
-	universo := domain.ObterUniversoLiquidoB3()
+// ExecutarSincronizacao busca os ativos, audita com os 4 motores e guarda no cache
+func (w *MarketSyncWorker) ExecutarSincronizacao(universo []string) {
 	inicio := time.Now()
 
-	fmt.Printf("\n🔄 [WORKER] A iniciar sincronização de %d ativos da B3...\n", len(universo))
+	if len(universo) > 0 {
+		fmt.Printf("\n🔄 [WORKER] A iniciar auditoria restrita de %d ativos da B3...\n", len(universo))
+	} else {
+		fmt.Println("\n🔄 [WORKER] A iniciar SCANNER GERAL DE MERCADO em lote (100% dos ativos da B3)...")
+	}
 
 	// 1. Busca cotações e proventos ao vivo (Yahoo Finance via Goroutines)
 	ativos := w.provedor.BuscarEmLote(universo)
@@ -66,26 +71,32 @@ func (w *MarketSyncWorker) ExecutarSincronizacao() {
 				a.VPCota = vpOficial // Dado oficial da CVM
 			}
 		} else {
-			// Atribui LPA e VPA calculados dinamicamente das demonstrações da CVM
+			// Atribui LPA e VPA calculados dinamicamente das demonstrações contábeis oficiais da CVM
 			if len(fundamentosCVM) > 0 {
-				// Mapeamento dinâmico de CNPJs limpos das ações de referência
-				cnpjsLimpos := map[string]string{
-					"PETR4": "33000167000101", "VALE3": "33592510000154",
-					"BBAS3": "00000000000191", "ITUB4": "60872534000123",
-					"BBDC4": "60746948000112", "WEGE3": "84429695000111",
-					"TAEE11": "07859971000130", "CPLE3": "04368898000106",
-					"CSAN3": "50746577000115", "RENT3": "16670085000155",
-				}
-				if cnpj, ok := cnpjsLimpos[a.Ticker]; ok {
-					if f, encontrado := fundamentosCVM[cnpj]; encontrado {
-						if f.LPA > 0 {
-							a.LPA = f.LPA
-						}
-						if f.VPA > 0 {
-							a.VPA = f.VPA
-						}
-						a.CrescimentoLucro5A = 10.0 // Média de mercado para Lynch
+				cnpjAlvo := strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(a.CNPJ, ".", ""), "/", ""), "-", "")
+
+				// Se o CNPJ for vazio ou um identificador provisório (ex: 'B3-PETR4'), recorre ao mapa de CNPJs oficiais
+				if len(cnpjAlvo) != 14 || strings.HasPrefix(cnpjAlvo, "B3") {
+					cnpjsOficiais := map[string]string{
+						"PETR4": "33000167000101", "VALE3": "33592510000154",
+						"BBAS3": "00000000000191", "ITUB4": "60872504000123",
+						"BBDC4": "60746948000112", "WEGE3": "84429695000111",
+						"TAEE11": "07859971000130", "CPLE3": "76483817000120",
+						"CSAN3": "50746577000115", "RENT3": "16670085000155",
 					}
+					if realCNPJ, ok := cnpjsOficiais[a.Ticker]; ok {
+						cnpjAlvo = realCNPJ
+					}
+				}
+
+				if f, encontrado := fundamentosCVM[cnpjAlvo]; encontrado {
+					if f.LPA > 0 {
+						a.LPA = f.LPA
+					}
+					if f.VPA > 0 {
+						a.VPA = f.VPA
+					}
+					a.CrescimentoLucro5A = 10.0 // Média conservadora de 10% a.a. para PEG Ratio (Lynch)
 				}
 			}
 		}
@@ -107,9 +118,9 @@ func (w *MarketSyncWorker) ExecutarSincronizacao() {
 }
 
 // IniciarLoop dispara o worker em background com time.Ticker
-func (w *MarketSyncWorker) IniciarLoop() {
+func (w *MarketSyncWorker) IniciarLoop(universo []string) {
 	// 1. Executa a primeira sincronização de imediato ao ligar o servidor
-	w.ExecutarSincronizacao()
+	w.ExecutarSincronizacao(universo)
 
 	// 2. Cria o timer nativo do Go
 	ticker := time.NewTicker(w.interval)
@@ -117,7 +128,7 @@ func (w *MarketSyncWorker) IniciarLoop() {
 	// Goroutine perpétua de segundo plano
 	go func() {
 		for range ticker.C {
-			w.ExecutarSincronizacao()
+			w.ExecutarSincronizacao(universo)
 		}
 	}()
 }

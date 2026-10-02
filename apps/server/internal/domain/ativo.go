@@ -22,6 +22,8 @@ const (
 type Ativo struct {
 	Ticker             string             `json:"ticker"`
 	Classe             ClasseAtivo        `json:"classe"`
+	CNPJ               string             `json:"cnpj,omitempty"`         // CNPJ oficial cadastrado no MySQL/CVM
+	VolumeTotal        float64            `json:"volume_total,omitempty"` // Volume financeiro real negociado no pregão da B3
 	PrecoAtual         float64            `json:"preco_atual"`
 	Dividendos12M      float64            `json:"dividendos_12m"`
 	LPA                float64            `json:"lpa"`
@@ -40,13 +42,24 @@ type Ativo struct {
 // AvaliarSemaforo define a recomendação consolidada
 func (a *Ativo) AvaliarSemaforo() {
 	if a.Classe == ClasseFII {
-		// Para FIIs: abaixo do teto Bazin e negociando abaixo ou próximo do VP (P/VP <= 1.02)
-		if a.PrecoAtual <= a.PrecoTetoBazin && (a.PVP > 0 && a.PVP <= 1.02) {
-			a.Status = StatusComprarMais
-		} else if a.PrecoAtual <= a.PrecoTetoBazin {
-			a.Status = StatusManter
+		// Se temos o Preço Teto Bazin calculado:
+		if a.PrecoTetoBazin > 0 {
+			if a.PrecoAtual <= a.PrecoTetoBazin && (a.PVP > 0 && a.PVP <= 1.02) {
+				a.Status = StatusComprarMais
+			} else if a.PrecoAtual <= a.PrecoTetoBazin || (a.PVP > 0 && a.PVP <= 1.00) {
+				a.Status = StatusManter
+			} else {
+				a.Status = StatusAlerta
+			}
 		} else {
-			a.Status = StatusAlerta
+			// Se o histórico de proventos ainda não foi carregado, avalia pelo desconto patrimonial oficial (CVM):
+			if a.PVP > 0 && a.PVP <= 0.95 {
+				a.Status = StatusComprarMais // Mais de 5% de desconto sobre o valor patrimonial
+			} else if a.PVP > 0 && a.PVP <= 1.02 {
+				a.Status = StatusManter // Negociando no valor justo patrimonial
+			} else {
+				a.Status = StatusAlerta // Ágio excessivo (P/VP esticado)
+			}
 		}
 		return
 	}

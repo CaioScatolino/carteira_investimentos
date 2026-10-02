@@ -24,16 +24,18 @@ func NovoMySQLRepository(db *sql.DB) *MySQLRepository {
 func (r *MySQLRepository) BuscarPorTicker(ctx context.Context, ticker string) (*Asset, error) {
 	query := `
 		SELECT id, ticker, cnpj, classe, COALESCE(tipo, ''), razao_social, 
-		       COALESCE(codigo_cvm, ''), COALESCE(setor, ''), ativo, created_at, updated_at
+		       COALESCE(codigo_cvm, ''), COALESCE(setor, ''), COALESCE(dividendos_12m, 0.0), 
+		       ativo, created_at, updated_at
 		FROM assets 
 		WHERE ticker = ? AND ativo = 1 LIMIT 1`
 
 	var a Asset
 	err := r.db.QueryRowContext(ctx, query, ticker).Scan(
 		&a.ID, &a.Ticker, &a.CNPJ, &a.Classe, &a.Tipo,
-		&a.RazaoSocial, &a.CodigoCVM, &a.Setor, &a.Ativo,
+		&a.RazaoSocial, &a.CodigoCVM, &a.Setor, &a.Dividendos12M, &a.Ativo,
 		&a.CreatedAt, &a.UpdatedAt,
 	)
+
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("ativo %s não encontrado no catálogo", ticker)
@@ -46,16 +48,18 @@ func (r *MySQLRepository) BuscarPorTicker(ctx context.Context, ticker string) (*
 func (r *MySQLRepository) BuscarPorCNPJ(ctx context.Context, cnpj string) (*Asset, error) {
 	query := `
 		SELECT id, ticker, cnpj, classe, COALESCE(tipo, ''), razao_social, 
-		       COALESCE(codigo_cvm, ''), COALESCE(setor, ''), ativo, created_at, updated_at
+		       COALESCE(codigo_cvm, ''), COALESCE(setor, ''), COALESCE(dividendos_12m, 0.0), 
+		       ativo, created_at, updated_at
 		FROM assets 
 		WHERE cnpj = ? AND ativo = 1 LIMIT 1`
 
 	var a Asset
 	err := r.db.QueryRowContext(ctx, query, cnpj).Scan(
 		&a.ID, &a.Ticker, &a.CNPJ, &a.Classe, &a.Tipo,
-		&a.RazaoSocial, &a.CodigoCVM, &a.Setor, &a.Ativo,
+		&a.RazaoSocial, &a.CodigoCVM, &a.Setor, &a.Dividendos12M, &a.Ativo,
 		&a.CreatedAt, &a.UpdatedAt,
 	)
+
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("CNPJ %s não encontrado no catálogo", cnpj)
@@ -68,7 +72,8 @@ func (r *MySQLRepository) BuscarPorCNPJ(ctx context.Context, cnpj string) (*Asse
 func (r *MySQLRepository) ListarTodos(ctx context.Context) ([]*Asset, error) {
 	query := `
 		SELECT id, ticker, cnpj, classe, COALESCE(tipo, ''), razao_social, 
-		       COALESCE(codigo_cvm, ''), COALESCE(setor, ''), ativo, created_at, updated_at
+		       COALESCE(codigo_cvm, ''), COALESCE(setor, ''), COALESCE(dividendos_12m, 0.0), 
+		       ativo, created_at, updated_at
 		FROM assets 
 		WHERE ativo = 1 
 		ORDER BY classe, ticker`
@@ -84,7 +89,7 @@ func (r *MySQLRepository) ListarTodos(ctx context.Context) ([]*Asset, error) {
 		var a Asset
 		if err := rows.Scan(
 			&a.ID, &a.Ticker, &a.CNPJ, &a.Classe, &a.Tipo,
-			&a.RazaoSocial, &a.CodigoCVM, &a.Setor, &a.Ativo,
+			&a.RazaoSocial, &a.CodigoCVM, &a.Setor, &a.Dividendos12M, &a.Ativo,
 			&a.CreatedAt, &a.UpdatedAt,
 		); err != nil {
 			return nil, err

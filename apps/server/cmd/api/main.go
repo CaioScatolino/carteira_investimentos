@@ -19,7 +19,7 @@ import (
 
 func main() {
 	fmt.Println("==================================================================")
-	fmt.Println("🚀 B3 CORE: AUDITORIA GERAL DE MERCADO (CVM + YAHOO + MYSQL)")
+	fmt.Println("🚀 B3 CORE: AUDITORIA GERAL DE MERCADO (CVM + B3 OFICIAL + MYSQL)")
 	fmt.Println("==================================================================")
 
 	// 1. Carrega configurações do .env e conecta ao MySQL
@@ -51,13 +51,15 @@ func main() {
 		fii.Novo(0.065),  // FIIs: P/VP e Spread vs NTN-B (IPCA+ 6.5% a.a.)
 	}
 
-	// 4. Inicializa o Cache e o Provedor de Cotações
+	// 4. Inicializa o Cache e o Provedor Oficial B3 (COTAHIST em Lote sem Yahoo)
 	store := storage.NovoInMemoryStore()
-	provedor := provider.NovoYahooFinanceProvider()
+	provedor := provider.NovoB3MarketProvider(nil, repo, 500_000.00)
 
-	// 5. Dispara a Sincronização Dinâmica (Yahoo + CVM ITR/FII sem dados fixos)
+	// 5. Scanner Geral de Mercado: Passando nil/vazio, o B3MarketProvider varre TODOS os ativos líquidos da B3
+	var universo []string // Slice vazio ativa o modo Scanner de Mercado Aberto
+
 	sincronizador := worker.NovoMarketSyncWorker(provedor, store, motores, 15*time.Minute)
-	sincronizador.ExecutarSincronizacao()
+	sincronizador.ExecutarSincronizacao(universo)
 
 	// 6. Lê os ativos auditados do Cache
 	todosAtivos := store.ListarTodos()

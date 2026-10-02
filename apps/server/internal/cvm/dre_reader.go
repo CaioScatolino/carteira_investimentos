@@ -49,9 +49,12 @@ func (c *CVMClient) ObterFundamentosAcoes() (map[string]*FundamentosAcao, error)
 
 	mapa := make(map[string]*FundamentosAcao)
 
-	// Helper para obter ou instanciar struct do CNPJ
+	cleanCNPJ := func(s string) string {
+		return strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(s, ".", ""), "/", ""), "-", "")
+	}
+
 	obterOuCriar := func(cnpj string) *FundamentosAcao {
-		cnpjLimpo := strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(cnpj, ".", ""), "/", ""), "-", "")
+		cnpjLimpo := cleanCNPJ(cnpj)
 		if _, existe := mapa[cnpjLimpo]; !existe {
 			mapa[cnpjLimpo] = &FundamentosAcao{CNPJ: cnpjLimpo}
 		}
@@ -65,17 +68,30 @@ func (c *CVMClient) ObterFundamentosAcoes() (map[string]*FundamentosAcao, error)
 			if rc, err := f.Open(); err == nil {
 				r := csv.NewReader(rc)
 				r.Comma = ';'
-				_, _ = r.Read() // pula cabeçalho
-				for {
-					l, err := r.Read()
-					if err != nil || len(l) <= 6 {
+				r.LazyQuotes = true
+				r.FieldsPerRecord = -1
+				h, _ := r.Read()
+				idxAcoes := 6
+				for i, col := range h {
+					if col == "QT_ACAO_TOTAL_CAP_INTEGR" {
+						idxAcoes = i
 						break
 					}
-					cnpj := l[0]
-					totalAcoesStr := strings.TrimSpace(l[6]) // QT_ACAO_TOTAL_CAP_INTEGR
-					if totalAcoes, err := strconv.ParseFloat(totalAcoesStr, 64); err == nil && totalAcoes > 0 {
-						item := obterOuCriar(cnpj)
-						item.TotalAcoes = totalAcoes
+				}
+				for {
+					l, err := r.Read()
+					if err != nil {
+						break
+					}
+					if len(l) > idxAcoes {
+						if totalAcoes, err := strconv.ParseFloat(l[idxAcoes], 64); err == nil && totalAcoes > 0 {
+							item := obterOuCriar(l[0])
+							// Empresas que reportam ações em milhares na CVM (ex: Vale, Itaú)
+							if totalAcoes < 100000000 && !strings.Contains(l[0], "33.000.167") {
+								totalAcoes *= 1000.0
+							}
+							item.TotalAcoes = totalAcoes
+						}
 					}
 				}
 				rc.Close()
@@ -84,33 +100,35 @@ func (c *CVMClient) ObterFundamentosAcoes() (map[string]*FundamentosAcao, error)
 		}
 	}
 
-	// 2. Lê o Balanço Passivo Consolidado (Patrimônio Líquido - Conta 2.03)
+	// 2. Lê o Balanço Passivo Consolidado (Patrimônio Líquido Consolidado)
 	nomeBPP := fmt.Sprintf("itr_cia_aberta_BPP_con_%d.csv", ano)
 	for _, f := range zipReader.File {
 		if f.Name == nomeBPP {
 			if rc, err := f.Open(); err == nil {
 				r := csv.NewReader(rc)
 				r.Comma = ';'
+				r.LazyQuotes = true
+				r.FieldsPerRecord = -1
 				_, _ = r.Read()
 				for {
 					l, err := r.Read()
-					if err != nil || len(l) <= 12 {
+					if err != nil {
 						break
 					}
-					cnpj := l[0]
-					cdConta := strings.TrimSpace(l[10]) // CD_CONTA
-					ordem := strings.TrimSpace(l[8])    // ORDEM_EXERC
+					if len(l) <= 12 {
+						continue
+					}
+					ordem := l[8]
+					isUltimo := strings.HasSuffix(ordem, "LTIMO") && !strings.Contains(ordem, "PEN")
+					dsConta := strings.ToUpper(l[11])
 
-					// Conta 2.03 é Patrimônio Líquido Consolidado do exercício mais recente
-					if cdConta == "2.03" && (ordem == "ÚLTIMO" || ordem == "ULTIMO") {
-						valStr := strings.TrimSpace(l[12])
-						if pl, err := strconv.ParseFloat(valStr, 64); err == nil {
-							item := obterOuCriar(cnpj)
-							// A CVM geralmente informa em milhares de Reais se ESCALA_MOEDA == "MIL"
-							escala := strings.ToUpper(strings.TrimSpace(l[7]))
-							if escala == "MIL" {
-								pl = pl * 1000.0
+					// O nome oficial infalível da CVM é 'Patrimônio Líquido Consolidado'
+					if isUltimo && strings.Contains(dsConta, "PATRIM") && strings.Contains(dsConta, "CONSOLIDADO") && !strings.Contains(dsConta, "CONTROL") {
+						if pl, err := strconv.ParseFloat(l[12], 64); err == nil && pl > 0 {
+							if strings.ToUpper(l[7]) == "MIL" {
+								pl *= 1000.0
 							}
+							item := obterOuCriar(l[0])
 							item.PatrimonioLiquido = pl
 						}
 					}
@@ -121,32 +139,35 @@ func (c *CVMClient) ObterFundamentosAcoes() (map[string]*FundamentosAcao, error)
 		}
 	}
 
-	// 3. Lê a DRE Consolidada (Lucro Líquido - Conta 3.11 ou 3.99)
+	// 3. Lê a DRE Consolidada (Lucro Líquido Consolidado)
 	nomeDRE := fmt.Sprintf("itr_cia_aberta_DRE_con_%d.csv", ano)
 	for _, f := range zipReader.File {
 		if f.Name == nomeDRE {
 			if rc, err := f.Open(); err == nil {
 				r := csv.NewReader(rc)
 				r.Comma = ';'
+				r.LazyQuotes = true
+				r.FieldsPerRecord = -1
 				_, _ = r.Read()
 				for {
 					l, err := r.Read()
-					if err != nil || len(l) <= 12 {
+					if err != nil {
 						break
 					}
-					cnpj := l[0]
-					cdConta := strings.TrimSpace(l[10])
-					ordem := strings.TrimSpace(l[8])
+					if len(l) <= 13 {
+						continue
+					}
+					ordem := l[8]
+					isUltimo := strings.HasSuffix(ordem, "LTIMO") && !strings.Contains(ordem, "PEN")
+					dsConta := strings.ToUpper(l[12])
 
-					// 3.11 ou 3.99 correspondem ao Lucro Líquido Consolidado
-					if (cdConta == "3.11" || cdConta == "3.99") && (ordem == "ÚLTIMO" || ordem == "ULTIMO") {
-						valStr := strings.TrimSpace(l[12])
-						if lucro, err := strconv.ParseFloat(valStr, 64); err == nil {
-							item := obterOuCriar(cnpj)
-							escala := strings.ToUpper(strings.TrimSpace(l[7]))
-							if escala == "MIL" {
-								lucro = lucro * 1000.0
+					// O nome oficial infalível da CVM é 'Lucro/Prejuízo Consolidado do Período'
+					if isUltimo && strings.Contains(dsConta, "LUCRO") && strings.Contains(dsConta, "CONSOLIDADO") && !strings.Contains(dsConta, "CONTROL") {
+						if lucro, err := strconv.ParseFloat(l[13], 64); err == nil {
+							if strings.ToUpper(l[7]) == "MIL" {
+								lucro *= 1000.0
 							}
+							item := obterOuCriar(l[0])
 							item.LucroLiquido = lucro
 						}
 					}

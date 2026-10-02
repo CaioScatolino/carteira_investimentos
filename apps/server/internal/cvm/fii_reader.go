@@ -12,15 +12,15 @@ import (
 	"time"
 )
 
-// CNPJs oficiais registrados na CVM dos principais FIIs da B3
+// CNPJs oficiais dos principais FIIs de referência na CVM
 var CNPJPorTicker = map[string]string{
-	"MXRF11": "13.318.527/0001-79",
-	"HGLG11": "11.728.688/0001-47",
-	"XPML11": "28.750.990/0001-74",
-	"KNRI11": "12.005.956/0001-65",
-	"BTLG11": "13.111.782/0001-84",
-	"VISC11": "17.554.274/0001-25",
-	"XPLG11": "26.502.794/0001-85",
+	"MXRF11": "97521225000125",
+	"HGLG11": "11728688000147",
+	"XPML11": "28757546000100",
+	"KNRI11": "12005956000165",
+	"BTLG11": "11839593000109",
+	"VISC11": "17554274000125",
+	"XPLG11": "26502794000185",
 }
 
 type CVMClient struct {
@@ -35,7 +35,7 @@ func NovoCVMClient() *CVMClient {
 	}
 }
 
-// ObterValoresPatrimoniais baixa o ZIP oficial do ano corrente e extrai o VP/Cota mais recente
+// ObterValoresPatrimoniais baixa o ZIP oficial do ano corrente e extrai o VP/Cota de todos os FIIs
 func (c *CVMClient) ObterValoresPatrimoniais() (map[string]float64, error) {
 	ano := time.Now().Year()
 	url := fmt.Sprintf("https://dados.cvm.gov.br/dados/FII/DOC/INF_MENSAL/DADOS/inf_mensal_fii_%d.zip", ano)
@@ -50,7 +50,6 @@ func (c *CVMClient) ObterValoresPatrimoniais() (map[string]float64, error) {
 		return nil, fmt.Errorf("CVM retornou HTTP %d para o ano %d", resp.StatusCode, ano)
 	}
 
-	// Lê o ZIP em memória (apenas ~1 MB)
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
@@ -61,11 +60,15 @@ func (c *CVMClient) ObterValoresPatrimoniais() (map[string]float64, error) {
 		return nil, err
 	}
 
-	// Mapeia CNPJ -> Ticker inverso para busca rápida O(1)
+	// Mapeia CNPJ -> Ticker
 	tickerPorCNPJ := make(map[string]string)
 	for t, cnpj := range CNPJPorTicker {
 		cnpjLimpo := strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(cnpj, ".", ""), "/", ""), "-", "")
 		tickerPorCNPJ[cnpjLimpo] = t
+	}
+
+	cleanCNPJ := func(s string) string {
+		return strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(s, ".", ""), "/", ""), "-", "")
 	}
 
 	nomeCSV := fmt.Sprintf("inf_mensal_fii_complemento_%d.csv", ano)
@@ -84,28 +87,29 @@ func (c *CVMClient) ObterValoresPatrimoniais() (map[string]float64, error) {
 
 		reader := csv.NewReader(rc)
 		reader.Comma = ';'
+		reader.LazyQuotes = true
+		reader.FieldsPerRecord = -1
 
-		// Pula o cabeçalho
-		_, _ = reader.Read()
+		header, _ := reader.Read()
+		idxVP := 23
+		for i, col := range header {
+			if col == "Valor_Patrimonial_Cotas" {
+				idxVP = i
+				break
+			}
+		}
 
 		for {
 			linha, err := reader.Read()
 			if err != nil {
-				break // Fim do ficheiro
+				break
 			}
-
-			if len(linha) <= 23 {
-				continue
-			}
-
-			// Coluna 0: CNPJ | Coluna 23: Valor_Patrimonial_Cotas
-			cnpjLinha := strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(linha[0], ".", ""), "/", ""), "-", "")
-
-			if ticker, encontrado := tickerPorCNPJ[cnpjLinha]; encontrado {
-				vpStr := strings.TrimSpace(linha[23])
-				if vp, err := strconv.ParseFloat(vpStr, 64); err == nil && vp > 0 {
-					// Guarda o VP mais recente
-					resultadoVP[ticker] = vp
+			if len(linha) > idxVP {
+				cnpj := cleanCNPJ(linha[0])
+				if ticker, ok := tickerPorCNPJ[cnpj]; ok {
+					if vp, err := strconv.ParseFloat(linha[idxVP], 64); err == nil && vp > 0 {
+						resultadoVP[ticker] = vp
+					}
 				}
 			}
 		}
