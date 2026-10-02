@@ -40,3 +40,6 @@ Thumbs.db
 # IDEs
 .vscode/
 .idea/
+
+# Local cache
+.cache/

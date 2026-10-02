@@ -5,8 +5,6 @@ import (
 	"bytes"
 	"encoding/csv"
 	"fmt"
-	"io"
-	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -27,19 +25,9 @@ func (c *CVMClient) ObterFundamentosAcoes() (map[string]*FundamentosAcao, error)
 	ano := time.Now().Year()
 	url := fmt.Sprintf("https://dados.cvm.gov.br/dados/CIA_ABERTA/DOC/ITR/DADOS/itr_cia_aberta_%d.zip", ano)
 
-	resp, err := c.httpClient.Get(url)
+	body, err := c.ObterArquivoZip(url, fmt.Sprintf("itr_%d.zip", ano))
 	if err != nil {
-		return nil, fmt.Errorf("falha ao baixar ITR da CVM: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("CVM retornou HTTP %d para ITR de %d", resp.StatusCode, ano)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("falha ao obter ITR da CVM: %w", err)
 	}
 
 	zipReader, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))

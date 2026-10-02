@@ -21,6 +21,7 @@ const (
 // Ativo representa a entidade central da nossa carteira de investimentos
 type Ativo struct {
 	Ticker             string             `json:"ticker"`
+	Nome               string             `json:"nome,omitempty"` // Nome resumido da B3 (NOMRES)
 	Classe             ClasseAtivo        `json:"classe"`
 	CNPJ               string             `json:"cnpj,omitempty"`         // CNPJ oficial cadastrado no MySQL/CVM
 	VolumeTotal        float64            `json:"volume_total,omitempty"` // Volume financeiro real negociado no pregão da B3
@@ -44,7 +45,8 @@ func (a *Ativo) AvaliarSemaforo() {
 	if a.Classe == ClasseFII {
 		// Se temos o Preço Teto Bazin calculado:
 		if a.PrecoTetoBazin > 0 {
-			if a.PrecoAtual <= a.PrecoTetoBazin && (a.PVP > 0 && a.PVP <= 1.02) {
+			// Exige P/VP justo E prêmio de risco positivo sobre a NTN-B
+			if a.PrecoAtual <= a.PrecoTetoBazin && (a.PVP > 0 && a.PVP <= 1.02) && a.SpreadNTNB >= 0 {
 				a.Status = StatusComprarMais
 			} else if a.PrecoAtual <= a.PrecoTetoBazin || (a.PVP > 0 && a.PVP <= 1.00) {
 				a.Status = StatusManter

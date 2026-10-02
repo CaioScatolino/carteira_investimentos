@@ -132,12 +132,14 @@ func (p *B3MarketProvider) converterParaDominio(c *b3.CotacaoDiaria, cat *catalo
 
 	return &domain.Ativo{
 		Ticker:        c.Ticker,
+		Nome:          c.NomeResumido, // <-- Nome da empresa do pregão da B3
 		Classe:        classe,
 		CNPJ:          cnpj,
 		VolumeTotal:   c.VolumeTotal,
 		PrecoAtual:    c.PrecoFechamento, // Preço oficial PREULT do pregão
 		Dividendos12M: dividendos,        // Proventos oficiais do catálogo local!
 	}
+
 }
 
 // BuscarAtivo consulta a cotação oficial do ativo no pregão da B3

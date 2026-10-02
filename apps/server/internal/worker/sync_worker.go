@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"carteira_investimentos/server/internal/b3"
 	"carteira_investimentos/server/internal/cvm"
 	"carteira_investimentos/server/internal/domain"
 	"carteira_investimentos/server/internal/provider"
@@ -15,6 +16,7 @@ type MarketSyncWorker struct {
 	provedor  provider.MarketProvider
 	store     storage.SnapshotStore
 	cvmClient *cvm.CVMClient // Cliente oficial CVM
+	b3Client  *b3.B3Client   // Cliente oficial B3 para eventos corporativos em dinheiro
 	motores   []domain.Analisador
 	interval  time.Duration
 }
@@ -29,6 +31,7 @@ func NovoMarketSyncWorker(
 		provedor:  provedor,
 		store:     store,
 		cvmClient: cvm.NovoCVMClient(), // Inicializa cliente CVM
+		b3Client:  b3.NovoB3Client(),   // Inicializa cliente B3
 		motores:   motores,
 		interval:  interval,
 	}
@@ -48,12 +51,12 @@ func (w *MarketSyncWorker) ExecutarSincronizacao(universo []string) {
 	// 1. Busca cotações e proventos ao vivo (Yahoo Finance via Goroutines)
 	ativos := w.provedor.BuscarEmLote(universo)
 
-	// 2. Busca VPs oficiais de FIIs da CVM (em memória, 1x)
-	vpsCVM, errFII := w.cvmClient.ObterValoresPatrimoniais()
+	// 2. Busca Dados Oficiais de FIIs da CVM (VP/Cota + Rendimentos 12M em memória, 1x)
+	dadosFII, errFII := w.cvmClient.ObterDadosFII()
 	if errFII != nil {
 		fmt.Printf("⚠️ [CVM FII Warning] %s\n", errFII)
 	} else {
-		fmt.Printf("🏛️ [CVM Oficial] %d FIIs com Valor Patrimonial oficial carregados!\n", len(vpsCVM))
+		fmt.Printf("🏛️ [CVM Oficial] %d FIIs com Valor Patrimonial e Proventos carregados!\n", len(dadosFII))
 	}
 
 	// 3. Busca Balanços Oficiais de Ações da CVM (LPA e VPA dinâmicos sem mocks)
@@ -64,28 +67,66 @@ func (w *MarketSyncWorker) ExecutarSincronizacao(universo []string) {
 		fmt.Printf("🏛️ [CVM Oficial] %d Balanços contábeis de companhias abertas carregados!\n", len(fundamentosCVM))
 	}
 
+	// Carrega cadastro oficial de companhias da CVM para resolução dinâmica de CNPJ
+	cadastroCVM, _ := w.cvmClient.ObterCadastroCVM()
+	if cadastroCVM != nil {
+		fmt.Println("📋 [CVM Cadastro] Cadastro oficial de companhias abertas carregado com sucesso!")
+	}
+
 	// 4. Aplica os fundamentos calculados a cada ativo e executa os 4 motores
 	for _, a := range ativos {
 		if a.Classe == domain.ClasseFII {
-			if vpOficial, ok := vpsCVM[a.Ticker]; ok {
-				a.VPCota = vpOficial // Dado oficial da CVM
+			// Atribui VP/Cota e Proventos 12M apurados diretamente da CVM
+			if f, ok := dadosFII[a.Ticker]; ok {
+				a.VPCota = f.VPCota
+				a.Dividendos12M = f.Dividendos12M
+			} else {
+				// Resolução dinâmica por similaridade de nome para FIIs com código divergente (ex: KNUQ11)
+				limpoB3 := strings.TrimPrefix(strings.TrimPrefix(strings.ToUpper(a.Nome), "FII "), "FDO ")
+				palavrasB3 := strings.Fields(limpoB3)
+				for _, f := range dadosFII {
+					if len(palavrasB3) >= 2 && f.Nome != "" {
+						palavrasCVM := strings.Fields(strings.ToUpper(f.Nome))
+						todasBatem := true
+						for _, pB3 := range palavrasB3 {
+							bateu := false
+							for _, pCVM := range palavrasCVM {
+								if strings.HasPrefix(pCVM, pB3) {
+									bateu = true
+									break
+								}
+							}
+							if !bateu {
+								todasBatem = false
+								break
+							}
+						}
+						if todasBatem {
+							a.VPCota = f.VPCota
+							a.Dividendos12M = f.Dividendos12M
+							a.CNPJ = f.CNPJ
+							dadosFII[a.Ticker] = f
+							break
+						}
+					}
+				}
 			}
 		} else {
+
+			// Proventos Oficiais 12M da B3 (Eventos Corporativos em Dinheiro com desconto de IR em JCP - Bazin)
+			if provs := w.b3Client.ObterProventos12MAcao(a.Nome, a.Ticker); provs > 0 {
+				a.Dividendos12M = provs
+			}
+
 			// Atribui LPA e VPA calculados dinamicamente das demonstrações contábeis oficiais da CVM
 			if len(fundamentosCVM) > 0 {
 				cnpjAlvo := strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(a.CNPJ, ".", ""), "/", ""), "-", "")
 
-				// Se o CNPJ for vazio ou um identificador provisório (ex: 'B3-PETR4'), recorre ao mapa de CNPJs oficiais
-				if len(cnpjAlvo) != 14 || strings.HasPrefix(cnpjAlvo, "B3") {
-					cnpjsOficiais := map[string]string{
-						"PETR4": "33000167000101", "VALE3": "33592510000154",
-						"BBAS3": "00000000000191", "ITUB4": "60872504000123",
-						"BBDC4": "60746948000112", "WEGE3": "84429695000111",
-						"TAEE11": "07859971000130", "CPLE3": "76483817000120",
-						"CSAN3": "50746577000115", "RENT3": "16670085000155",
-					}
-					if realCNPJ, ok := cnpjsOficiais[a.Ticker]; ok {
-						cnpjAlvo = realCNPJ
+				// Se não tem CNPJ cadastrado ou é genérico, resolve dinamicamente na base da CVM
+				if (len(cnpjAlvo) != 14 || strings.HasPrefix(cnpjAlvo, "B3")) && cadastroCVM != nil {
+					cnpjAlvo = cadastroCVM.ResolverCNPJ(a.Ticker, a.Nome)
+					if cnpjAlvo != "" {
+						a.CNPJ = cnpjAlvo
 					}
 				}
 
@@ -96,9 +137,10 @@ func (w *MarketSyncWorker) ExecutarSincronizacao(universo []string) {
 					if f.VPA > 0 {
 						a.VPA = f.VPA
 					}
-					a.CrescimentoLucro5A = 10.0 // Média conservadora de 10% a.a. para PEG Ratio (Lynch)
+					a.CrescimentoLucro5A = 10.0 // Média de 10% a.a. para PEG Ratio (Lynch)
 				}
 			}
+
 		}
 
 		// Roda os 4 motores analíticos
