@@ -3,9 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
+	"net/http"
 	"sort"
 	"time"
 
+	"carteira_investimentos/server/internal/api"
 	"carteira_investimentos/server/internal/bazin"
 	"carteira_investimentos/server/internal/catalog"
 	"carteira_investimentos/server/internal/config"
@@ -13,11 +16,12 @@ import (
 	"carteira_investimentos/server/internal/fii"
 	"carteira_investimentos/server/internal/gordon"
 	"carteira_investimentos/server/internal/graham"
+	"carteira_investimentos/server/internal/greenblatt"
 	"carteira_investimentos/server/internal/lynch"
-	"carteira_investimentos/server/internal/provider"
+	"carteira_investimentos/server/internal/piotroski"
 	"carteira_investimentos/server/internal/score"
+	"carteira_investimentos/server/internal/statusinvest"
 	"carteira_investimentos/server/internal/storage"
-	"carteira_investimentos/server/internal/worker"
 )
 
 func main() {
@@ -48,23 +52,38 @@ func main() {
 
 	// 3. Inicializa os Motores de Valuation e Consolidação
 	motores := []domain.Analisador{
-		bazin.Novo(0.06),  // 1. Décio Bazin: Dividend Yield sustentável >= 6%
-		graham.Novo(),     // 2. Benjamin Graham: Valor Intrínseco
-		lynch.Novo(),      // 3. Peter Lynch: PEG Ratio e Preço Justo de Crescimento
-		gordon.Novo(0.11), // 4. Gordon DDM: Preço Teto com crescimento sustentável (taxa desc. 11%)
-		fii.Novo(0.065),   // 5. FIIs: P/VP e Spread real vs NTN-B (IPCA+ 6.5% a.a.)
-		score.Novo(),      // 6. Score Fundamentalista (0 a 100) e Pareceres Individuais
+		bazin.Novo(0.06),      // 1. Décio Bazin: Dividend Yield sustentável >= 6%
+		graham.Novo(),         // 2. Benjamin Graham: Valor Intrínseco
+		lynch.Novo(),          // 3. Peter Lynch: PEG Ratio e Preço Justo de Crescimento
+		gordon.Novo(0.11),     // 4. Gordon DDM: Preço Teto com crescimento sustentável (taxa desc. 11%)
+		greenblatt.Novo(),     // 5. Joel Greenblatt: The Magic Formula (EV/EBIT + ROIC com adaptação p/ bancos)
+		piotroski.Novo(),      // 6. Joseph Piotroski: F-Score de Solvência & Saúde Contábil (0 a 9)
+		fii.Novo(0.065),       // 7. FIIs: Segmentação (Tijolo/Papel), Cap Rate Implícito e Spread NTN-B
+		score.Novo(),          // 8. Score Fundamentalista Composto (0 a 100) e Blindagem Anti-Value Trap
 	}
 
-	// 4. Inicializa o Cache e o Provedor Oficial B3 (COTAHIST em Lote sem Yahoo)
+	// 4. Inicializa o Cache e o Ingestion Service Consolidado (StatusInvest)
 	store := storage.NovoInMemoryStore()
-	provedor := provider.NovoB3MarketProvider(nil, repo, 500_000.00)
+	ingestionService := statusinvest.NovoIngestionService(nil, store, motores)
 
-	// 5. Scanner Geral de Mercado: Passando nil/vazio, o B3MarketProvider varre TODOS os ativos líquidos da B3
-	var universo []string // Slice vazio ativa o modo Scanner de Mercado Aberto
+	// 5. Ingestão consolidada em 2 requisições ultra-rápidas (<1s para 100% dos ativos da B3)
+	ctxIngest, cancelIngest := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancelIngest()
 
-	sincronizador := worker.NovoMarketSyncWorker(provedor, store, motores, 15*time.Minute)
-	sincronizador.ExecutarSincronizacao(universo)
+	if _, err := ingestionService.ExecutarSincronizacao(ctxIngest); err != nil {
+		fmt.Printf("⚠️ Erro na sincronização inicial do StatusInvest: %v\n", err)
+	}
+
+	// Inicia rotina periódica em background a cada 1 hora
+	go func() {
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
+			ctxBg, cancelBg := context.WithTimeout(context.Background(), 60*time.Second)
+			_, _ = ingestionService.ExecutarSincronizacao(ctxBg)
+			cancelBg()
+		}
+	}()
 
 	// 6. Lê todos os ativos auditados e separa em 3 listas independentes
 	todosAtivos := store.ListarTodos()
@@ -131,6 +150,31 @@ func main() {
 	fmt.Printf("📊 Auditoria Finalizada: %d Ativos Analisados (Ações: %d | FIIs: %d | ETFs: %d)\n",
 		len(todosAtivos), len(acoes), len(fiis), len(etfs))
 	fmt.Println("==================================================================")
+
+	// ==================================================================
+	// 10. INICIALIZAÇÃO DA API REST (HTTP SERVER)
+	// ==================================================================
+	apiHandler := api.NovoHandler(store)
+	router := apiHandler.ConfigurarRotas()
+
+	servidor := &http.Server{
+		Addr:         ":8080",
+		Handler:      router,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+	}
+
+	fmt.Println("\n==================================================================")
+	fmt.Println("🌐 SERVIDOR HTTP ATIVO EM http://localhost:8080")
+	fmt.Println("   • Health Check: GET http://localhost:8080/health")
+	fmt.Println("   • Rankings:     GET http://localhost:8080/api/v1/rankings")
+	fmt.Println("   • Ativo Único:  GET http://localhost:8080/api/v1/ativos/PETR4")
+	fmt.Println("==================================================================")
+
+	if err := servidor.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		log.Fatalf("❌ Erro fatal no servidor HTTP: %s\n", err)
+	}
+
 }
 
 func getIconeStatus(status domain.StatusRecomendacao) string {

@@ -8,8 +8,8 @@ import (
 )
 
 // AnalisadorScore consolida as métricas calculadas pelos outros motores,
-// gera pareceres individuais pedagógicos por escola de investimento
-// e calcula o Score Fundamentalista Composto (0 a 100).
+// gera pareceres pedagógicos por escola de investimento
+// e calcula o Score Fundamentalista Composto (0 a 100) com blindagem contra Value Traps.
 type AnalisadorScore struct{}
 
 func Novo() *AnalisadorScore {
@@ -58,7 +58,7 @@ func (s *AnalisadorScore) Executar(ativo *domain.Ativo) error {
 				ativo.Pareceres["Bazin"] = domain.ParecerItem{
 					Status:  domain.ParecerAprovado,
 					Metrica: fmt.Sprintf("Teto: R$ %6.2f | Yield: %4.1f%%", ativo.PrecoTetoBazin, ativo.DY),
-					Detalhe: fmt.Sprintf("Margem: %+.1f%%", ativo.MargemBazin),
+					Detalhe: fmt.Sprintf("Margem de Segurança: %+.1f%%", ativo.MargemBazin),
 				}
 			} else {
 				ativo.Pareceres["Bazin"] = domain.ParecerItem{
@@ -66,6 +66,12 @@ func (s *AnalisadorScore) Executar(ativo *domain.Ativo) error {
 					Metrica: fmt.Sprintf("Teto: R$ %6.2f | Yield: %4.1f%%", ativo.PrecoTetoBazin, ativo.DY),
 					Detalhe: fmt.Sprintf("Acima do Teto: %+.1f%%", -ativo.MargemBazin),
 				}
+			}
+		} else {
+			ativo.Pareceres["Bazin"] = domain.ParecerItem{
+				Status:  domain.ParecerNaoAplica,
+				Metrica: "DY 12M: 0,0%",
+				Detalhe: "Não pagou proventos no último ano (reinvestimento ou crescimento)",
 			}
 		}
 
@@ -90,6 +96,12 @@ func (s *AnalisadorScore) Executar(ativo *domain.Ativo) error {
 					Detalhe: fmt.Sprintf("Acima do VI (+%4.1f%%)", -ativo.MargemGraham),
 				}
 			}
+		} else {
+			ativo.Pareceres["Graham"] = domain.ParecerItem{
+				Status:  domain.ParecerReprovado,
+				Metrica: "VI: Inaplicável",
+				Detalhe: "Prejuízo acumulado ou patrimônio líquido negativo",
+			}
 		}
 
 		// Parecer 3: Peter Lynch (PEG Ratio)
@@ -98,111 +110,114 @@ func (s *AnalisadorScore) Executar(ativo *domain.Ativo) error {
 				ativo.Pareceres["Lynch"] = domain.ParecerItem{
 					Status:  domain.ParecerAprovado,
 					Metrica: fmt.Sprintf("Teto: R$ %6.2f | PEG: %4.2f", ativo.PrecoJustoLynch, ativo.PEGRatio),
-					Detalhe: "Subavaliado pelo Crescimento",
+					Detalhe: "Crescimento a preço muito atrativo",
 				}
 			} else if ativo.PEGRatio <= 1.5 {
 				ativo.Pareceres["Lynch"] = domain.ParecerItem{
 					Status:  domain.ParecerAtencao,
 					Metrica: fmt.Sprintf("Teto: R$ %6.2f | PEG: %4.2f", ativo.PrecoJustoLynch, ativo.PEGRatio),
-					Detalhe: "Preço Justo para Crescimento",
+					Detalhe: "Crescimento a preço justo",
 				}
 			} else {
 				ativo.Pareceres["Lynch"] = domain.ParecerItem{
 					Status:  domain.ParecerReprovado,
 					Metrica: fmt.Sprintf("Teto: R$ %6.2f | PEG: %4.2f", ativo.PrecoJustoLynch, ativo.PEGRatio),
-					Detalhe: "Esticado para o Crescimento",
+					Detalhe: "Preço elevado para a taxa de crescimento",
 				}
 			}
 		}
 
-		// Parecer 4: Gordon Growth Model (DDM)
+		// Parecer 4: Gordon DDM
 		if ativo.PrecoTetoGordon > 0 {
 			if ativo.PrecoAtual <= ativo.PrecoTetoGordon {
 				ativo.Pareceres["Gordon"] = domain.ParecerItem{
 					Status:  domain.ParecerAprovado,
-					Metrica: fmt.Sprintf("Teto Gordon: R$ %6.2f", ativo.PrecoTetoGordon),
-					Detalhe: "Fluxo Futuro Sustentável",
+					Metrica: fmt.Sprintf("Teto: R$ %6.2f", ativo.PrecoTetoGordon),
+					Detalhe: "Dividendos com crescimento sustentável abaixo do teto",
 				}
 			} else {
 				ativo.Pareceres["Gordon"] = domain.ParecerItem{
-					Status:  domain.ParecerAtencao,
-					Metrica: fmt.Sprintf("Teto Gordon: R$ %6.2f", ativo.PrecoTetoGordon),
+					Status:  domain.ParecerReprovado,
+					Metrica: fmt.Sprintf("Teto: R$ %6.2f", ativo.PrecoTetoGordon),
 					Detalhe: "Acima do Teto de Gordon",
 				}
 			}
 		}
 
-		// Parecer 5: Joel Greenblatt (Earnings Yield)
-		if ativo.EarningsYield > 0 {
-			if ativo.EarningsYield >= 10.0 {
-				ativo.Pareceres["Greenblatt"] = domain.ParecerItem{
-					Status:  domain.ParecerAprovado,
-					Metrica: fmt.Sprintf("Earnings Yield: %4.1f%%", ativo.EarningsYield),
-					Detalhe: "Lucro Supera Renda Fixa",
-				}
-			} else if ativo.EarningsYield >= 6.0 {
-				ativo.Pareceres["Greenblatt"] = domain.ParecerItem{
-					Status:  domain.ParecerAtencao,
-					Metrica: fmt.Sprintf("Earnings Yield: %4.1f%%", ativo.EarningsYield),
-					Detalhe: "Retorno Operacional Moderado",
-				}
-			} else {
-				ativo.Pareceres["Greenblatt"] = domain.ParecerItem{
-					Status:  domain.ParecerReprovado,
-					Metrica: fmt.Sprintf("Earnings Yield: %4.1f%%", ativo.EarningsYield),
-					Detalhe: "Earnings Yield Baixo",
-				}
+		// ==========================================
+		// CÁLCULO DO SCORE DE AÇÕES (0 a 100)
+		// ==========================================
+		score := 0.0
+
+		// Bloco 1: Bazin / Dividend Yield (até 20 pontos)
+		if ativo.DY >= 8.0 {
+			score += 20.0
+		} else if ativo.DY >= 6.0 {
+			score += 15.0 + (ativo.DY-6.0)*2.5
+		} else if ativo.DY >= 4.0 {
+			score += 8.0
+		} else if ativo.DY > 0.0 {
+			score += 4.0
+		}
+
+		// Bloco 2: Graham / Desconto de Valor Intrínseco (até 20 pontos)
+		if ativo.MargemGraham >= 25.0 {
+			score += 20.0
+		} else if ativo.MargemGraham >= 0.0 {
+			score += 14.0 + (ativo.MargemGraham/25.0)*6.0
+		} else if ativo.MargemGraham >= -15.0 {
+			score += 6.0
+		}
+
+		// Bloco 3: Greenblatt (Magic Formula) (até 20 pontos)
+		if pGreen, ok := ativo.Pareceres["Greenblatt"]; ok {
+			if pGreen.Status == domain.ParecerAprovado {
+				score += 20.0
+			} else if pGreen.Status == domain.ParecerAtencao {
+				score += 12.0
+			} else if pGreen.Status == domain.ParecerReprovado && ativo.PL > 0 {
+				score += 4.0
 			}
 		}
 
-		// CÁLCULO DO SCORE GERAL DE AÇÕES (0 a 100)
-		score := 0.0
+		// Bloco 4: Piotroski (Solvência & Saúde Contábil) (até 20 pontos)
+		if pPio, ok := ativo.Pareceres["Piotroski"]; ok {
+			if pPio.Status == domain.ParecerAprovado {
+				score += 20.0
+			} else if pPio.Status == domain.ParecerAtencao {
+				score += 12.0
+			} else {
+				score += 3.0
+			}
+		}
 
-		// Bloco 1: Bazin (até 30 pontos)
-		if ativo.DY >= 8.0 {
-			score += 30.0
-		} else if ativo.DY >= 6.0 {
-			score += 22.0 + (ativo.DY-6.0)*4.0
-		} else if ativo.DY >= 4.0 {
-			score += 12.0
-		} else if ativo.DY > 0.0 {
+		// Bloco 5: Lynch PEG & Crescimento (até 10 pontos)
+		if ativo.PEGRatio > 0 {
+			if ativo.PEGRatio <= 0.8 {
+				score += 10.0
+			} else if ativo.PEGRatio <= 1.2 {
+				score += 7.0
+			} else if ativo.PEGRatio <= 1.6 {
+				score += 4.0
+			}
+		}
+
+		// Bloco 6: Gordon Dividend Growth (até 10 pontos)
+		if ativo.PrecoTetoGordon > 0 && ativo.PrecoAtual <= ativo.PrecoTetoGordon {
+			score += 10.0
+		} else if ativo.PrecoTetoGordon > 0 && ativo.PrecoAtual <= ativo.PrecoTetoGordon*1.15 {
 			score += 5.0
 		}
 
-		// Bloco 2: Graham (até 30 pontos)
-		if ativo.MargemGraham >= 20.0 {
-			score += 30.0
-		} else if ativo.MargemGraham >= 0.0 {
-			score += 22.0 + (ativo.MargemGraham/20.0)*8.0
-		} else if ativo.MargemGraham >= -15.0 {
-			score += 10.0
+		// --- BLINDAGEM CONTRA VALUE TRAPS ---
+		// Se a empresa opera em prejuízo (LPA <= 0) ou tem Patrimônio Negativo (VPA <= 0):
+		if ativo.LPA <= 0 || ativo.VPA <= 0 {
+			score = math.Min(score, 25.0)
 		}
 
-		// Bloco 3: Lynch PEG (até 15 pontos)
-		if ativo.PEGRatio > 0 {
-			if ativo.PEGRatio <= 0.8 {
-				score += 15.0
-			} else if ativo.PEGRatio <= 1.0 {
-				score += 12.0
-			} else if ativo.PEGRatio <= 1.5 {
-				score += 6.0
-			}
-		}
-
-		// Bloco 4: Gordon (até 15 pontos)
-		if ativo.PrecoTetoGordon > 0 && ativo.PrecoAtual <= ativo.PrecoTetoGordon {
-			score += 15.0
-		} else if ativo.PrecoTetoGordon > 0 && ativo.PrecoAtual <= ativo.PrecoTetoGordon*1.15 {
-			score += 7.0
-		}
-
-		// Bloco 5: ROE / Rentabilidade (até 10 pontos)
-		if ativo.ROE >= 15.0 {
-			score += 10.0
-		} else if ativo.ROE >= 10.0 {
-			score += 6.0
-		} else if ativo.ROE > 0.0 {
-			score += 3.0
+		// Se a liquidez for menor que R$ 20k/dia (risco severo de saída):
+		if ativo.LiquidezMediaDiaria < 20000.0 && ativo.LiquidezMediaDiaria > 0 {
+			score = math.Max(0.0, score-15.0)
 		}
 
 		ativo.Score = math.Round(score)
@@ -277,40 +292,65 @@ func (s *AnalisadorScore) Executar(ativo *domain.Ativo) error {
 			}
 		}
 
+		// ==========================================
 		// CÁLCULO DO SCORE DE FIIs (0 a 100)
+		// ==========================================
 		score := 0.0
 
-		// Bloco 1: Desconto P/VP (até 40 pontos)
+		// Bloco 1: Desconto P/VP com trava de ágio (até 30 pontos)
 		if ativo.PVP > 0 {
 			if ativo.PVP >= 0.85 && ativo.PVP <= 0.95 {
-				score += 40.0 // Desconto ideal com margem
-			} else if ativo.PVP > 0.95 && ativo.PVP <= 1.02 {
-				score += 32.0 // Preço justo
+				score += 30.0 // Desconto ideal
+			} else if ativo.PVP > 0.95 && ativo.PVP <= 1.01 {
+				score += 24.0 // Preço justo
 			} else if ativo.PVP < 0.85 {
-				score += 25.0 // Desconto profundo (cautela)
-			} else if ativo.PVP <= 1.06 {
-				score += 10.0
+				score += 18.0 // Desconto excessivo (atenção a inadimplência)
+			} else if ativo.PVP <= 1.05 {
+				score += 8.0
 			}
 		}
 
-		// Bloco 2: Spread NTN-B (até 40 pontos)
+		// Bloco 2: Spread NTN-B (até 25 pontos)
 		if ativo.SpreadNTNB >= 3.0 {
-			score += 40.0
-		} else if ativo.SpreadNTNB >= 1.0 {
-			score += 30.0
-		} else if ativo.SpreadNTNB >= 0.0 {
+			score += 25.0
+		} else if ativo.SpreadNTNB >= 1.5 {
 			score += 20.0
+		} else if ativo.SpreadNTNB >= 0.0 {
+			score += 12.0
 		}
 
-		// Bloco 3: Yield Absoluto (até 20 pontos)
-		if ativo.DY >= 11.0 {
+		// Bloco 3: Dividend Yield 12M (até 25 pontos)
+		if ativo.DY >= 11.5 {
+			score += 25.0
+		} else if ativo.DY >= 9.5 {
 			score += 20.0
-		} else if ativo.DY >= 9.0 {
-			score += 15.0
-		} else if ativo.DY >= 7.0 {
-			score += 10.0
+		} else if ativo.DY >= 7.5 {
+			score += 14.0
 		} else if ativo.DY > 0.0 {
-			score += 5.0
+			score += 6.0
+		}
+
+		// Bloco 4: Estabilidade de Proventos (até 10 pontos)
+		if pProv, ok := ativo.Pareceres["FII Proventos"]; ok {
+			if pProv.Status == domain.ParecerAprovado {
+				score += 10.0
+			} else if pProv.Status == domain.ParecerAtencao {
+				score += 6.0
+			}
+		}
+
+		// Bloco 5: Liquidez & Pulverização (até 10 pontos)
+		if ativo.LiquidezMediaDiaria >= 500_000.0 && ativo.NumeroCotistas >= 20_000.0 {
+			score += 10.0
+		} else if ativo.LiquidezMediaDiaria >= 100_000.0 {
+			score += 6.0
+		} else if ativo.LiquidezMediaDiaria > 0 {
+			score += 2.0
+		}
+
+		// Se o fundo não pagou proventos (DY == 0):
+		if ativo.DY <= 0 {
+			score = math.Min(score, 30.0)
 		}
 
 		ativo.Score = math.Round(score)

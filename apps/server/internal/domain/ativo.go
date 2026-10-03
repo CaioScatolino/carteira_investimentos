@@ -63,6 +63,27 @@ type Ativo struct {
 	PrecoTetoGordon    float64                `json:"preco_teto_gordon"`    // Teto Gordon com crescimento
 	MargemBazin        float64                `json:"margem_bazin"`         // % Margem de Segurança Bazin
 	MargemGraham       float64                `json:"margem_graham"`        // % Margem de Segurança Graham
+
+	// Métricas Avançadas StatusInvest
+	ROIC                float64 `json:"roic,omitempty"`
+	ROA                 float64 `json:"roa,omitempty"`
+	GiroAtivos          float64 `json:"giro_ativos,omitempty"`
+	MargemBruta         float64 `json:"margem_bruta,omitempty"`
+	MargemEbit          float64 `json:"margem_ebit,omitempty"`
+	MargemLiquida       float64 `json:"margem_liquida,omitempty"`
+	DividaLiquidaPL     float64 `json:"divida_liquida_pl,omitempty"`
+	DividaLiquidaEbit   float64 `json:"divida_liquida_ebit,omitempty"`
+	LiquidezCorrente    float64 `json:"liquidez_corrente,omitempty"`
+	LiquidezMediaDiaria float64 `json:"liquidez_media_diaria,omitempty"`
+	ValorMercado        float64 `json:"valor_mercado,omitempty"`
+	Setor               string  `json:"setor,omitempty"`
+	Subsetor            string  `json:"subsetor,omitempty"`
+	Segmento            string  `json:"segmento,omitempty"`
+	Gestao              string  `json:"gestao,omitempty"`
+	PercentualCaixa     float64 `json:"percentual_caixa,omitempty"`
+	NumeroCotistas      float64 `json:"numero_cotistas,omitempty"`
+	LastDividend        float64 `json:"last_dividend,omitempty"`
+
 	Pareceres          map[string]ParecerItem `json:"pareceres,omitempty"`  // Pareceres individuais por motor
 	Status             StatusRecomendacao     `json:"status"`
 }

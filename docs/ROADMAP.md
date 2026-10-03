@@ -122,10 +122,11 @@ Este documento é a bússola viva do projeto. Ele mapeia as decisões arquitetur
 ---
 
 ### ⏳ FASE 8: Servidor HTTP Nativo & Streaming com Server-Sent Events (SSE)
-- [ ] **Passo 8.1**: Servidor HTTP em Go (`net/http`) com `http.NewServeMux()`:
-  - `GET /health` (Health check para Docker/Nginx Proxy Manager).
-  - `GET /api/market/snapshot` (JSON de mercado).
-  - `POST /api/portfolio/audit` (Auditoria rápida da carteira).
+- [x] **Passo 8.1**: Servidor HTTP em Go (`net/http`) com `http.NewServeMux()` (Concluído - Passo 16):
+  - `GET /health` (Health check com total de ativos carregados).
+  - `GET /api/v1/rankings` (Rankings completos de Ações, FIIs e ETFs ordenados por Score).
+  - `GET /api/v1/ativos/{ticker}` (Análise profunda e pareceres individuais).
+  - Middlewares de CORS nativo e Logging de performance em microssegundos.
 - [ ] **Passo 8.2**: Endpoint SSE (`GET /api/audit/stream`):
   - Streaming em tempo real para o frontend com efeito máquina de escrever.
 
@@ -139,9 +140,9 @@ Este documento é a bússola viva do projeto. Ele mapeia as decisões arquitetur
 ---
 
 ### ⏳ FASE 10: Front-end Next.js (Mobile-First & Desktop)
-- [ ] **Passo 10.1**: Inicialização do Next.js standalone em `apps/web/`.
-- [ ] **Passo 10.2**: Consumo do fluxo SSE em tempo real.
-- [ ] **Passo 10.3**: Interface responsiva de auditoria com semáforo visual e simulador de aportes.
+- [x] **Passo 10.1**: Inicialização do Next.js standalone em `apps/web/` com Tailwind CSS v4 e TypeScript (Concluído - Passo 17).
+- [x] **Passo 10.2**: Consumo dos endpoints REST (`/api/v1/rankings` e `/api/v1/ativos/{ticker}`) em tempo real.
+- [x] **Passo 10.3**: Interface responsiva institucional em preto com dourado, 3 tabelas independentes (Ações, FIIs, ETFs) com paginação, busca e modais detalhados de valuation.
 
 ---
 
