@@ -84,11 +84,17 @@ type Ativo struct {
 	NumeroCotistas      float64 `json:"numero_cotistas,omitempty"`
 	LastDividend        float64 `json:"last_dividend,omitempty"`
 
+	// Qualidade e Sustentabilidade de Proventos (Blindagem Anti-Yield Trap)
+	Payout                    float64 `json:"payout,omitempty"`                      // % do LPA pago em proventos (Dividendos12M / LPA * 100)
+	IsProventoAtipico         bool    `json:"is_provento_atipico,omitempty"`          // Flag para proventos não recorrentes, extraordinários ou amortizações
+	AlertaRisco               string  `json:"alerta_risco,omitempty"`                // Alerta pedagógico (ex: "Yield Atípico (32.9%)", "Amortização de Capital")
+	PrecoTetoBazinSustentavel float64 `json:"preco_teto_bazin_sustentavel,omitempty"` // Preço teto ajustado para capacidade de lucro real
+
 	Pareceres          map[string]ParecerItem `json:"pareceres,omitempty"`  // Pareceres individuais por motor
 	Status             StatusRecomendacao     `json:"status"`
 }
 
-// AvaliarSemaforo define a recomendação consolidada
+// AvaliarSemaforo define a recomendação consolidada respeitando o Score Composto e blindagens de risco
 func (a *Ativo) AvaliarSemaforo() {
 	if a.Classe == ClasseETF {
 		if a.VolumeTotal >= 5_000_000.0 {
@@ -101,45 +107,22 @@ func (a *Ativo) AvaliarSemaforo() {
 		return
 	}
 
-	if a.Classe == ClasseFII {
-		// Se temos o Preço Teto Bazin calculado:
-		if a.PrecoTetoBazin > 0 {
-			// Exige P/VP justo E prêmio de risco positivo sobre a NTN-B
-			if a.PrecoAtual <= a.PrecoTetoBazin && (a.PVP > 0 && a.PVP <= 1.02) && a.SpreadNTNB >= 0 {
-				a.Status = StatusComprarMais
-			} else if a.PrecoAtual <= a.PrecoTetoBazin || (a.PVP > 0 && a.PVP <= 1.00) {
-				a.Status = StatusManter
-			} else {
-				a.Status = StatusAlerta
-			}
-		} else {
-			// Se o histórico de proventos ainda não foi carregado, avalia pelo desconto patrimonial oficial (CVM):
-			if a.PVP > 0 && a.PVP <= 0.95 {
-				a.Status = StatusComprarMais // Mais de 5% de desconto sobre o valor patrimonial
-			} else if a.PVP > 0 && a.PVP <= 1.02 {
-				a.Status = StatusManter // Negociando no valor justo patrimonial
-			} else {
-				a.Status = StatusAlerta // Ágio excessivo (P/VP esticado)
-			}
-		}
+	// BLINDAGEM 1: FIIs em liquidação ou amortização extraordinária (PATL11, BBFI11, etc)
+	if a.Classe == ClasseFII && (a.IsProventoAtipico || a.PVP < 0.35 || a.DY > 20.0) {
+		a.Status = StatusAlerta
 		return
 	}
 
-	// Para Ações: cruzamento de múltiplos motores
-	pontos := 0
-	if a.PrecoTetoBazin > 0 && a.PrecoAtual <= a.PrecoTetoBazin {
-		pontos++
-	}
-	if a.ValorGraham > 0 && a.PrecoAtual <= a.ValorGraham {
-		pontos++
-	}
-	if a.PEGRatio > 0 && a.PEGRatio <= 1.0 { // PEG de Lynch subavaliado
-		pontos++
+	// BLINDAGEM 2: Ações com prejuízo (LPA <= 0) ou patrimônio líquido negativo (VPA <= 0)
+	if a.Classe == ClasseAcao && (a.LPA <= 0 || a.VPA <= 0) {
+		a.Status = StatusAlerta
+		return
 	}
 
-	if pontos >= 2 {
+	// Alinhamento Consolidado com o Score Fundamentalista Multi-Fatorial
+	if a.Score >= 70.0 {
 		a.Status = StatusComprarMais
-	} else if pontos == 1 {
+	} else if a.Score >= 50.0 {
 		a.Status = StatusManter
 	} else {
 		a.Status = StatusAlerta

@@ -67,6 +67,28 @@ func (s *IngestionService) ExecutarSincronizacao(ctx context.Context) ([]*domain
 			crescimento = 10.0 // Média defensiva quando CAGR histórico não for positivo
 		}
 
+		payout := 0.0
+		if a.LPA > 0 && divs12M > 0 {
+			payout = (divs12M / a.LPA) * 100.0
+		} else if a.LPA <= 0 && divs12M > 0 {
+			payout = 999.0 // Payout com prejuízo
+		}
+
+		isAtipico := false
+		alertaRisco := ""
+
+		// Critérios Institucionais de Yield Trap em Ações:
+		if a.DY >= 18.0 {
+			isAtipico = true
+			alertaRisco = fmt.Sprintf("Yield Atípico (%4.1f%%): Provento extraordinário não perpétuo", a.DY)
+		} else if payout > 115.0 && a.DY >= 8.0 {
+			isAtipico = true
+			alertaRisco = fmt.Sprintf("Payout Excessivo (%4.0f%%): Distribuição acima do lucro anual", payout)
+		} else if a.LPA <= 0 && divs12M > 0 {
+			isAtipico = true
+			alertaRisco = "Prejuízo Operacional: Provento pago com reservas ou desinvestimento"
+		}
+
 		ativo := &domain.Ativo{
 			Ticker:              a.Ticker,
 			Nome:                a.CompanyName,
@@ -79,6 +101,9 @@ func (s *IngestionService) ExecutarSincronizacao(ctx context.Context) ([]*domain
 			PVPReal:             a.PVP,
 			DY:                  a.DY,
 			Dividendos12M:       divs12M,
+			Payout:              payout,
+			IsProventoAtipico:   isAtipico,
+			AlertaRisco:         alertaRisco,
 			CrescimentoLucro5A:  crescimento,
 			PEGRatio:            a.PEGRatio,
 			ROIC:                a.ROIC,
@@ -127,6 +152,16 @@ func (s *IngestionService) ExecutarSincronizacao(ctx context.Context) ([]*domain
 			divs12M = f.Price * (f.DY / 100.0)
 		}
 
+		isAtipicoFII := false
+		alertaRiscoFII := ""
+		if f.DY >= 18.0 {
+			isAtipicoFII = true
+			alertaRiscoFII = fmt.Sprintf("Amortização Extraordinária (DY %4.1f%%): Fundo em liquidação ou devolução de capital", f.DY)
+		} else if f.PVP > 0 && f.PVP < 0.35 && divs12M > 0 {
+			isAtipicoFII = true
+			alertaRiscoFII = "Risco Crítico: Cotação em colapso / Possível liquidação judicial"
+		}
+
 		ativo := &domain.Ativo{
 			Ticker:              f.Ticker,
 			Nome:                f.CompanyName,
@@ -137,6 +172,8 @@ func (s *IngestionService) ExecutarSincronizacao(ctx context.Context) ([]*domain
 			PVP:                 f.PVP,
 			DY:                  f.DY,
 			Dividendos12M:       divs12M,
+			IsProventoAtipico:   isAtipicoFII,
+			AlertaRisco:         alertaRiscoFII,
 			LastDividend:        f.LastDividend,
 			LiquidezMediaDiaria: f.LiquidezMediaDiaria,
 			VolumeTotal:         f.LiquidezMediaDiaria,

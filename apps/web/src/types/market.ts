@@ -56,6 +56,12 @@ export interface Ativo {
   numero_cotistas?: number;
   last_dividend?: number;
 
+  // Qualidade e Sustentabilidade de Proventos
+  payout?: number;
+  is_provento_atipico?: boolean;
+  alerta_risco?: string;
+  preco_teto_bazin_sustentavel?: number;
+
   pareceres?: Record<string, ParecerItem>;
   status: StatusRecomendacao;
 }

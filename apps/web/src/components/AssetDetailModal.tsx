@@ -68,6 +68,21 @@ export function AssetDetailModal({ ativo, onClose }: AssetModalProps) {
           </div>
         </div>
 
+        {/* Alerta de Risco para Proventos Atípicos ou Amortizações Extraordinárias */}
+        {ativo.is_provento_atipico && (
+          <div className="my-6 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3.5">
+            <span className="text-2xl mt-0.5">⚠️</span>
+            <div>
+              <h5 className="text-xs font-bold text-amber-400 uppercase tracking-wider">
+                Alerta de Sustentabilidade: Provento Atípico / Amortização
+              </h5>
+              <p className="text-xs text-neutral-300 mt-1 leading-relaxed">
+                {ativo.alerta_risco || "Este ativo distribuiu proventos não recorrentes que distorcem o Dividend Yield. O Preço Teto e o Score foram ajustados para a capacidade real de geração de caixa."}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Score Fundamentalista */}
         <div className="my-6 p-4 rounded-xl bg-gradient-to-r from-[#14141c] to-[#121217] border border-[#d4af37]/20 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -88,8 +103,15 @@ export function AssetDetailModal({ ativo, onClose }: AssetModalProps) {
         {/* Indicadores Principais */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 my-6">
           <div className="p-3 rounded-lg bg-neutral-900/60 border border-neutral-800">
-            <span className="text-[11px] text-neutral-400 uppercase tracking-wider block">Dividend Yield 12M</span>
-            <span className="text-lg font-bold text-emerald-400 tabular-numbers">{formatPercent(ativo.dy)}</span>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-neutral-400 uppercase tracking-wider block">Dividend Yield 12M</span>
+              {ativo.is_provento_atipico && (
+                <span className="text-[9px] px-1 py-0.2 bg-amber-500/20 text-amber-400 rounded font-bold">Atípico</span>
+              )}
+            </div>
+            <span className={`text-lg font-bold tabular-numbers ${ativo.is_provento_atipico ? "text-amber-400" : "text-emerald-400"}`}>
+              {formatPercent(ativo.dy)}
+            </span>
             <span className="text-[11px] text-neutral-500 block mt-0.5">{formatCurrency(ativo.dividendos_12m)}/cota</span>
           </div>
 
@@ -173,8 +195,14 @@ export function AssetDetailModal({ ativo, onClose }: AssetModalProps) {
                   <span className="font-semibold text-emerald-400">{formatPercent(ativo.margem_liquida)}</span>
                 </div>
                 <div className="p-2 rounded bg-neutral-900/80 border border-neutral-800/60">
-                  <span className="text-neutral-500 block text-[10px] uppercase">Margem Bruta</span>
-                  <span className="font-semibold text-neutral-200">{formatPercent(ativo.margem_bruta)}</span>
+                  <span className="text-neutral-500 block text-[10px] uppercase">Payout Histórico</span>
+                  <span className={`font-semibold ${ativo.payout && ativo.payout > 100 ? "text-amber-400" : "text-neutral-200"}`}>
+                    {ativo.payout !== undefined && ativo.payout > 0
+                      ? ativo.payout > 500
+                        ? "> 500%"
+                        : `${ativo.payout.toFixed(0)}%`
+                      : "—"}
+                  </span>
                 </div>
                 <div className="p-2 rounded bg-neutral-900/80 border border-neutral-800/60">
                   <span className="text-neutral-500 block text-[10px] uppercase">Dív. Líquida / PL</span>
@@ -183,10 +211,6 @@ export function AssetDetailModal({ ativo, onClose }: AssetModalProps) {
                 <div className="p-2 rounded bg-neutral-900/80 border border-neutral-800/60">
                   <span className="text-neutral-500 block text-[10px] uppercase">Dív. Líquida / EBIT</span>
                   <span className="font-semibold text-neutral-200">{ativo.divida_liquida_ebit !== undefined ? `${ativo.divida_liquida_ebit.toFixed(2)}x` : "-"}</span>
-                </div>
-                <div className="p-2 rounded bg-neutral-900/80 border border-neutral-800/60">
-                  <span className="text-neutral-500 block text-[10px] uppercase">Liq. Corrente</span>
-                  <span className="font-semibold text-neutral-200">{ativo.liquidez_corrente !== undefined ? `${ativo.liquidez_corrente.toFixed(2)}x` : "-"}</span>
                 </div>
                 <div className="p-2 rounded bg-neutral-900/80 border border-neutral-800/60">
                   <span className="text-neutral-500 block text-[10px] uppercase">Liq. Média Diária</span>

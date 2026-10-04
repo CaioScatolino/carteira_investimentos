@@ -163,6 +163,14 @@ export function MarketTable({
                         <span className="font-bold text-white font-mono group-hover:text-[#d4af37] transition-colors">
                           {ativo.ticker}
                         </span>
+                        {ativo.is_provento_atipico && (
+                          <span
+                            title={ativo.alerta_risco || "Provento atípico / Yield Trap"}
+                            className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center gap-1 cursor-help shrink-0"
+                          >
+                            ⚠️ Atípico
+                          </span>
+                        )}
                         <span className="text-[11px] text-neutral-500 truncate max-w-[120px]">
                           {ativo.nome}
                         </span>
@@ -203,7 +211,7 @@ export function MarketTable({
                         <td className="py-3 px-4 text-right font-mono text-neutral-300 tabular-numbers">
                           {ativo.roe > 0 ? formatPercent(ativo.roe) : "—"}
                         </td>
-                        <td className="py-3 px-4 text-right font-mono font-semibold text-emerald-400 tabular-numbers">
+                        <td className={`py-3 px-4 text-right font-mono font-semibold tabular-numbers ${ativo.is_provento_atipico ? "text-amber-400" : "text-emerald-400"}`}>
                           {formatPercent(ativo.dy)}
                         </td>
                         <td className="py-3 px-4 text-right font-mono text-neutral-300 tabular-numbers">
@@ -234,7 +242,7 @@ export function MarketTable({
                         <td className="py-3 px-4 text-right font-mono text-neutral-400 tabular-numbers">
                           {formatCurrency(ativo.vp_cota)}
                         </td>
-                        <td className="py-3 px-4 text-right font-mono font-semibold text-emerald-400 tabular-numbers">
+                        <td className={`py-3 px-4 text-right font-mono font-semibold tabular-numbers ${ativo.is_provento_atipico ? "text-amber-400" : "text-emerald-400"}`}>
                           {formatPercent(ativo.dy)}
                         </td>
                         <td className="py-3 px-4 text-right font-mono tabular-numbers">

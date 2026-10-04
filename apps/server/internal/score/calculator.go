@@ -53,7 +53,19 @@ func (s *AnalisadorScore) Executar(ativo *domain.Ativo) error {
 		}
 
 		// Parecer 1: Décio Bazin
-		if ativo.PrecoTetoBazin > 0 {
+		if ativo.IsProventoAtipico && ativo.PrecoTetoBazinSustentavel > 0 {
+			ativo.Pareceres["Bazin"] = domain.ParecerItem{
+				Status:  domain.ParecerAtencao,
+				Metrica: fmt.Sprintf("Teto Prudente: R$ %6.2f | Yield: %4.1f%%", ativo.PrecoTetoBazinSustentavel, ativo.DY),
+				Detalhe: fmt.Sprintf("⚠️ Yield Atípico (Payout %4.0f%%): Teto ajustado para capacidade de lucro real", ativo.Payout),
+			}
+		} else if ativo.IsProventoAtipico && ativo.LPA <= 0 {
+			ativo.Pareceres["Bazin"] = domain.ParecerItem{
+				Status:  domain.ParecerReprovado,
+				Metrica: fmt.Sprintf("Teto: Inaplicável | Yield: %4.1f%%", ativo.DY),
+				Detalhe: "⚠️ Prejuízo operacional: dividendo insustentável sem suporte de lucro",
+			}
+		} else if ativo.PrecoTetoBazin > 0 {
 			if ativo.PrecoAtual <= ativo.PrecoTetoBazin {
 				ativo.Pareceres["Bazin"] = domain.ParecerItem{
 					Status:  domain.ParecerAprovado,
@@ -128,7 +140,21 @@ func (s *AnalisadorScore) Executar(ativo *domain.Ativo) error {
 		}
 
 		// Parecer 4: Gordon DDM
-		if ativo.PrecoTetoGordon > 0 {
+		if ativo.IsProventoAtipico || ativo.Payout > 100.0 {
+			if ativo.PrecoTetoGordon > 0 && ativo.PrecoAtual <= ativo.PrecoTetoGordon {
+				ativo.Pareceres["Gordon"] = domain.ParecerItem{
+					Status:  domain.ParecerAtencao,
+					Metrica: fmt.Sprintf("Teto Prudente: R$ %6.2f", ativo.PrecoTetoGordon),
+					Detalhe: "Crescimento perpétuo calculado sobre payout sustentável de 60%",
+				}
+			} else {
+				ativo.Pareceres["Gordon"] = domain.ParecerItem{
+					Status:  domain.ParecerReprovado,
+					Metrica: "Teto: Inaplicável",
+					Detalhe: "Provento atípico inviabiliza projeção perpétua de dividendos",
+				}
+			}
+		} else if ativo.PrecoTetoGordon > 0 {
 			if ativo.PrecoAtual <= ativo.PrecoTetoGordon {
 				ativo.Pareceres["Gordon"] = domain.ParecerItem{
 					Status:  domain.ParecerAprovado,
@@ -150,14 +176,22 @@ func (s *AnalisadorScore) Executar(ativo *domain.Ativo) error {
 		score := 0.0
 
 		// Bloco 1: Bazin / Dividend Yield (até 20 pontos)
-		if ativo.DY >= 8.0 {
-			score += 20.0
-		} else if ativo.DY >= 6.0 {
-			score += 15.0 + (ativo.DY-6.0)*2.5
-		} else if ativo.DY >= 4.0 {
-			score += 8.0
-		} else if ativo.DY > 0.0 {
-			score += 4.0
+		if ativo.IsProventoAtipico {
+			if ativo.PrecoTetoBazinSustentavel > 0 && ativo.PrecoAtual <= ativo.PrecoTetoBazinSustentavel {
+				score += 8.0 // Bonificação moderada baseada na capacidade de lucro real
+			} else {
+				score += 2.0
+			}
+		} else {
+			if ativo.DY >= 8.0 {
+				score += 20.0
+			} else if ativo.DY >= 6.0 {
+				score += 15.0 + (ativo.DY-6.0)*2.5
+			} else if ativo.DY >= 4.0 {
+				score += 8.0
+			} else if ativo.DY > 0.0 {
+				score += 4.0
+			}
 		}
 
 		// Bloco 2: Graham / Desconto de Valor Intrínseco (até 20 pontos)
@@ -209,10 +243,16 @@ func (s *AnalisadorScore) Executar(ativo *domain.Ativo) error {
 			score += 5.0
 		}
 
-		// --- BLINDAGEM CONTRA VALUE TRAPS ---
+		// --- BLINDAGEM CONTRA VALUE TRAPS & PROVENTOS ATÍPICOS ---
 		// Se a empresa opera em prejuízo (LPA <= 0) ou tem Patrimônio Negativo (VPA <= 0):
 		if ativo.LPA <= 0 || ativo.VPA <= 0 {
 			score = math.Min(score, 25.0)
+		}
+
+		// Penalidade de Yield Trap (provento atípico / payout > 115% / DY > 18%):
+		if ativo.IsProventoAtipico {
+			score = math.Max(0.0, score-15.0) // Penalidade pelo risco de sustentabilidade
+			score = math.Min(score, 65.0)     // Trava prudencial: Impede recomendação de COMPRAR_MAIS
 		}
 
 		// Se a liquidez for menor que R$ 20k/dia (risco severo de saída):
@@ -255,7 +295,13 @@ func (s *AnalisadorScore) Executar(ativo *domain.Ativo) error {
 		}
 
 		// Parecer 2: Spread de Renda vs NTN-B (IPCA+ 6.5% a.a.)
-		if ativo.SpreadNTNB >= 2.0 {
+		if ativo.IsProventoAtipico || ativo.DY >= 18.0 {
+			ativo.Pareceres["SpreadNTNB"] = domain.ParecerItem{
+				Status:  domain.ParecerReprovado,
+				Metrica: fmt.Sprintf("Spread: Inaplicável (DY %4.1f%%)", ativo.DY),
+				Detalhe: "Provento extraordinário de amortização não reflete renda perpétua",
+			}
+		} else if ativo.SpreadNTNB >= 2.0 {
 			ativo.Pareceres["SpreadNTNB"] = domain.ParecerItem{
 				Status:  domain.ParecerAprovado,
 				Metrica: fmt.Sprintf("Spread: %+.2f%% vs NTN-B", ativo.SpreadNTNB),
@@ -276,7 +322,13 @@ func (s *AnalisadorScore) Executar(ativo *domain.Ativo) error {
 		}
 
 		// Parecer 3: Teto Bazin FII
-		if ativo.PrecoTetoBazin > 0 {
+		if ativo.IsProventoAtipico {
+			ativo.Pareceres["Bazin"] = domain.ParecerItem{
+				Status:  domain.ParecerReprovado,
+				Metrica: "Teto: Inaplicável",
+				Detalhe: "Fundo em amortização extraordinária ou liquidação",
+			}
+		} else if ativo.PrecoTetoBazin > 0 {
 			if ativo.PrecoAtual <= ativo.PrecoTetoBazin {
 				ativo.Pareceres["Bazin"] = domain.ParecerItem{
 					Status:  domain.ParecerAprovado,
@@ -303,31 +355,35 @@ func (s *AnalisadorScore) Executar(ativo *domain.Ativo) error {
 				score += 30.0 // Desconto ideal
 			} else if ativo.PVP > 0.95 && ativo.PVP <= 1.01 {
 				score += 24.0 // Preço justo
-			} else if ativo.PVP < 0.85 {
-				score += 18.0 // Desconto excessivo (atenção a inadimplência)
+			} else if ativo.PVP < 0.85 && ativo.PVP >= 0.35 {
+				score += 18.0 // Desconto acentuado
 			} else if ativo.PVP <= 1.05 {
 				score += 8.0
 			}
 		}
 
 		// Bloco 2: Spread NTN-B (até 25 pontos)
-		if ativo.SpreadNTNB >= 3.0 {
-			score += 25.0
-		} else if ativo.SpreadNTNB >= 1.5 {
-			score += 20.0
-		} else if ativo.SpreadNTNB >= 0.0 {
-			score += 12.0
+		if !ativo.IsProventoAtipico && ativo.DY < 18.0 {
+			if ativo.SpreadNTNB >= 3.0 {
+				score += 25.0
+			} else if ativo.SpreadNTNB >= 1.5 {
+				score += 20.0
+			} else if ativo.SpreadNTNB >= 0.0 {
+				score += 12.0
+			}
 		}
 
 		// Bloco 3: Dividend Yield 12M (até 25 pontos)
-		if ativo.DY >= 11.5 {
-			score += 25.0
-		} else if ativo.DY >= 9.5 {
-			score += 20.0
-		} else if ativo.DY >= 7.5 {
-			score += 14.0
-		} else if ativo.DY > 0.0 {
-			score += 6.0
+		if !ativo.IsProventoAtipico && ativo.DY < 18.0 {
+			if ativo.DY >= 11.5 {
+				score += 25.0
+			} else if ativo.DY >= 9.5 {
+				score += 20.0
+			} else if ativo.DY >= 7.5 {
+				score += 14.0
+			} else if ativo.DY > 0.0 {
+				score += 6.0
+			}
 		}
 
 		// Bloco 4: Estabilidade de Proventos (até 10 pontos)
@@ -346,6 +402,12 @@ func (s *AnalisadorScore) Executar(ativo *domain.Ativo) error {
 			score += 6.0
 		} else if ativo.LiquidezMediaDiaria > 0 {
 			score += 2.0
+		}
+
+		// --- BLINDAGEM DE RISCO DE FIIs ---
+		// Se o fundo tem provento atípico (amortização/liquidação), P/VP em colapso (< 0.35) ou DY >= 18%:
+		if ativo.IsProventoAtipico || ativo.PVP < 0.35 || ativo.DY >= 18.0 {
+			score = math.Min(score, 30.0) // Trava de segurança para ALERTA imediato
 		}
 
 		// Se o fundo não pagou proventos (DY == 0):
@@ -410,14 +472,8 @@ func (s *AnalisadorScore) Executar(ativo *domain.Ativo) error {
 		ativo.Score = score
 	}
 
-	// 2. Alinha o Status do Semáforo ao Score Consolidado
-	if ativo.Score >= 70.0 {
-		ativo.Status = domain.StatusComprarMais
-	} else if ativo.Score >= 50.0 {
-		ativo.Status = domain.StatusManter
-	} else {
-		ativo.Status = domain.StatusAlerta
-	}
+	// 2. Alinha o Status do Semáforo ao Score Consolidado e Regras de Segurança
+	ativo.AvaliarSemaforo()
 
 	return nil
 }

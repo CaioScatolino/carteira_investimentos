@@ -29,9 +29,19 @@ func (g *AnalisadorGordon) Nome() string {
 }
 
 func (g *AnalisadorGordon) Executar(ativo *domain.Ativo) error {
-	// Aplicável a ações com proventos distribuídos
-	if ativo.Classe != domain.ClasseAcao || ativo.Dividendos12M <= 0 {
+	// Aplicável a ações com proventos distribuídos e lucro positivo
+	if ativo.Classe != domain.ClasseAcao || ativo.Dividendos12M <= 0 || ativo.LPA <= 0 {
+		ativo.PrecoTetoGordon = 0
 		return nil
+	}
+
+	// Se provento for atípico ou payout > 100%, usa a base sustentável (60% do LPA)
+	baseDividendo := ativo.Dividendos12M
+	if ativo.IsProventoAtipico || ativo.Payout > 100.0 {
+		divSustentavel := ativo.LPA * 0.60
+		if divSustentavel < baseDividendo {
+			baseDividendo = divSustentavel
+		}
 	}
 
 	// Taxa de crescimento sustentável g:
@@ -54,7 +64,7 @@ func (g *AnalisadorGordon) Executar(ativo *domain.Ativo) error {
 		return nil
 	}
 
-	d1 := ativo.Dividendos12M * (1.0 + crescimento)
+	d1 := baseDividendo * (1.0 + crescimento)
 	ativo.PrecoTetoGordon = d1 / (g.taxaDesconto - crescimento)
 
 	return nil

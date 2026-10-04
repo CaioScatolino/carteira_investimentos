@@ -119,7 +119,13 @@ func (f *AnalisadorFII) Executar(ativo *domain.Ativo) error {
 	}
 
 	// Parecer 2: Estabilidade e Recorrência de Dividendos
-	if ativo.Dividendos12M > 0 && ativo.LastDividend > 0 && ativo.PrecoAtual > 0 {
+	if ativo.IsProventoAtipico || ativo.DY >= 18.0 || (ativo.PVP > 0 && ativo.PVP < 0.35) {
+		ativo.Pareceres["FII Proventos"] = domain.ParecerItem{
+			Status:  domain.ParecerReprovado,
+			Metrica: fmt.Sprintf("DY 12M: %4.1f%% (Atípico)", ativo.DY),
+			Detalhe: "⚠️ Amortização Extraordinária: Fundo em devolução de capital ou liquidação",
+		}
+	} else if ativo.Dividendos12M > 0 && ativo.LastDividend > 0 && ativo.PrecoAtual > 0 {
 		mediaMensal := ativo.Dividendos12M / 12.0
 		razaoUltimo := ativo.LastDividend / mediaMensal
 
