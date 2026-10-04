@@ -62,6 +62,9 @@ export interface Ativo {
   alerta_risco?: string;
   preco_teto_bazin_sustentavel?: number;
 
+  // Porte e Robustez Institucional
+  porte?: "BLUE_CHIP" | "MID_CAP" | "SMALL_CAP" | "MICRO_CAP" | "FII_GIGANTE" | "FII_CONSOLIDADO" | "FII_MEDIO" | "FII_CONCENTRADO";
+
   pareceres?: Record<string, ParecerItem>;
   status: StatusRecomendacao;
 }

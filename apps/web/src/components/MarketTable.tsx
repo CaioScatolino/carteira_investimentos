@@ -25,17 +25,28 @@ export function MarketTable({
   const [busca, setBusca] = useState("");
   const [pagina, setPagina] = useState(1);
   const [itensPorPagina, setItensPorPagina] = useState(8);
+  const [filtroPorte, setFiltroPorte] = useState<string>("TODOS");
 
-  // Filtro de busca por Ticker ou Nome
+  // Filtro de busca por Ticker ou Nome e Porte
   const filtrados = useMemo(() => {
-    if (!busca.trim()) return ativos;
+    let lista = ativos;
+
+    if (filtroPorte === "BLUE_CHIPS") {
+      lista = lista.filter((a) => a.porte === "BLUE_CHIP" || a.porte === "FII_GIGANTE");
+    } else if (filtroPorte === "MID_SMALL") {
+      lista = lista.filter(
+        (a) => a.porte === "MID_CAP" || a.porte === "SMALL_CAP" || a.porte === "FII_CONSOLIDADO"
+      );
+    }
+
+    if (!busca.trim()) return lista;
     const termo = busca.toLowerCase().trim();
-    return ativos.filter(
+    return lista.filter(
       (a) =>
         a.ticker.toLowerCase().includes(termo) ||
         (a.nome && a.nome.toLowerCase().includes(termo))
     );
-  }, [ativos, busca]);
+  }, [ativos, busca, filtroPorte]);
 
   // Paginação
   const totalPaginas = Math.max(1, Math.ceil(filtrados.length / itensPorPagina));
@@ -98,6 +109,70 @@ export function MarketTable({
         </div>
       </div>
 
+      {/* Sub-barra de Filtros Rápidos de Porte (Ações e FIIs) */}
+      {classe !== "ETF" && (
+        <div className="px-5 py-2.5 bg-[#0a0a0e] border-b border-neutral-800/60 flex items-center justify-between gap-2 overflow-x-auto text-xs">
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-neutral-500 uppercase tracking-wider font-mono mr-1">Porte:</span>
+            <button
+              onClick={() => {
+                setFiltroPorte("TODOS");
+                setPagina(1);
+              }}
+              className={`px-3 py-1 rounded-lg font-medium transition-all ${
+                filtroPorte === "TODOS"
+                  ? "bg-[#d4af37] text-black font-semibold shadow-sm"
+                  : "bg-neutral-900 text-neutral-400 hover:text-white border border-neutral-800"
+              }`}
+            >
+              Todos ({ativos.length})
+            </button>
+
+            <button
+              onClick={() => {
+                setFiltroPorte("BLUE_CHIPS");
+                setPagina(1);
+              }}
+              className={`px-3 py-1 rounded-lg font-medium transition-all flex items-center gap-1.5 ${
+                filtroPorte === "BLUE_CHIPS"
+                  ? "bg-[#d4af37] text-black font-semibold shadow-sm"
+                  : "bg-neutral-900 text-neutral-400 hover:text-white border border-neutral-800"
+              }`}
+            >
+              <span>{classe === "ACAO" ? "👑 Blue Chips & Gigantes" : "🏰 FIIs Baleia (>150k cotistas)"}</span>
+              <span
+                className={`text-[10px] px-1.5 rounded-full ${
+                  filtroPorte === "BLUE_CHIPS" ? "bg-black/20 text-black font-bold" : "bg-neutral-800 text-[#d4af37]"
+                }`}
+              >
+                {ativos.filter((a) => a.porte === "BLUE_CHIP" || a.porte === "FII_GIGANTE").length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => {
+                setFiltroPorte("MID_SMALL");
+                setPagina(1);
+              }}
+              className={`px-3 py-1 rounded-lg font-medium transition-all flex items-center gap-1.5 ${
+                filtroPorte === "MID_SMALL"
+                  ? "bg-[#d4af37] text-black font-semibold shadow-sm"
+                  : "bg-neutral-900 text-neutral-400 hover:text-white border border-neutral-800"
+              }`}
+            >
+              <span>{classe === "ACAO" ? "⚡ Mid & Small Caps" : "🏢 FIIs Consolidados"}</span>
+              <span
+                className={`text-[10px] px-1.5 rounded-full ${
+                  filtroPorte === "MID_SMALL" ? "bg-black/20 text-black font-bold" : "bg-neutral-800 text-neutral-300"
+                }`}
+              >
+                {ativos.filter((a) => a.porte === "MID_CAP" || a.porte === "SMALL_CAP" || a.porte === "FII_CONSOLIDADO").length}
+              </span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Conteúdo Desktop: Tabela Institucional */}
       <div className="overflow-x-auto">
         <table className="w-full text-left border-collapse text-xs">
@@ -159,10 +234,34 @@ export function MarketTable({
                       {rankingGeral}º
                     </td>
                     <td className="py-3 px-4">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="font-bold text-white font-mono group-hover:text-[#d4af37] transition-colors">
                           {ativo.ticker}
                         </span>
+                        {ativo.porte === "BLUE_CHIP" && (
+                          <span
+                            title="Blue Chip: Gigante de mercado (> R$ 15B) com altíssima liquidez institucional"
+                            className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-[#d4af37]/15 text-[#d4af37] border border-[#d4af37]/40 flex items-center gap-1 shrink-0"
+                          >
+                            👑 Blue Chip
+                          </span>
+                        )}
+                        {ativo.porte === "FII_GIGANTE" && (
+                          <span
+                            title="FII Baleia: Mais de 150 mil cotistas e alta liquidez no mercado"
+                            className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-[#d4af37]/15 text-[#d4af37] border border-[#d4af37]/40 flex items-center gap-1 shrink-0"
+                          >
+                            🏰 Baleia
+                          </span>
+                        )}
+                        {ativo.porte === "MID_CAP" && (
+                          <span
+                            title="Mid Cap: Empresa consolidada de médio porte (> R$ 3B)"
+                            className="px-1.5 py-0.5 text-[9px] font-medium rounded bg-neutral-800 text-neutral-300 border border-neutral-700 shrink-0"
+                          >
+                            Mid Cap
+                          </span>
+                        )}
                         {ativo.is_provento_atipico && (
                           <span
                             title={ativo.alerta_risco || "Provento atípico / Yield Trap"}

@@ -170,69 +170,108 @@ func (s *AnalisadorScore) Executar(ativo *domain.Ativo) error {
 			}
 		}
 
+		// Porte e Robustez Institucional da Ação
+		if ativo.ValorMercado >= 15_000_000_000.0 && ativo.LiquidezMediaDiaria >= 10_000_000.0 {
+			ativo.Porte = "BLUE_CHIP"
+		} else if ativo.ValorMercado >= 3_000_000_000.0 && ativo.LiquidezMediaDiaria >= 2_000_000.0 {
+			ativo.Porte = "MID_CAP"
+		} else if ativo.ValorMercado >= 500_000_000.0 && ativo.LiquidezMediaDiaria >= 500_000.0 {
+			ativo.Porte = "SMALL_CAP"
+		} else {
+			ativo.Porte = "MICRO_CAP"
+		}
+
+		// Parecer 5: Porte & Robustez Institucional
+		switch ativo.Porte {
+		case "BLUE_CHIP":
+			ativo.Pareceres["Porte & Liquidez"] = domain.ParecerItem{
+				Status:  domain.ParecerAprovado,
+				Metrica: fmt.Sprintf("MktCap: R$ %5.1fB | Liq: R$ %5.1fM/dia", ativo.ValorMercado/1e9, ativo.LiquidezMediaDiaria/1e6),
+				Detalhe: "🛡️ Blue Chip / Fortaleza Institucional da B3",
+			}
+		case "MID_CAP":
+			ativo.Pareceres["Porte & Liquidez"] = domain.ParecerItem{
+				Status:  domain.ParecerAprovado,
+				Metrica: fmt.Sprintf("MktCap: R$ %5.1fB | Liq: R$ %5.1fM/dia", ativo.ValorMercado/1e9, ativo.LiquidezMediaDiaria/1e6),
+				Detalhe: "Mid Cap Estabelecida com Boa Liquidez",
+			}
+		case "SMALL_CAP":
+			ativo.Pareceres["Porte & Liquidez"] = domain.ParecerItem{
+				Status:  domain.ParecerAtencao,
+				Metrica: fmt.Sprintf("MktCap: R$ %5.0fM | Liq: R$ %5.0fK/dia", ativo.ValorMercado/1e6, ativo.LiquidezMediaDiaria/1e3),
+				Detalhe: "Small Cap: Maior Volatilidade e Liquidez Moderada",
+			}
+		default:
+			ativo.Pareceres["Porte & Liquidez"] = domain.ParecerItem{
+				Status:  domain.ParecerReprovado,
+				Metrica: fmt.Sprintf("MktCap: R$ %5.0fM | Liq: R$ %5.0fK/dia", ativo.ValorMercado/1e6, ativo.LiquidezMediaDiaria/1e3),
+				Detalhe: "⚠️ Microcap / Baixa Liquidez: Risco de Execução",
+			}
+		}
+
 		// ==========================================
 		// CÁLCULO DO SCORE DE AÇÕES (0 a 100)
 		// ==========================================
 		score := 0.0
 
-		// Bloco 1: Bazin / Dividend Yield (até 20 pontos)
+		// Bloco 1: Bazin / Dividend Yield (até 15 pontos)
 		if ativo.IsProventoAtipico {
 			if ativo.PrecoTetoBazinSustentavel > 0 && ativo.PrecoAtual <= ativo.PrecoTetoBazinSustentavel {
-				score += 8.0 // Bonificação moderada baseada na capacidade de lucro real
+				score += 6.0
 			} else {
 				score += 2.0
 			}
 		} else {
 			if ativo.DY >= 8.0 {
-				score += 20.0
+				score += 15.0
 			} else if ativo.DY >= 6.0 {
-				score += 15.0 + (ativo.DY-6.0)*2.5
+				score += 11.0 + (ativo.DY-6.0)*2.0
 			} else if ativo.DY >= 4.0 {
-				score += 8.0
+				score += 6.0
 			} else if ativo.DY > 0.0 {
-				score += 4.0
+				score += 3.0
 			}
 		}
 
-		// Bloco 2: Graham / Desconto de Valor Intrínseco (até 20 pontos)
+		// Bloco 2: Graham / Desconto de Valor Intrínseco (até 15 pontos)
 		if ativo.MargemGraham >= 25.0 {
-			score += 20.0
+			score += 15.0
 		} else if ativo.MargemGraham >= 0.0 {
-			score += 14.0 + (ativo.MargemGraham/25.0)*6.0
+			score += 10.0 + (ativo.MargemGraham/25.0)*5.0
 		} else if ativo.MargemGraham >= -15.0 {
-			score += 6.0
+			score += 4.0
 		}
 
-		// Bloco 3: Greenblatt (Magic Formula) (até 20 pontos)
+		// Bloco 3: Greenblatt (Magic Formula) (até 18 pontos)
 		if pGreen, ok := ativo.Pareceres["Greenblatt"]; ok {
 			if pGreen.Status == domain.ParecerAprovado {
-				score += 20.0
+				score += 18.0
 			} else if pGreen.Status == domain.ParecerAtencao {
-				score += 12.0
+				score += 11.0
 			} else if pGreen.Status == domain.ParecerReprovado && ativo.PL > 0 {
-				score += 4.0
+				score += 3.0
 			}
 		}
 
-		// Bloco 4: Piotroski (Solvência & Saúde Contábil) (até 20 pontos)
+		// Bloco 4: Piotroski (Solvência & Saúde Contábil) (até 18 pontos)
 		if pPio, ok := ativo.Pareceres["Piotroski"]; ok {
 			if pPio.Status == domain.ParecerAprovado {
-				score += 20.0
+				score += 18.0
 			} else if pPio.Status == domain.ParecerAtencao {
-				score += 12.0
+				score += 11.0
 			} else {
 				score += 3.0
 			}
 		}
 
-		// Bloco 5: Lynch PEG & Crescimento (até 10 pontos)
+		// Bloco 5: Lynch PEG & Crescimento (até 9 pontos)
 		if ativo.PEGRatio > 0 {
 			if ativo.PEGRatio <= 0.8 {
-				score += 10.0
+				score += 9.0
 			} else if ativo.PEGRatio <= 1.2 {
-				score += 7.0
+				score += 6.0
 			} else if ativo.PEGRatio <= 1.6 {
-				score += 4.0
+				score += 3.0
 			}
 		}
 
@@ -243,7 +282,19 @@ func (s *AnalisadorScore) Executar(ativo *domain.Ativo) error {
 			score += 5.0
 		}
 
-		// --- BLINDAGEM CONTRA VALUE TRAPS & PROVENTOS ATÍPICOS ---
+		// Bloco 7: Robustez Institucional & Porte (até 15 pontos)
+		switch ativo.Porte {
+		case "BLUE_CHIP":
+			score += 15.0
+		case "MID_CAP":
+			score += 10.0
+		case "SMALL_CAP":
+			score += 4.0
+		default:
+			score += 0.0
+		}
+
+		// --- BLINDAGEM CONTRA VALUE TRAPS & MICROCAPS ILÍQUIDAS ---
 		// Se a empresa opera em prejuízo (LPA <= 0) ou tem Patrimônio Negativo (VPA <= 0):
 		if ativo.LPA <= 0 || ativo.VPA <= 0 {
 			score = math.Min(score, 25.0)
@@ -251,13 +302,19 @@ func (s *AnalisadorScore) Executar(ativo *domain.Ativo) error {
 
 		// Penalidade de Yield Trap (provento atípico / payout > 115% / DY > 18%):
 		if ativo.IsProventoAtipico {
-			score = math.Max(0.0, score-15.0) // Penalidade pelo risco de sustentabilidade
-			score = math.Min(score, 65.0)     // Trava prudencial: Impede recomendação de COMPRAR_MAIS
+			score = math.Max(0.0, score-15.0)
+			score = math.Min(score, 65.0) // Trava prudencial: Impede recomendação de COMPRAR_MAIS
 		}
 
-		// Se a liquidez for menor que R$ 20k/dia (risco severo de saída):
-		if ativo.LiquidezMediaDiaria < 20000.0 && ativo.LiquidezMediaDiaria > 0 {
-			score = math.Max(0.0, score-15.0)
+		// Microcaps ou ativos de baixa liquidez (< R$ 1 milhão/dia):
+		// Não podem roubar o topo das gigantes sólidas no ranking geral
+		if ativo.Porte == "MICRO_CAP" || ativo.LiquidezMediaDiaria < 1_000_000.0 {
+			score = math.Min(score, 78.0)
+		}
+
+		// Se a liquidez for menor que R$ 50k/dia (risco severo de saída):
+		if ativo.LiquidezMediaDiaria < 50_000.0 && ativo.LiquidezMediaDiaria > 0 {
+			score = math.Max(0.0, score-20.0)
 		}
 
 		ativo.Score = math.Round(score)
@@ -269,6 +326,45 @@ func (s *AnalisadorScore) Executar(ativo *domain.Ativo) error {
 	if ativo.Classe == domain.ClasseFII {
 		if ativo.PrecoTetoBazin > 0 && ativo.PrecoAtual > 0 {
 			ativo.MargemBazin = ((ativo.PrecoTetoBazin - ativo.PrecoAtual) / ativo.PrecoTetoBazin) * 100.0
+		}
+
+		// Porte e Pulverização de Cotistas do FII
+		if ativo.NumeroCotistas >= 150_000.0 && ativo.LiquidezMediaDiaria >= 3_000_000.0 {
+			ativo.Porte = "FII_GIGANTE"
+		} else if ativo.NumeroCotistas >= 50_000.0 && ativo.LiquidezMediaDiaria >= 1_000_000.0 {
+			ativo.Porte = "FII_CONSOLIDADO"
+		} else if ativo.NumeroCotistas >= 20_000.0 && ativo.LiquidezMediaDiaria >= 300_000.0 {
+			ativo.Porte = "FII_MEDIO"
+		} else {
+			ativo.Porte = "FII_CONCENTRADO"
+		}
+
+		// Parecer: Porte & Pulverização
+		switch ativo.Porte {
+		case "FII_GIGANTE":
+			ativo.Pareceres["Porte & Cotistas"] = domain.ParecerItem{
+				Status:  domain.ParecerAprovado,
+				Metrica: fmt.Sprintf("%4.0fK cotistas | R$ %4.1fM/dia", ativo.NumeroCotistas/1000.0, ativo.LiquidezMediaDiaria/1e6),
+				Detalhe: "🏰 FII Baleia: Altíssima Liquidez e Pulverização",
+			}
+		case "FII_CONSOLIDADO":
+			ativo.Pareceres["Porte & Cotistas"] = domain.ParecerItem{
+				Status:  domain.ParecerAprovado,
+				Metrica: fmt.Sprintf("%4.0fK cotistas | R$ %4.1fM/dia", ativo.NumeroCotistas/1000.0, ativo.LiquidezMediaDiaria/1e6),
+				Detalhe: "FII Consolidado no Mercado",
+			}
+		case "FII_MEDIO":
+			ativo.Pareceres["Porte & Cotistas"] = domain.ParecerItem{
+				Status:  domain.ParecerAtencao,
+				Metrica: fmt.Sprintf("%4.0fK cotistas | R$ %4.0fK/dia", ativo.NumeroCotistas/1000.0, ativo.LiquidezMediaDiaria/1000.0),
+				Detalhe: "FII de Médio Porte: Liquidez Moderada",
+			}
+		default:
+			ativo.Pareceres["Porte & Cotistas"] = domain.ParecerItem{
+				Status:  domain.ParecerReprovado,
+				Metrica: fmt.Sprintf("%4.0f cotistas | R$ %4.0fK/dia", ativo.NumeroCotistas, ativo.LiquidezMediaDiaria/1000.0),
+				Detalhe: "⚠️ FII Concentrado / Baixa Liquidez",
+			}
 		}
 
 		// Parecer 1: P/VP e Desconto Patrimonial Oficial CVM
@@ -349,40 +445,40 @@ func (s *AnalisadorScore) Executar(ativo *domain.Ativo) error {
 		// ==========================================
 		score := 0.0
 
-		// Bloco 1: Desconto P/VP com trava de ágio (até 30 pontos)
+		// Bloco 1: Desconto P/VP com trava de ágio (até 25 pontos)
 		if ativo.PVP > 0 {
 			if ativo.PVP >= 0.85 && ativo.PVP <= 0.95 {
-				score += 30.0 // Desconto ideal
+				score += 25.0 // Desconto ideal
 			} else if ativo.PVP > 0.95 && ativo.PVP <= 1.01 {
-				score += 24.0 // Preço justo
+				score += 20.0 // Preço justo
 			} else if ativo.PVP < 0.85 && ativo.PVP >= 0.35 {
-				score += 18.0 // Desconto acentuado
+				score += 15.0 // Desconto acentuado
 			} else if ativo.PVP <= 1.05 {
-				score += 8.0
+				score += 6.0
 			}
 		}
 
-		// Bloco 2: Spread NTN-B (até 25 pontos)
+		// Bloco 2: Spread NTN-B (até 20 pontos)
 		if !ativo.IsProventoAtipico && ativo.DY < 18.0 {
 			if ativo.SpreadNTNB >= 3.0 {
-				score += 25.0
-			} else if ativo.SpreadNTNB >= 1.5 {
 				score += 20.0
+			} else if ativo.SpreadNTNB >= 1.5 {
+				score += 15.0
 			} else if ativo.SpreadNTNB >= 0.0 {
-				score += 12.0
+				score += 9.0
 			}
 		}
 
-		// Bloco 3: Dividend Yield 12M (até 25 pontos)
+		// Bloco 3: Dividend Yield 12M (até 20 pontos)
 		if !ativo.IsProventoAtipico && ativo.DY < 18.0 {
 			if ativo.DY >= 11.5 {
-				score += 25.0
-			} else if ativo.DY >= 9.5 {
 				score += 20.0
+			} else if ativo.DY >= 9.5 {
+				score += 16.0
 			} else if ativo.DY >= 7.5 {
-				score += 14.0
+				score += 10.0
 			} else if ativo.DY > 0.0 {
-				score += 6.0
+				score += 4.0
 			}
 		}
 
@@ -395,19 +491,28 @@ func (s *AnalisadorScore) Executar(ativo *domain.Ativo) error {
 			}
 		}
 
-		// Bloco 5: Liquidez & Pulverização (até 10 pontos)
-		if ativo.LiquidezMediaDiaria >= 500_000.0 && ativo.NumeroCotistas >= 20_000.0 {
+		// Bloco 5: Robustez Institucional, Base de Cotistas & Liquidez (até 25 pontos)
+		switch ativo.Porte {
+		case "FII_GIGANTE":
+			score += 25.0
+		case "FII_CONSOLIDADO":
+			score += 18.0
+		case "FII_MEDIO":
 			score += 10.0
-		} else if ativo.LiquidezMediaDiaria >= 100_000.0 {
-			score += 6.0
-		} else if ativo.LiquidezMediaDiaria > 0 {
-			score += 2.0
+		default:
+			score += 3.0
 		}
 
 		// --- BLINDAGEM DE RISCO DE FIIs ---
 		// Se o fundo tem provento atípico (amortização/liquidação), P/VP em colapso (< 0.35) ou DY >= 18%:
 		if ativo.IsProventoAtipico || ativo.PVP < 0.35 || ativo.DY >= 18.0 {
 			score = math.Min(score, 30.0) // Trava de segurança para ALERTA imediato
+		}
+
+		// FIIs Concentrados / baixa liquidez (< 20k cotistas ou < R$ 300k/dia):
+		// Não podem liderar sobre fundos consolidados
+		if ativo.Porte == "FII_CONCENTRADO" {
+			score = math.Min(score, 78.0)
 		}
 
 		// Se o fundo não pagou proventos (DY == 0):

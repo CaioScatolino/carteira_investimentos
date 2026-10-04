@@ -109,6 +109,15 @@ Este documento é a bússola viva do projeto. Ele mapeia as decisões arquitetur
   - Pareceres individuais pedagógicos por escola (`APROVADO`, `ATENCAO`, `REPROVADO`).
   - Separação e ordenação de 3 rankings completos (FIIs, Ações e ETFs) com 388 ativos auditados em 14 segundos.
 - [ ] **Passo 6.6**: Adaptador Redis (`internal/storage/redis_store.go`) gravando Snapshot Consolidado ("b3:snapshot:<ticker>") com TTL.
+- [ ] **Passo 6.7**: Histórico Diário de Rankings Pós-Pregão (Cron 19h) & Fator Temporal no Valuation:
+  - **Cron Automatizado 19h:** Rotina agendada diária executada às 19:00 (de segunda a sexta-feira, pós-fechamento do pregão da B3 e homologação dos boletins diários).
+  - **Tabela MySQL `historico_rankings_diarios`:** Armazena o snapshot imutável de cada pregão (`data_pregao`, `ticker`, `classe`, `posicao_ranking`, `score`, `preco`, `pl`, `pvp`, `dy`, `payout`, `teto_bazin`, `valor_graham`, `status`, `is_provento_atipico`, `pareceres_json`).
+  - **Motor de Valuation Temporal (Consistência & Momentum Fundamentalista):**
+    - Analisa os rankings e scores dos pregões anteriores (7, 30 e 90 dias) como peso analítico.
+    - *Fator de Consistência:* Bonifica ativos resilientes no topo e penaliza oscilações efêmeras.
+    - *Detecção de Turnaround / Upgrades:* Identifica ativos em franca ascensão no ranking.
+    - *Divergência Preço x Score:* Detecta oportunidades quando o preço cai mas o score sobe ou se mantém firme.
+  - **Visualização Gráfica no Front-end:** Gráfico de evolução histórica de Score e Preço Teto nos modais de análise.
 
 ---
 
@@ -143,6 +152,7 @@ Este documento é a bússola viva do projeto. Ele mapeia as decisões arquitetur
 - [x] **Passo 10.1**: Inicialização do Next.js standalone em `apps/web/` com Tailwind CSS v4 e TypeScript (Concluído - Passo 17).
 - [x] **Passo 10.2**: Consumo dos endpoints REST (`/api/v1/rankings` e `/api/v1/ativos/{ticker}`) em tempo real.
 - [x] **Passo 10.3**: Interface responsiva institucional em preto com dourado, 3 tabelas independentes (Ações, FIIs, ETFs) com paginação, busca e modais detalhados de valuation.
+- [ ] **Passo 10.4**: Visualização temporal da trajetória de rankings e scores dos últimos 30 dias.
 
 ---
 
@@ -150,3 +160,4 @@ Este documento é a bússola viva do projeto. Ele mapeia as decisões arquitetur
 - [ ] **Passo 11.1**: `Dockerfile` multi-stage build do back-end em Go (< 25 MB).
 - [ ] **Passo 11.2**: `docker-compose.yml` conectado à rede existente da VPS (`mysql_central`, `redis_central`, `nginx_proxy_manager`).
 - [ ] **Passo 11.3**: Script de deploy automatizado via SSH (`root@179.236.230.139`).
+

@@ -90,6 +90,9 @@ type Ativo struct {
 	AlertaRisco               string  `json:"alerta_risco,omitempty"`                // Alerta pedagógico (ex: "Yield Atípico (32.9%)", "Amortização de Capital")
 	PrecoTetoBazinSustentavel float64 `json:"preco_teto_bazin_sustentavel,omitempty"` // Preço teto ajustado para capacidade de lucro real
 
+	// Porte e Robustez Institucional (Blue Chips vs Small/Micro Caps)
+	Porte string `json:"porte,omitempty"` // BLUE_CHIP, MID_CAP, SMALL_CAP, MICRO_CAP, FII_GIGANTE, FII_CONSOLIDADO, FII_MEDIO, FII_CONCENTRADO
+
 	Pareceres          map[string]ParecerItem `json:"pareceres,omitempty"`  // Pareceres individuais por motor
 	Status             StatusRecomendacao     `json:"status"`
 }

@@ -48,11 +48,36 @@ export function AssetDetailModal({ ativo, onClose }: AssetModalProps) {
         {/* Cabeçalho do Ativo */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-neutral-800/80 pb-6">
           <div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2.5 flex-wrap">
               <span className="text-3xl font-extrabold tracking-tight text-white font-mono">{ativo.ticker}</span>
               <span className="text-xs uppercase px-2 py-0.5 rounded bg-neutral-900 text-[#d4af37] border border-[#d4af37]/30 font-semibold tracking-wider">
                 {ativo.classe}
               </span>
+              {ativo.porte === "BLUE_CHIP" && (
+                <span className="text-xs px-2.5 py-0.5 rounded-full bg-[#d4af37]/15 text-[#d4af37] border border-[#d4af37]/40 font-bold flex items-center gap-1 shadow-sm">
+                  👑 Blue Chip
+                </span>
+              )}
+              {ativo.porte === "FII_GIGANTE" && (
+                <span className="text-xs px-2.5 py-0.5 rounded-full bg-[#d4af37]/15 text-[#d4af37] border border-[#d4af37]/40 font-bold flex items-center gap-1 shadow-sm">
+                  🏰 FII Baleia
+                </span>
+              )}
+              {ativo.porte === "MID_CAP" && (
+                <span className="text-xs px-2 py-0.5 rounded-full bg-neutral-800 text-neutral-300 border border-neutral-700 font-medium">
+                  Mid Cap
+                </span>
+              )}
+              {ativo.porte === "SMALL_CAP" && (
+                <span className="text-xs px-2 py-0.5 rounded-full bg-neutral-900 text-neutral-400 border border-neutral-800 font-medium">
+                  Small Cap
+                </span>
+              )}
+              {ativo.porte === "MICRO_CAP" && (
+                <span className="text-xs px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20 font-medium">
+                  Microcap
+                </span>
+              )}
               <StatusBadge status={ativo.status} />
             </div>
             <p className="text-sm text-neutral-400 mt-1 font-medium">{ativo.nome}</p>
@@ -64,7 +89,9 @@ export function AssetDetailModal({ ativo, onClose }: AssetModalProps) {
           <div className="flex flex-col md:items-end">
             <span className="text-xs text-neutral-500 uppercase tracking-widest">Cotação Atual (B3)</span>
             <span className="text-3xl font-bold text-white tabular-numbers">{formatCurrency(ativo.preco_atual)}</span>
-            <span className="text-xs text-neutral-400 mt-0.5">Volume Diário: {formatVolume(ativo.volume_total)}</span>
+            <span className="text-xs text-neutral-400 mt-0.5">
+              {ativo.valor_mercado ? `MktCap: ${formatVolume(ativo.valor_mercado)}` : `Cotistas: ${ativo.numero_cotistas?.toLocaleString("pt-BR")}`} • Vol: {formatVolume(ativo.volume_total)}
+            </span>
           </div>
         </div>
 
