@@ -12,8 +12,10 @@ func (h *Handler) ConfigurarRotas() http.Handler {
 
 	// 1. Registro dos Endpoints com Verbos HTTP explícitos
 	mux.HandleFunc("GET /health", h.HealthCheck)
+	mux.HandleFunc("GET /api/v1/macro", h.ObterCenarioMacro)
 	mux.HandleFunc("GET /api/v1/rankings", h.ObterRankings)
 	mux.HandleFunc("GET /api/v1/ativos/{ticker}", h.ObterAtivoPorTicker)
+	mux.HandleFunc("GET /api/v1/ativos/{ticker}/dividendos", h.ObterAnaliseDividendos)
 
 	// 2. Encadeamento de Middlewares: Logging -> CORS -> Mux
 	var handler http.Handler = mux

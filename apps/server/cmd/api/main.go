@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"carteira_investimentos/server/internal/api"
+	"carteira_investimentos/server/internal/b3"
 	"carteira_investimentos/server/internal/bazin"
 	"carteira_investimentos/server/internal/catalog"
 	"carteira_investimentos/server/internal/config"
@@ -18,6 +19,7 @@ import (
 	"carteira_investimentos/server/internal/graham"
 	"carteira_investimentos/server/internal/greenblatt"
 	"carteira_investimentos/server/internal/lynch"
+	"carteira_investimentos/server/internal/macro"
 	"carteira_investimentos/server/internal/piotroski"
 	"carteira_investimentos/server/internal/score"
 	"carteira_investimentos/server/internal/statusinvest"
@@ -29,42 +31,48 @@ func main() {
 	fmt.Println("🚀 B3 CORE: AUDITORIA MULTI-MODELO DE MERCADO (CVM + B3 OFICIAL)")
 	fmt.Println("==================================================================")
 
-	// 1. Carrega configurações do .env e conecta ao MySQL
+	// 1. Sincroniza parâmetros macroeconômicos oficiais (BCB SGS / Tesouro Direto)
+	macro.SincronizarTaxasOficiais()
+	cenario := macro.ObterCenario()
+	fmt.Printf("🏛️ CENÁRIO MACRO ATIVO (%s):\n", cenario.DataAtualizacao)
+	fmt.Printf("   • Taxa Selic Meta: %.2f%% a.a. | NTN-B (IPCA+): %.2f%% a.a.\n", cenario.TaxaSelic, cenario.TaxaNTNB)
+	fmt.Printf("   • Hurdle Mínimo Ações: %.2f%% a.a. | Hurdle FIIs: %.2f%% a.a.\n",
+		cenario.TaxaNTNB+cenario.SpreadMinimoAcoes, cenario.TaxaNTNB+cenario.SpreadMinimoFIITijolo)
+	fmt.Println("==================================================================")
+
+	// 2. Carrega configurações do .env e conecta ao MySQL (com fallback gracioso)
 	cfg := config.Carregar()
 	db, err := storage.NovoMySQLConnection(cfg.DBUser, cfg.DBPassword, cfg.DBHost, cfg.DBPort, cfg.DBName)
 	if err != nil {
-		fmt.Printf("❌ Falha na conexão com o MySQL: %s\n", err)
-		return
+		fmt.Printf("⚠️ MySQL local offline: operando em modo Resiliente de Alta Disponibilidade (In-Memory + StatusInvest + B3)\n")
+	} else {
+		defer db.Close()
+		// Confirma catálogo de ativos no MySQL se conectado
+		repo := catalog.NovoMySQLRepository(db)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ativosDB, err := repo.ListarTodos(ctx)
+		cancel()
+		if err == nil {
+			fmt.Printf("🏛️ Catálogo MySQL Ativo: %d ativos cadastrados na base local.\n", len(ativosDB))
+		}
 	}
-	defer db.Close()
 
-	// 2. Confirma o catálogo de ativos no MySQL
-	repo := catalog.NovoMySQLRepository(db)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	ativosDB, err := repo.ListarTodos(ctx)
-	if err != nil {
-		fmt.Printf("❌ Falha ao consultar catálogo: %s\n", err)
-		return
-	}
-	fmt.Printf("🏛️ Catálogo MySQL Ativo: %d ativos cadastrados na base local.\n", len(ativosDB))
-
-	// 3. Inicializa os Motores de Valuation e Consolidação
+	// 3. Inicializa os Motores de Valuation e Consolidação Calibrados ao Macro
 	motores := []domain.Analisador{
-		bazin.Novo(0.06),      // 1. Décio Bazin: Dividend Yield sustentável >= 6%
+		bazin.NovoDinamico(),  // 1. Décio Bazin: Hurdle dinâmico via NTN-B + Spread
 		graham.Novo(),         // 2. Benjamin Graham: Valor Intrínseco
 		lynch.Novo(),          // 3. Peter Lynch: PEG Ratio e Preço Justo de Crescimento
-		gordon.Novo(0.11),     // 4. Gordon DDM: Preço Teto com crescimento sustentável (taxa desc. 11%)
+		gordon.NovoDinamico(), // 4. Gordon DDM: Custo de capital calibrado via CAPM / Selic
 		greenblatt.Novo(),     // 5. Joel Greenblatt: The Magic Formula (EV/EBIT + ROIC com adaptação p/ bancos)
 		piotroski.Novo(),      // 6. Joseph Piotroski: F-Score de Solvência & Saúde Contábil (0 a 9)
-		fii.Novo(0.065),       // 7. FIIs: Segmentação (Tijolo/Papel), Cap Rate Implícito e Spread NTN-B
-		score.Novo(),          // 8. Score Fundamentalista Composto (0 a 100) e Blindagem Anti-Value Trap
+		fii.Novo(0),           // 7. FIIs: Segmentação (Tijolo/Papel), Cap Rate Implícito e Spread NTN-B dinâmico
+		score.Novo(),          // 8. Score Fundamentalista Composto (0 a 100) com Veredito de Risco vs Renda Fixa
 	}
 
-	// 4. Inicializa o Cache e o Ingestion Service Consolidado (StatusInvest)
+	// 4. Inicializa o Cache e o Ingestion Service Consolidado (StatusInvest + B3)
 	store := storage.NovoInMemoryStore()
-	ingestionService := statusinvest.NovoIngestionService(nil, store, motores)
+	b3Client := b3.NovoB3Client()
+	ingestionService := statusinvest.NovoIngestionService(nil, b3Client, store, motores)
 
 	// 5. Ingestão consolidada em 2 requisições ultra-rápidas (<1s para 100% dos ativos da B3)
 	ctxIngest, cancelIngest := context.WithTimeout(context.Background(), 60*time.Second)
@@ -154,7 +162,7 @@ func main() {
 	// ==================================================================
 	// 10. INICIALIZAÇÃO DA API REST (HTTP SERVER)
 	// ==================================================================
-	apiHandler := api.NovoHandler(store)
+	apiHandler := api.NovoHandler(store, b3Client)
 	router := apiHandler.ConfigurarRotas()
 
 	servidor := &http.Server{
@@ -205,6 +213,12 @@ func imprimirAcao(posicao int, a *domain.Ativo) {
 	fmt.Printf("     • Indicadores: P/L: %4.1fx | P/VP: %4.2fx | ROE: %4.1f%% | Yield: %4.1f%% (R$ %.2f)\n",
 		a.PL, a.PVPReal, a.ROE, a.DY, a.Dividendos12M)
 
+	if a.PrecoTetoConsolidado > 0 {
+		fmt.Printf("     ├── 🎯 Preço Teto: R$ %6.2f | Prêmio: %+.1f%% (Consenso)\n", a.PrecoTetoConsolidado, a.PremioDescontoPercentual)
+	}
+	if p, ok := a.Pareceres["VereditoRisco"]; ok {
+		fmt.Printf("     ├── ⚖️ Risco NTN-B:  %s %s (%s)\n", getIconeParecer(p.Status), p.Metrica, p.Detalhe)
+	}
 	if p, ok := a.Pareceres["Bazin"]; ok {
 		fmt.Printf("     ├── 💰 Bazin:      %s %s (%s)\n", getIconeParecer(p.Status), p.Metrica, p.Detalhe)
 	}
@@ -228,14 +242,17 @@ func imprimirFII(posicao int, f *domain.Ativo) {
 	fmt.Printf("     • Indicadores: P/VP: %4.2f (VP: R$ %.2f) | Proventos 12M: R$ %5.2f (DY: %4.1f%%)\n",
 		f.PVP, f.VPCota, f.Dividendos12M, f.DY)
 
+	if f.PrecoTetoConsolidado > 0 {
+		fmt.Printf("     ├── 🎯 Preço Teto: R$ %6.2f | Prêmio: %+.1f%% (Consenso)\n", f.PrecoTetoConsolidado, f.PremioDescontoPercentual)
+	}
+	if p, ok := f.Pareceres["VereditoRisco"]; ok {
+		fmt.Printf("     ├── ⚖️ Risco NTN-B:    %s %s (%s)\n", getIconeParecer(p.Status), p.Metrica, p.Detalhe)
+	}
 	if p, ok := f.Pareceres["PVP"]; ok {
 		fmt.Printf("     ├── 🏢 CVM P/VP:       %s %s (%s)\n", getIconeParecer(p.Status), p.Metrica, p.Detalhe)
 	}
-	if p, ok := f.Pareceres["SpreadNTNB"]; ok {
-		fmt.Printf("     ├── 📈 Prêmio NTN-B:   %s %s (%s)\n", getIconeParecer(p.Status), p.Metrica, p.Detalhe)
-	}
 	if p, ok := f.Pareceres["Bazin"]; ok {
-		fmt.Printf("     └── 💰 Teto Bazin:     %s %s (%s)\n", getIconeParecer(p.Status), p.Metrica, p.Detalhe)
+		fmt.Printf("     └── 💰 Teto Renda:     %s %s (%s)\n", getIconeParecer(p.Status), p.Metrica, p.Detalhe)
 	}
 }
 

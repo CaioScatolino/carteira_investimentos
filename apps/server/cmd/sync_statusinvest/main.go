@@ -40,7 +40,7 @@ func main() {
 	store := storage.NovoInMemoryStore()
 
 	// 3. Ingestion Service
-	service := statusinvest.NovoIngestionService(nil, store, motores)
+	service := statusinvest.NovoIngestionService(nil, nil, store, motores)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()

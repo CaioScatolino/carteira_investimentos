@@ -5,6 +5,7 @@ import (
 	"math"
 
 	"carteira_investimentos/server/internal/domain"
+	"carteira_investimentos/server/internal/macro"
 )
 
 // Calcular aplica a fórmula de Décio Bazin: Preço Teto = Proventos / Yield Mínimo
@@ -33,13 +34,24 @@ func Novo(yieldMinimo float64) *AnalisadorBazin {
 	return &AnalisadorBazin{YieldMinimo: yieldMinimo}
 }
 
+// NovoDinamico inicializa o Bazin com hurdle dinâmico ancorado na NTN-B + Prêmio de Risco
+func NovoDinamico() *AnalisadorBazin {
+	return &AnalisadorBazin{YieldMinimo: 0}
+}
+
 func (b *AnalisadorBazin) Nome() string {
 	return "Décio Bazin"
 }
 
 func (b *AnalisadorBazin) Executar(ativo *domain.Ativo) error {
-	if b.YieldMinimo <= 0 {
-		b.YieldMinimo = 0.06
+	yieldEfetivo := b.YieldMinimo
+	if yieldEfetivo <= 0 {
+		cenario := macro.ObterCenario()
+		if ativo.Classe == domain.ClasseFII {
+			yieldEfetivo = (cenario.TaxaNTNB + cenario.ObterSpreadSegmentoFII(ativo.Segmento)) / 100.0
+		} else {
+			yieldEfetivo = cenario.ObterYieldMinimoAcoes()
+		}
 	}
 
 	// 1. Caso FII com amortização/liquidação atípica: Bazin é inaplicável
@@ -49,7 +61,7 @@ func (b *AnalisadorBazin) Executar(ativo *domain.Ativo) error {
 			ativo.PrecoTetoBazinSustentavel = 0
 			return nil
 		}
-		teto, err := Calcular(ativo.Dividendos12M, b.YieldMinimo)
+		teto, err := Calcular(ativo.Dividendos12M, yieldEfetivo)
 		if err != nil {
 			return err
 		}
@@ -70,19 +82,42 @@ func (b *AnalisadorBazin) Executar(ativo *domain.Ativo) error {
 	// Aplica Bazin Prudencial: limita o dividendo à capacidade de lucro (payout sustentável de 60% do LPA)
 	if ativo.IsProventoAtipico {
 		divSustentavel := math.Min(ativo.Dividendos12M, ativo.LPA*0.60)
-		tetoSustentavel, _ := Calcular(divSustentavel, b.YieldMinimo)
+		tetoSustentavel, _ := Calcular(divSustentavel, yieldEfetivo)
 		ativo.PrecoTetoBazinSustentavel = tetoSustentavel
 		ativo.PrecoTetoBazin = tetoSustentavel // Previne teto inflado no dashboard
 		return nil
 	}
 
 	// Caso regular de dividendos sustentáveis
-	teto, err := Calcular(ativo.Dividendos12M, b.YieldMinimo)
+	teto, err := Calcular(ativo.Dividendos12M, yieldEfetivo)
 	if err != nil {
 		return err
 	}
 	ativo.PrecoTetoBazin = teto
 	ativo.PrecoTetoBazinSustentavel = teto
+
+	// Cálculo do Preço Teto Bazin com Média dos Últimos 5 Anos (Regra Clássica de Décio Bazin)
+	// Prioriza a média saneada com Winsorização anti-outliers para evitar tetos artificiais (ex: PETR4)
+	mediaParaTeto := ativo.MediaDividendos5ANormalizada
+	if mediaParaTeto <= 0 {
+		mediaParaTeto = ativo.MediaDividendos5A
+	}
+
+	if mediaParaTeto > 0 {
+		teto5A, err := Calcular(mediaParaTeto, yieldEfetivo)
+		if err == nil && teto5A > 0 {
+			ativo.PrecoTetoBazin5A = math.Round(teto5A*100) / 100
+			if ativo.PrecoAtual > 0 {
+				ativo.MargemBazin5A = math.Round(((ativo.PrecoTetoBazin5A-ativo.PrecoAtual)/ativo.PrecoTetoBazin5A)*1000) / 10
+			}
+		}
+	} else if ativo.PrecoTetoBazin > 0 {
+		// Fallback temporário caso a média de 5A ainda não tenha sido carregada
+		ativo.PrecoTetoBazin5A = ativo.PrecoTetoBazin
+		ativo.MargemBazin5A = ativo.MargemBazin
+		ativo.MediaDividendos5A = ativo.Dividendos12M
+	}
+
 	return nil
 }
 

@@ -3,28 +3,35 @@ package statusinvest
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
+	"carteira_investimentos/server/internal/b3"
 	"carteira_investimentos/server/internal/domain"
 	"carteira_investimentos/server/internal/storage"
 )
 
 // IngestionService coordena a captura integral dos dados do StatusInvest e auditoria dos motores
 type IngestionService struct {
-	client  *Client
-	store   storage.SnapshotStore
-	motores []domain.Analisador
+	client   *Client
+	b3Client *b3.B3Client
+	store    storage.SnapshotStore
+	motores  []domain.Analisador
 }
 
 // NovoIngestionService cria uma nova instância do serviço de ingestão consolidado
-func NovoIngestionService(client *Client, store storage.SnapshotStore, motores []domain.Analisador) *IngestionService {
+func NovoIngestionService(client *Client, b3Client *b3.B3Client, store storage.SnapshotStore, motores []domain.Analisador) *IngestionService {
 	if client == nil {
 		client = NovoClient()
 	}
+	if b3Client == nil {
+		b3Client = b3.NovoB3Client()
+	}
 	return &IngestionService{
-		client:  client,
-		store:   store,
-		motores: motores,
+		client:   client,
+		b3Client: b3Client,
+		store:    store,
+		motores:  motores,
 	}
 }
 
@@ -129,6 +136,37 @@ func (s *IngestionService) ExecutarSincronizacao(ctx context.Context) ([]*domain
 			ativo.EarningsYield = (ativo.LPA / ativo.PrecoAtual) * 100.0
 		}
 
+		// Décio Bazin: Preço Teto e Média Histórica de 5 Anos
+		media5A := divs12M
+		if a.LucrosCAGR5 > 0 && a.LucrosCAGR5 < 100 {
+			fator := 1.0 / (1.0 + (a.LucrosCAGR5/100.0)*0.4)
+			media5A = divs12M * fator
+		}
+		ativo.MediaDividendos5A = math.Round(media5A*100) / 100
+		if media5A > 0 {
+			ativo.PrecoTetoBazin5A = math.Round((media5A/0.06)*100) / 100
+			if ativo.PrecoAtual > 0 {
+				ativo.MargemBazin5A = math.Round(((ativo.PrecoTetoBazin5A-ativo.PrecoAtual)/ativo.PrecoTetoBazin5A)*1000) / 10
+			}
+		}
+
+		// Se o ticker for Blue Chip / pagadora mapeada na B3, enriquece com a série oficial da B3
+		if s.b3Client != nil && b3.IsTickerMapeado(ativo.Ticker) {
+			analise := s.b3Client.ObterAnaliseProventos5A(a.CompanyName, a.Ticker, a.Price, divs12M)
+			if analise != nil && analise.TotalEventos > 0 {
+				ativo.MediaDividendos5A = analise.MediaDividendos5A
+				ativo.MediaDividendos5ANormalizada = analise.MediaDividendos5ANormalizada
+				ativo.PrecoTetoBazin5A = analise.PrecoTetoBazin5A
+				ativo.MargemBazin5A = analise.MargemBazin5A
+				ativo.Dividendos12MB3 = analise.Dividendos12MB3Liquido
+				ativo.HistoricoDividendosAnual = analise.ProventosPorAno
+				ativo.Diferenca12MB3StatusInvest = analise.Diferenca12M
+				ativo.AderenciaStatusInvest = analise.AderenciaStatusInvest
+				ativo.TeveOutlier5A = analise.TeveOutlier5A
+				ativo.ObservacaoOutlier = analise.ObservacaoOutlier
+			}
+		}
+
 		// Roda os motores de valuation
 		for _, motor := range s.motores {
 			_ = motor.Executar(ativo)
@@ -184,6 +222,37 @@ func (s *IngestionService) ExecutarSincronizacao(ctx context.Context) ([]*domain
 			Subsetor:            f.SubSectorName,
 			Segmento:            f.Segment,
 			Pareceres:           make(map[string]domain.ParecerItem),
+		}
+
+		// Décio Bazin FII: Média Histórica de 5 Anos (estimativa prudente padrão)
+		media5AFII := divs12M
+		if f.DividendCAGR > 0 && f.DividendCAGR < 100 {
+			fator := 1.0 / (1.0 + (f.DividendCAGR/100.0)*0.4)
+			media5AFII = divs12M * fator
+		}
+		ativo.MediaDividendos5A = math.Round(media5AFII*100) / 100
+		if media5AFII > 0 {
+			ativo.PrecoTetoBazin5A = math.Round((media5AFII/0.06)*100) / 100
+			if ativo.PrecoAtual > 0 {
+				ativo.MargemBazin5A = math.Round(((ativo.PrecoTetoBazin5A-ativo.PrecoAtual)/ativo.PrecoTetoBazin5A)*1000) / 10
+			}
+		}
+
+		// Se o FII for consolidado/relevante, enriquece com a série histórica auditada CVM/StatusInvest
+		if s.b3Client != nil && (f.NumeroCotistas >= 50000 || f.LiquidezMediaDiaria >= 3000000) {
+			analise := s.b3Client.ObterAnaliseProventos5A(f.CompanyName, f.Ticker, f.Price, divs12M)
+			if analise != nil && analise.TotalEventos > 0 {
+				ativo.MediaDividendos5A = analise.MediaDividendos5A
+				ativo.MediaDividendos5ANormalizada = analise.MediaDividendos5ANormalizada
+				ativo.PrecoTetoBazin5A = analise.PrecoTetoBazin5A
+				ativo.MargemBazin5A = analise.MargemBazin5A
+				ativo.Dividendos12MB3 = analise.Dividendos12MB3Liquido
+				ativo.HistoricoDividendosAnual = analise.ProventosPorAno
+				ativo.Diferenca12MB3StatusInvest = analise.Diferenca12M
+				ativo.AderenciaStatusInvest = analise.AderenciaStatusInvest
+				ativo.TeveOutlier5A = analise.TeveOutlier5A
+				ativo.ObservacaoOutlier = analise.ObservacaoOutlier
+			}
 		}
 
 		// Roda os motores de valuation

@@ -2,6 +2,7 @@ package gordon
 
 import (
 	"carteira_investimentos/server/internal/domain"
+	"carteira_investimentos/server/internal/macro"
 )
 
 // AnalisadorGordon implementa o Modelo de Desconto de Dividendos de Gordon (DDM)
@@ -9,18 +10,22 @@ import (
 // Preço Teto = D1 / (k - g)
 // Onde:
 // - D1: Próximo dividendo estimado (Dividendos12M * (1 + g))
-// - k: Taxa de retorno exigida pelo investidor (custo de oportunidade, ex: 11% a.a.)
+// - k: Taxa de retorno exigida pelo investidor (custo de oportunidade calibrado via Selic / CAPM)
 // - g: Taxa de crescimento perpétuo sustentável dos dividendos (ex: 3% a 4.5% a.a.)
 type AnalisadorGordon struct {
-	taxaDesconto float64 // Custo de capital próprio / taxa de desconto (ex: 0.11 = 11% a.a.)
+	taxaDesconto float64 // Custo de capital próprio / taxa de desconto
 }
 
 func Novo(taxaDesconto float64) *AnalisadorGordon {
-	if taxaDesconto <= 0 {
-		taxaDesconto = 0.11 // Padrão conservador de 11% a.a. para o Brasil
-	}
 	return &AnalisadorGordon{
 		taxaDesconto: taxaDesconto,
+	}
+}
+
+// NovoDinamico inicializa Gordon calibrado dinamicamente com o custo de oportunidade da Selic
+func NovoDinamico() *AnalisadorGordon {
+	return &AnalisadorGordon{
+		taxaDesconto: 0,
 	}
 }
 
@@ -33,6 +38,11 @@ func (g *AnalisadorGordon) Executar(ativo *domain.Ativo) error {
 	if ativo.Classe != domain.ClasseAcao || ativo.Dividendos12M <= 0 || ativo.LPA <= 0 {
 		ativo.PrecoTetoGordon = 0
 		return nil
+	}
+
+	kEfetivo := g.taxaDesconto
+	if kEfetivo <= 0 {
+		kEfetivo = macro.ObterCenario().ObterCustoCapitalGordon()
 	}
 
 	// Se provento for atípico ou payout > 100%, usa a base sustentável (60% do LPA)
@@ -60,12 +70,12 @@ func (g *AnalisadorGordon) Executar(ativo *domain.Ativo) error {
 	}
 
 	// Evita denominador nulo ou negativo caso a taxa de desconto seja menor ou igual ao crescimento
-	if g.taxaDesconto <= crescimento {
+	if kEfetivo <= crescimento {
 		return nil
 	}
 
 	d1 := baseDividendo * (1.0 + crescimento)
-	ativo.PrecoTetoGordon = d1 / (g.taxaDesconto - crescimento)
+	ativo.PrecoTetoGordon = d1 / (kEfetivo - crescimento)
 
 	return nil
 }

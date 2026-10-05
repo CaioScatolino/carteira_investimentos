@@ -53,7 +53,11 @@ type Ativo struct {
 	PrecoJustoLynch    float64                `json:"preco_justo_lynch"`
 	PEGRatio           float64                `json:"peg_ratio"`
 	PVP                float64                `json:"pvp"`
-	SpreadNTNB         float64                `json:"spread_ntnb"`
+	SpreadNTNB         float64                `json:"spread_ntnb"`          // Spread de retorno sobre o Tesouro IPCA+ (% a.a.)
+	YieldExigido       float64                `json:"yield_exigido"`        // Yield mínimo exigido para compensar a taxa de juros (% a.a.)
+	VereditoRisco      string                 `json:"veredito_risco"`       // "COMPENSA_RISCO", "NEUTRO", "RISCO_DESCOMPENSADO"
+	JustificativaRisco string                 `json:"justificativa_risco"`  // Explicação detalhada da relação risco vs retorno
+	TIRProjetada       float64                `json:"tir_projetada"`        // Taxa interna de retorno estimada (% a.a.)
 	Score              float64                `json:"score"`                // Score Fundamentalista Geral (0 a 100)
 	DY                 float64                `json:"dy"`                   // % Dividend Yield nos últimos 12M
 	PL                 float64                `json:"pl"`                   // P/L (Preço sobre Lucro)
@@ -89,6 +93,24 @@ type Ativo struct {
 	IsProventoAtipico         bool    `json:"is_provento_atipico,omitempty"`          // Flag para proventos não recorrentes, extraordinários ou amortizações
 	AlertaRisco               string  `json:"alerta_risco,omitempty"`                // Alerta pedagógico (ex: "Yield Atípico (32.9%)", "Amortização de Capital")
 	PrecoTetoBazinSustentavel float64 `json:"preco_teto_bazin_sustentavel,omitempty"` // Preço teto ajustado para capacidade de lucro real
+
+	// Décio Bazin Histórico 5 Anos (B3 Oficial vs StatusInvest)
+	MediaDividendos5A            float64            `json:"media_dividendos_5a,omitempty"`            // Média anual de proventos líquidos dos últimos 5 anos
+	MediaDividendos5ANormalizada float64            `json:"media_dividendos_5a_normalizada,omitempty"` // Média anual saneada com Winsorização anti-distorção
+	PrecoTetoBazin5A             float64            `json:"preco_teto_bazin_5a,omitempty"`            // Preço Teto Bazin calculado sobre a média de 5A (MediaDiv5A / 0.06)
+	MargemBazin5A                float64            `json:"margem_bazin_5a,omitempty"`                // Margem de segurança sobre o Teto de 5A
+	Dividendos12MB3              float64            `json:"dividendos_12m_b3,omitempty"`              // Proventos 12M auditados direto na B3
+	HistoricoDividendosAnual     map[string]float64 `json:"historico_dividendos_anual,omitempty"`    // Proventos ano a ano (2021, 2022, 2023, 2024, 2025)
+	Diferenca12MB3StatusInvest   float64            `json:"diferenca_12m_b3_statusinvest,omitempty"`  // Diferença monetária B3 vs StatusInvest
+	AderenciaStatusInvest        string             `json:"aderencia_statusinvest,omitempty"`         // Auditoria de conferência ("100% Aderente", etc.)
+	TeveOutlier5A                bool               `json:"teve_outlier_5a,omitempty"`                // Indica se a série histórica continha um ano de distribuição extraordinária
+	ObservacaoOutlier            string             `json:"observacao_outlier,omitempty"`             // Explicação transparente da normalização de proventos
+
+	// Preço Teto Consolidado e Prêmio de Valorização (Consenso Multi-Modelo)
+	PrecoTetoConsolidado       float64  `json:"preco_teto_consolidado"`                   // Preço teto consensual dos motores de valuation
+	PremioDescontoPercentual   float64  `json:"premio_desconto_percentual"`               // % de Prêmio/Upside: ((PrecoTetoConsolidado - PrecoAtual) / PrecoAtual) * 100
+	MargemSegurancaConsolidada float64  `json:"margem_seguranca_consolidada"`             // % Margem de Segurança: ((PrecoTetoConsolidado - PrecoAtual) / PrecoTetoConsolidado) * 100
+	ModelosTetoConsolidado     []string `json:"modelos_teto_consolidado,omitempty"`       // Modelos que convergiram (ex: ["Bazin 5A", "Graham", "Gordon"])
 
 	// Porte e Robustez Institucional (Blue Chips vs Small/Micro Caps)
 	Porte string `json:"porte,omitempty"` // BLUE_CHIP, MID_CAP, SMALL_CAP, MICRO_CAP, FII_GIGANTE, FII_CONSOLIDADO, FII_MEDIO, FII_CONCENTRADO

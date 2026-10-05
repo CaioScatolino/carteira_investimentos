@@ -26,6 +26,10 @@ export interface Ativo {
   peg_ratio: number;
   pvp: number;
   spread_ntnb: number;
+  yield_exigido?: number;
+  veredito_risco?: "COMPENSA_RISCO" | "NEUTRO" | "RISCO_DESCOMPENSADO";
+  justificativa_risco?: string;
+  tir_projetada?: number;
   score: number;
   dy: number;
   pl: number;
@@ -65,8 +69,46 @@ export interface Ativo {
   // Porte e Robustez Institucional
   porte?: "BLUE_CHIP" | "MID_CAP" | "SMALL_CAP" | "MICRO_CAP" | "FII_GIGANTE" | "FII_CONSOLIDADO" | "FII_MEDIO" | "FII_CONCENTRADO";
 
+  // Proventos Décio Bazin 5 Anos (B3 Oficial vs StatusInvest)
+  media_dividendos_5a?: number;
+  media_dividendos_5a_normalizada?: number;
+  preco_teto_bazin_5a?: number;
+  margem_bazin_5a?: number;
+  dividendos_12m_b3?: number;
+  historico_dividendos_anual?: Record<string, number>;
+  diferenca_12m_b3_statusinvest?: number;
+  aderencia_statusinvest?: string;
+  teve_outlier_5a?: boolean;
+  observacao_outlier?: string;
+
+  // Preço Teto Consolidado e Prêmio de Valorização (Consenso Multi-Modelo)
+  preco_teto_consolidado?: number;
+  premio_desconto_percentual?: number;
+  margem_seguranca_consolidada?: number;
+  modelos_teto_consolidado?: string[];
+
   pareceres?: Record<string, ParecerItem>;
   status: StatusRecomendacao;
+}
+
+export interface AnaliseProventos5A {
+  ticker: string;
+  trading_name: string;
+  total_eventos: number;
+  proventos_por_ano: Record<string, number>;
+  media_dividendos_5a: number;
+  media_dividendos_5a_normalizada?: number;
+  preco_teto_bazin_5a: number;
+  margem_bazin_5a: number;
+  dividendos_12m_b3_liquido: number;
+  dividendos_12m_b3_bruto: number;
+  dividendos_12m_statusinvest: number;
+  diferenca_12m: number;
+  aderencia_percentual: number;
+  aderencia_statusinvest: string;
+  teve_outlier_5a?: boolean;
+  observacao_outlier?: string;
+  observacao: string;
 }
 
 export interface RespostaRankings {
@@ -75,3 +117,14 @@ export interface RespostaRankings {
   fiis: Ativo[];
   etfs: Ativo[];
 }
+
+export interface CenarioMacro {
+  taxa_selic: number;
+  taxa_ntnb: number;
+  spread_minimo_acoes: number;
+  spread_minimo_fii_tijolo: number;
+  equity_risk_premium: number;
+  data_atualizacao: string;
+  fonte: string;
+}
+

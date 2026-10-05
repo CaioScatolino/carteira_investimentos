@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from "react";
 import { Ativo } from "@/types/market";
 import { StatusBadge } from "./StatusBadge";
-import { Search, ChevronLeft, ChevronRight, ArrowUpDown, ChevronDown } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, ArrowUpDown, ChevronDown, Target, TrendingUp, ShieldCheck } from "lucide-react";
 
 interface MarketTableProps {
   titulo: string;
@@ -13,6 +13,8 @@ interface MarketTableProps {
   classe: "ACAO" | "FII" | "ETF";
   onSelectAtivo: (ativo: Ativo) => void;
 }
+
+type SortKey = "SCORE" | "PREMIO" | "SPREAD_NTNB" | "DY" | "MARGEM" | "COTACAO";
 
 export function MarketTable({
   titulo,
@@ -26,10 +28,22 @@ export function MarketTable({
   const [pagina, setPagina] = useState(1);
   const [itensPorPagina, setItensPorPagina] = useState(8);
   const [filtroPorte, setFiltroPorte] = useState<string>("TODOS");
+  const [criterioOrdenacao, setCriterioOrdenacao] = useState<SortKey>("SCORE");
+  const [direcaoOrdenacao, setDirecaoOrdenacao] = useState<"ASC" | "DESC">("DESC");
 
-  // Filtro de busca por Ticker ou Nome e Porte
+  const alternarOrdenacao = (key: SortKey) => {
+    if (criterioOrdenacao === key) {
+      setDirecaoOrdenacao((prev) => (prev === "DESC" ? "ASC" : "DESC"));
+    } else {
+      setCriterioOrdenacao(key);
+      setDirecaoOrdenacao("DESC");
+    }
+    setPagina(1);
+  };
+
+  // Filtro de busca por Ticker ou Nome, Porte e Ordenação Dinâmica
   const filtrados = useMemo(() => {
-    let lista = ativos;
+    let lista = [...ativos];
 
     if (filtroPorte === "BLUE_CHIPS") {
       lista = lista.filter((a) => a.porte === "BLUE_CHIP" || a.porte === "FII_GIGANTE");
@@ -39,14 +53,60 @@ export function MarketTable({
       );
     }
 
-    if (!busca.trim()) return lista;
-    const termo = busca.toLowerCase().trim();
-    return lista.filter(
-      (a) =>
-        a.ticker.toLowerCase().includes(termo) ||
-        (a.nome && a.nome.toLowerCase().includes(termo))
-    );
-  }, [ativos, busca, filtroPorte]);
+    if (busca.trim()) {
+      const termo = busca.toLowerCase().trim();
+      lista = lista.filter(
+        (a) =>
+          a.ticker.toLowerCase().includes(termo) ||
+          (a.nome && a.nome.toLowerCase().includes(termo))
+      );
+    }
+
+    // Ordenação dinâmica solicitada
+    lista.sort((a, b) => {
+      let valA = 0;
+      let valB = 0;
+
+      switch (criterioOrdenacao) {
+        case "PREMIO":
+          valA = a.premio_desconto_percentual ?? (((a.preco_teto_consolidado || a.preco_teto_bazin_5a || a.preco_teto_bazin || 0) - a.preco_atual) / (a.preco_atual || 1) * 100);
+          valB = b.premio_desconto_percentual ?? (((b.preco_teto_consolidado || b.preco_teto_bazin_5a || b.preco_teto_bazin || 0) - b.preco_atual) / (b.preco_atual || 1) * 100);
+          break;
+        case "SPREAD_NTNB":
+          valA = a.spread_ntnb ?? -999;
+          valB = b.spread_ntnb ?? -999;
+          break;
+        case "DY":
+          valA = a.dy || 0;
+          valB = b.dy || 0;
+          break;
+        case "MARGEM":
+          valA = a.margem_seguranca_consolidada ?? a.margem_bazin_5a ?? a.margem_bazin ?? 0;
+          valB = b.margem_seguranca_consolidada ?? b.margem_bazin_5a ?? b.margem_bazin ?? 0;
+          break;
+        case "COTACAO":
+          valA = a.preco_atual || 0;
+          valB = b.preco_atual || 0;
+          break;
+        case "SCORE":
+        default:
+          valA = a.score || 0;
+          valB = b.score || 0;
+          if (valA === valB) {
+            valA = a.volume_total || 0;
+            valB = b.volume_total || 0;
+          }
+          break;
+      }
+
+      if (direcaoOrdenacao === "ASC") {
+        return valA - valB;
+      }
+      return valB - valA;
+    });
+
+    return lista;
+  }, [ativos, busca, filtroPorte, criterioOrdenacao, direcaoOrdenacao]);
 
   // Paginação
   const totalPaginas = Math.max(1, Math.ceil(filtrados.length / itensPorPagina));
@@ -109,10 +169,11 @@ export function MarketTable({
         </div>
       </div>
 
-      {/* Sub-barra de Filtros Rápidos de Porte (Ações e FIIs) */}
-      {classe !== "ETF" && (
-        <div className="px-5 py-2.5 bg-[#0a0a0e] border-b border-neutral-800/60 flex items-center justify-between gap-2 overflow-x-auto text-xs">
-          <div className="flex items-center gap-2">
+      {/* Sub-barra de Filtros Rápidos de Porte e Classificação / Ordenação */}
+      <div className="px-5 py-3 bg-[#0a0a0e] border-b border-neutral-800/60 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+        {/* Lado Esquerdo: Filtros de Porte (Ações e FIIs) */}
+        {classe !== "ETF" ? (
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0">
             <span className="text-[11px] text-neutral-500 uppercase tracking-wider font-mono mr-1">Porte:</span>
             <button
               onClick={() => {
@@ -139,7 +200,7 @@ export function MarketTable({
                   : "bg-neutral-900 text-neutral-400 hover:text-white border border-neutral-800"
               }`}
             >
-              <span>{classe === "ACAO" ? "👑 Blue Chips & Gigantes" : "🏰 FIIs Baleia (>150k cotistas)"}</span>
+              <span>{classe === "ACAO" ? "👑 Blue Chips" : "🏰 FIIs Baleia"}</span>
               <span
                 className={`text-[10px] px-1.5 rounded-full ${
                   filtroPorte === "BLUE_CHIPS" ? "bg-black/20 text-black font-bold" : "bg-neutral-800 text-[#d4af37]"
@@ -160,7 +221,7 @@ export function MarketTable({
                   : "bg-neutral-900 text-neutral-400 hover:text-white border border-neutral-800"
               }`}
             >
-              <span>{classe === "ACAO" ? "⚡ Mid & Small Caps" : "🏢 FIIs Consolidados"}</span>
+              <span>{classe === "ACAO" ? "⚡ Mid & Small" : "🏢 Consolidados"}</span>
               <span
                 className={`text-[10px] px-1.5 rounded-full ${
                   filtroPorte === "MID_SMALL" ? "bg-black/20 text-black font-bold" : "bg-neutral-800 text-neutral-300"
@@ -170,8 +231,92 @@ export function MarketTable({
               </span>
             </button>
           </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-neutral-500 uppercase tracking-wider font-mono">Listando ETFs por Liquidez</span>
+          </div>
+        )}
+
+        {/* Lado Direito: Seletor de Ordenação Dinâmica (Score, Prêmio %, Yield, Margem) */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
+          <span className="text-[11px] text-neutral-500 uppercase tracking-wider font-mono mr-1">Ordenar por:</span>
+          
+          <button
+            onClick={() => alternarOrdenacao("SCORE")}
+            title="Ordenar por Score Fundamentalista Composto"
+            className={`px-2.5 py-1 rounded-lg font-medium transition-all flex items-center gap-1 shrink-0 ${
+              criterioOrdenacao === "SCORE"
+                ? "bg-[#d4af37] text-black font-semibold shadow-sm"
+                : "bg-neutral-900 text-neutral-400 hover:text-white border border-neutral-800"
+            }`}
+          >
+            <span>🛡️ Score</span>
+            {criterioOrdenacao === "SCORE" && (
+              <span className="text-[11px] font-bold">{direcaoOrdenacao === "DESC" ? "↓" : "↑"}</span>
+            )}
+          </button>
+
+          <button
+            onClick={() => alternarOrdenacao("PREMIO")}
+            title="Ordenar pela maior % de Prêmio / Upside (diferença entre preço atual e preço teto)"
+            className={`px-2.5 py-1 rounded-lg font-medium transition-all flex items-center gap-1 shrink-0 ${
+              criterioOrdenacao === "PREMIO"
+                ? "bg-emerald-400 text-black font-semibold shadow-sm"
+                : "bg-neutral-900 text-neutral-400 hover:text-emerald-400 border border-neutral-800"
+            }`}
+          >
+            <span>🎯 Maior Prêmio (%)</span>
+            {criterioOrdenacao === "PREMIO" && (
+              <span className="text-[11px] font-bold">{direcaoOrdenacao === "DESC" ? "↓" : "↑"}</span>
+            )}
+          </button>
+
+          <button
+            onClick={() => alternarOrdenacao("SPREAD_NTNB")}
+            title="Ordenar pelo maior Spread de Retorno sobre a NTN-B (Tesouro IPCA+)"
+            className={`px-2.5 py-1 rounded-lg font-medium transition-all flex items-center gap-1 shrink-0 ${
+              criterioOrdenacao === "SPREAD_NTNB"
+                ? "bg-cyan-400 text-black font-semibold shadow-sm"
+                : "bg-neutral-900 text-neutral-400 hover:text-cyan-400 border border-neutral-800"
+            }`}
+          >
+            <span>⚖️ Risco vs NTN-B</span>
+            {criterioOrdenacao === "SPREAD_NTNB" && (
+              <span className="text-[11px] font-bold">{direcaoOrdenacao === "DESC" ? "↓" : "↑"}</span>
+            )}
+          </button>
+
+          <button
+            onClick={() => alternarOrdenacao("DY")}
+            title="Ordenar por maior Dividend Yield nos últimos 12M"
+            className={`px-2.5 py-1 rounded-lg font-medium transition-all flex items-center gap-1 shrink-0 ${
+              criterioOrdenacao === "DY"
+                ? "bg-[#d4af37] text-black font-semibold shadow-sm"
+                : "bg-neutral-900 text-neutral-400 hover:text-white border border-neutral-800"
+            }`}
+          >
+            <span>💰 Yield 12M</span>
+            {criterioOrdenacao === "DY" && (
+              <span className="text-[11px] font-bold">{direcaoOrdenacao === "DESC" ? "↓" : "↑"}</span>
+            )}
+          </button>
+
+          <button
+            onClick={() => alternarOrdenacao("MARGEM")}
+            title="Ordenar por maior Margem de Segurança Consolidada"
+            className={`px-2.5 py-1 rounded-lg font-medium transition-all flex items-center gap-1 shrink-0 ${
+              criterioOrdenacao === "MARGEM"
+                ? "bg-[#d4af37] text-black font-semibold shadow-sm"
+                : "bg-neutral-900 text-neutral-400 hover:text-white border border-neutral-800"
+            }`}
+          >
+            <span>📐 Margem</span>
+            {criterioOrdenacao === "MARGEM" && (
+              <span className="text-[11px] font-bold">{direcaoOrdenacao === "DESC" ? "↓" : "↑"}</span>
+            )}
+          </button>
         </div>
-      )}
+      </div>
 
       {/* Conteúdo Desktop: Tabela Institucional */}
       <div className="overflow-x-auto">
@@ -180,16 +325,74 @@ export function MarketTable({
             <tr className="border-b border-neutral-800/60 bg-[#09090d] text-neutral-400 font-mono uppercase tracking-wider text-[11px]">
               <th className="py-3 px-4 w-12 text-center">#</th>
               <th className="py-3 px-4">Ativo</th>
-              <th className="py-3 px-4 text-right">Cotação</th>
-              <th className="py-3 px-4 text-center">Score</th>
+              <th 
+                onClick={() => alternarOrdenacao("COTACAO")} 
+                className="py-3 px-4 text-right cursor-pointer hover:text-white transition-colors"
+                title="Clique para ordenar por Cotação"
+              >
+                <div className="flex items-center justify-end gap-1">
+                  <span>Cotação</span>
+                  {criterioOrdenacao === "COTACAO" && (
+                    <span className="text-[#d4af37] font-bold">{direcaoOrdenacao === "DESC" ? "↓" : "↑"}</span>
+                  )}
+                </div>
+              </th>
+              <th 
+                onClick={() => alternarOrdenacao("SCORE")} 
+                className="py-3 px-4 text-center cursor-pointer hover:text-white transition-colors"
+                title="Clique para ordenar por Score Fundamentalista"
+              >
+                <div className="flex items-center justify-center gap-1">
+                  <span>Score</span>
+                  {criterioOrdenacao === "SCORE" && (
+                    <span className="text-[#d4af37] font-bold">{direcaoOrdenacao === "DESC" ? "↓" : "↑"}</span>
+                  )}
+                </div>
+              </th>
               
               {classe === "ACAO" && (
                 <>
                   <th className="py-3 px-4 text-right">P/L</th>
                   <th className="py-3 px-4 text-right">P/VP</th>
                   <th className="py-3 px-4 text-right">ROE</th>
-                  <th className="py-3 px-4 text-right">Yield 12M</th>
-                  <th className="py-3 px-4 text-right">Teto Bazin</th>
+                  <th 
+                    onClick={() => alternarOrdenacao("DY")} 
+                    className="py-3 px-4 text-right cursor-pointer hover:text-white transition-colors"
+                    title="Clique para ordenar por Dividend Yield"
+                  >
+                    <div className="flex items-center justify-end gap-1">
+                      <span>Yield 12M</span>
+                      {criterioOrdenacao === "DY" && (
+                        <span className="text-[#d4af37] font-bold">{direcaoOrdenacao === "DESC" ? "↓" : "↑"}</span>
+                      )}
+                    </div>
+                  </th>
+                  <th 
+                    onClick={() => alternarOrdenacao("SPREAD_NTNB")} 
+                    className="py-3 px-4 text-right cursor-pointer hover:text-cyan-400 transition-colors"
+                    title="Clique para ordenar por Spread de Retorno sobre a NTN-B (IPCA+ 6.5%)"
+                  >
+                    <div className="flex items-center justify-end gap-1">
+                      <span>Spread NTN-B</span>
+                      {criterioOrdenacao === "SPREAD_NTNB" && (
+                        <span className="text-cyan-400 font-bold">{direcaoOrdenacao === "DESC" ? "↓" : "↑"}</span>
+                      )}
+                    </div>
+                  </th>
+                  <th 
+                    onClick={() => alternarOrdenacao("PREMIO")} 
+                    className="py-3 px-4 text-right cursor-pointer hover:text-emerald-400 transition-colors bg-emerald-950/10 border-x border-emerald-500/20"
+                    title="Clique para ordenar por % do Prêmio / Upside (diferença entre preço atual e preço teto)"
+                  >
+                    <div className="flex items-center justify-end gap-1 text-emerald-400 font-semibold">
+                      <span>🎯 Teto & Prêmio (%)</span>
+                      {criterioOrdenacao === "PREMIO" ? (
+                        <span className="text-emerald-300 font-bold">{direcaoOrdenacao === "DESC" ? "↓" : "↑"}</span>
+                      ) : (
+                        <ArrowUpDown className="w-3 h-3 opacity-60" />
+                      )}
+                    </div>
+                  </th>
                   <th className="py-3 px-4 text-right">VI Graham</th>
                 </>
               )}
@@ -198,9 +401,44 @@ export function MarketTable({
                 <>
                   <th className="py-3 px-4 text-right">P/VP CVM</th>
                   <th className="py-3 px-4 text-right">VP Cota</th>
-                  <th className="py-3 px-4 text-right">Yield 12M</th>
-                  <th className="py-3 px-4 text-right">Spread NTN-B</th>
-                  <th className="py-3 px-4 text-right">Teto Bazin</th>
+                  <th 
+                    onClick={() => alternarOrdenacao("DY")} 
+                    className="py-3 px-4 text-right cursor-pointer hover:text-white transition-colors"
+                    title="Clique para ordenar por Dividend Yield"
+                  >
+                    <div className="flex items-center justify-end gap-1">
+                      <span>Yield 12M</span>
+                      {criterioOrdenacao === "DY" && (
+                        <span className="text-[#d4af37] font-bold">{direcaoOrdenacao === "DESC" ? "↓" : "↑"}</span>
+                      )}
+                    </div>
+                  </th>
+                  <th 
+                    onClick={() => alternarOrdenacao("SPREAD_NTNB")} 
+                    className="py-3 px-4 text-right cursor-pointer hover:text-cyan-400 transition-colors"
+                    title="Clique para ordenar por Spread sobre o Tesouro IPCA+ (6.5%)"
+                  >
+                    <div className="flex items-center justify-end gap-1">
+                      <span>Spread NTN-B</span>
+                      {criterioOrdenacao === "SPREAD_NTNB" && (
+                        <span className="text-cyan-400 font-bold">{direcaoOrdenacao === "DESC" ? "↓" : "↑"}</span>
+                      )}
+                    </div>
+                  </th>
+                  <th 
+                    onClick={() => alternarOrdenacao("PREMIO")} 
+                    className="py-3 px-4 text-right cursor-pointer hover:text-emerald-400 transition-colors bg-emerald-950/10 border-x border-emerald-500/20"
+                    title="Clique para ordenar por % do Prêmio / Upside (diferença entre preço atual e preço teto)"
+                  >
+                    <div className="flex items-center justify-end gap-1 text-emerald-400 font-semibold">
+                      <span>🎯 Teto & Prêmio (%)</span>
+                      {criterioOrdenacao === "PREMIO" ? (
+                        <span className="text-emerald-300 font-bold">{direcaoOrdenacao === "DESC" ? "↓" : "↑"}</span>
+                      ) : (
+                        <ArrowUpDown className="w-3 h-3 opacity-60" />
+                      )}
+                    </div>
+                  </th>
                 </>
               )}
 
@@ -313,8 +551,78 @@ export function MarketTable({
                         <td className={`py-3 px-4 text-right font-mono font-semibold tabular-numbers ${ativo.is_provento_atipico ? "text-amber-400" : "text-emerald-400"}`}>
                           {formatPercent(ativo.dy)}
                         </td>
-                        <td className="py-3 px-4 text-right font-mono text-neutral-300 tabular-numbers">
-                          {ativo.preco_teto_bazin > 0 ? formatCurrency(ativo.preco_teto_bazin) : "—"}
+                        <td className="py-3 px-4 text-right font-mono tabular-numbers">
+                          <span
+                            className={
+                              ativo.spread_ntnb >= 2.0
+                                ? "text-emerald-400 font-semibold"
+                                : ativo.spread_ntnb >= 0
+                                ? "text-amber-400"
+                                : "text-rose-400"
+                            }
+                          >
+                            {ativo.spread_ntnb !== undefined
+                              ? `${ativo.spread_ntnb >= 0 ? "+" : ""}${ativo.spread_ntnb.toFixed(2)}%`
+                              : "—"}
+                          </span>
+                          {ativo.veredito_risco && (
+                            <span
+                              className={`block text-[9px] font-bold ${
+                                ativo.veredito_risco === "COMPENSA_RISCO"
+                                  ? "text-emerald-400"
+                                  : ativo.veredito_risco === "NEUTRO"
+                                  ? "text-amber-400"
+                                  : "text-rose-400"
+                              }`}
+                            >
+                              {ativo.veredito_risco === "COMPENSA_RISCO"
+                                ? "🟢 Compensa"
+                                : ativo.veredito_risco === "NEUTRO"
+                                ? "🟡 Neutro"
+                                : "🔴 Descompensado"}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono tabular-numbers bg-emerald-950/5 border-x border-emerald-500/10">
+                          {ativo.preco_teto_consolidado && ativo.preco_teto_consolidado > 0 ? (
+                            <div>
+                              <div className="flex items-center justify-end gap-1.5">
+                                <span className="text-white font-bold text-xs">{formatCurrency(ativo.preco_teto_consolidado)}</span>
+                                {ativo.teve_outlier_5a && (
+                                  <span 
+                                    title={ativo.observacao_outlier || "Outlier 5A normalizado com Winsorização"} 
+                                    className="text-[9px] px-1 py-0.2 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 cursor-help"
+                                  >
+                                    🛡️
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center justify-end gap-1 mt-0.5">
+                                <span
+                                  className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
+                                    (ativo.premio_desconto_percentual ?? 0) >= 15
+                                      ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
+                                      : (ativo.premio_desconto_percentual ?? 0) >= 0
+                                      ? "bg-amber-500/15 text-amber-400 border border-amber-500/30"
+                                      : "bg-rose-500/15 text-rose-400 border border-rose-500/30"
+                                  }`}
+                                >
+                                  {(ativo.premio_desconto_percentual ?? 0) >= 0 ? "+" : ""}
+                                  {(ativo.premio_desconto_percentual ?? 0).toFixed(1)}% prêmio
+                                </span>
+                              </div>
+                              <span className="block text-[9px] text-neutral-500 font-normal mt-0.5">
+                                Bazin 5A: {formatCurrency(ativo.preco_teto_bazin_5a || ativo.preco_teto_bazin)}
+                              </span>
+                            </div>
+                          ) : ativo.preco_teto_bazin_5a && ativo.preco_teto_bazin_5a > 0 ? (
+                            <div>
+                              <span className="text-[#d4af37] font-semibold">{formatCurrency(ativo.preco_teto_bazin_5a)}</span>
+                              <span className="block text-[10px] text-neutral-500 font-normal">12M: {formatCurrency(ativo.preco_teto_bazin)}</span>
+                            </div>
+                          ) : (
+                            formatCurrency(ativo.preco_teto_bazin)
+                          )}
                         </td>
                         <td className="py-3 px-4 text-right font-mono text-neutral-300 tabular-numbers">
                           {ativo.valor_graham > 0 ? formatCurrency(ativo.valor_graham) : "—"}
@@ -354,13 +662,68 @@ export function MarketTable({
                                 : "text-rose-400"
                             }
                           >
-                            {ativo.spread_ntnb >= 0
-                              ? `+${ativo.spread_ntnb.toFixed(2)}%`
-                              : `${ativo.spread_ntnb.toFixed(2)}%`}
+                            {ativo.spread_ntnb !== undefined
+                              ? `${ativo.spread_ntnb >= 0 ? "+" : ""}${ativo.spread_ntnb.toFixed(2)}%`
+                              : "—"}
                           </span>
+                          {ativo.veredito_risco && (
+                            <span
+                              className={`block text-[9px] font-bold ${
+                                ativo.veredito_risco === "COMPENSA_RISCO"
+                                  ? "text-emerald-400"
+                                  : ativo.veredito_risco === "NEUTRO"
+                                  ? "text-amber-400"
+                                  : "text-rose-400"
+                              }`}
+                            >
+                              {ativo.veredito_risco === "COMPENSA_RISCO"
+                                ? "🟢 Compensa"
+                                : ativo.veredito_risco === "NEUTRO"
+                                ? "🟡 Neutro"
+                                : "🔴 Descompensado"}
+                            </span>
+                          )}
                         </td>
-                        <td className="py-3 px-4 text-right font-mono text-neutral-300 tabular-numbers">
-                          {formatCurrency(ativo.preco_teto_bazin)}
+                        <td className="py-3 px-4 text-right font-mono tabular-numbers bg-emerald-950/5 border-x border-emerald-500/10">
+                          {ativo.preco_teto_consolidado && ativo.preco_teto_consolidado > 0 ? (
+                            <div>
+                              <div className="flex items-center justify-end gap-1.5">
+                                <span className="text-white font-bold text-xs">{formatCurrency(ativo.preco_teto_consolidado)}</span>
+                                {ativo.teve_outlier_5a && (
+                                  <span 
+                                    title={ativo.observacao_outlier || "Outlier 5A normalizado"} 
+                                    className="text-[9px] px-1 py-0.2 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 cursor-help"
+                                  >
+                                    🛡️
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center justify-end gap-1 mt-0.5">
+                                <span
+                                  className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
+                                    (ativo.premio_desconto_percentual ?? 0) >= 5
+                                      ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
+                                      : (ativo.premio_desconto_percentual ?? 0) >= 0
+                                      ? "bg-amber-500/15 text-amber-400 border border-amber-500/30"
+                                      : "bg-rose-500/15 text-rose-400 border border-rose-500/30"
+                                  }`}
+                                >
+                                  {(ativo.premio_desconto_percentual ?? 0) >= 0 ? "+" : ""}
+                                  {(ativo.premio_desconto_percentual ?? 0).toFixed(1)}% prêmio
+                                </span>
+                              </div>
+                              <span className="block text-[9px] text-neutral-500 font-normal mt-0.5">
+                                Teto Bazin: {formatCurrency(ativo.preco_teto_bazin_5a || ativo.preco_teto_bazin)}
+                              </span>
+                            </div>
+                          ) : ativo.preco_teto_bazin_5a && ativo.preco_teto_bazin_5a > 0 ? (
+                            <div>
+                              <span className="text-[#d4af37] font-semibold">{formatCurrency(ativo.preco_teto_bazin_5a)}</span>
+                              <span className="block text-[10px] text-neutral-500 font-normal">12M: {formatCurrency(ativo.preco_teto_bazin)}</span>
+                            </div>
+                          ) : (
+                            formatCurrency(ativo.preco_teto_bazin)
+                          )}
                         </td>
                       </>
                     )}

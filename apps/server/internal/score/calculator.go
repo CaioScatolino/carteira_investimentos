@@ -3,8 +3,10 @@ package score
 import (
 	"fmt"
 	"math"
+	"strings"
 
 	"carteira_investimentos/server/internal/domain"
+	"carteira_investimentos/server/internal/macro"
 )
 
 // AnalisadorScore consolida as métricas calculadas pelos outros motores,
@@ -65,19 +67,31 @@ func (s *AnalisadorScore) Executar(ativo *domain.Ativo) error {
 				Metrica: fmt.Sprintf("Teto: Inaplicável | Yield: %4.1f%%", ativo.DY),
 				Detalhe: "⚠️ Prejuízo operacional: dividendo insustentável sem suporte de lucro",
 			}
-		} else if ativo.PrecoTetoBazin > 0 {
-			if ativo.PrecoAtual <= ativo.PrecoTetoBazin {
-				ativo.Pareceres["Bazin"] = domain.ParecerItem{
-					Status:  domain.ParecerAprovado,
-					Metrica: fmt.Sprintf("Teto: R$ %6.2f | Yield: %4.1f%%", ativo.PrecoTetoBazin, ativo.DY),
-					Detalhe: fmt.Sprintf("Margem de Segurança: %+.1f%%", ativo.MargemBazin),
-				}
-			} else {
-				ativo.Pareceres["Bazin"] = domain.ParecerItem{
-					Status:  domain.ParecerReprovado,
-					Metrica: fmt.Sprintf("Teto: R$ %6.2f | Yield: %4.1f%%", ativo.PrecoTetoBazin, ativo.DY),
-					Detalhe: fmt.Sprintf("Acima do Teto: %+.1f%%", -ativo.MargemBazin),
-				}
+		} else if ativo.PrecoTetoBazin > 0 || ativo.PrecoTetoBazin5A > 0 {
+			tetoRef := ativo.PrecoTetoBazin5A
+			if tetoRef <= 0 {
+				tetoRef = ativo.PrecoTetoBazin
+			}
+			margemRef := ativo.MargemBazin5A
+			if ativo.PrecoTetoBazin5A <= 0 {
+				margemRef = ativo.MargemBazin
+			}
+
+			status := domain.ParecerReprovado
+			if ativo.PrecoAtual <= tetoRef {
+				status = domain.ParecerAprovado
+			}
+
+			metricaStr := fmt.Sprintf("Teto 5A: R$ %6.2f | Teto 12M: R$ %6.2f", ativo.PrecoTetoBazin5A, ativo.PrecoTetoBazin)
+			detalheStr := fmt.Sprintf("Média 5A: R$ %.2f (Margem 5A: %+.1f%% | 12M: %+.1f%%)", ativo.MediaDividendos5A, margemRef, ativo.MargemBazin)
+			if ativo.AderenciaStatusInvest != "" {
+				detalheStr += fmt.Sprintf(" • %s", ativo.AderenciaStatusInvest)
+			}
+
+			ativo.Pareceres["Bazin"] = domain.ParecerItem{
+				Status:  status,
+				Metrica: metricaStr,
+				Detalhe: detalheStr,
 			}
 		} else {
 			ativo.Pareceres["Bazin"] = domain.ParecerItem{
@@ -209,10 +223,47 @@ func (s *AnalisadorScore) Executar(ativo *domain.Ativo) error {
 			}
 		}
 
+		// Avaliação Macroeconômica de Risco Relativo vs NTN-B / Selic
+		cenario := macro.ObterCenario()
+		ativo.YieldExigido = math.Round((cenario.TaxaNTNB+cenario.SpreadMinimoAcoes)*100) / 100
+		ativo.SpreadNTNB = math.Round((ativo.DY-cenario.TaxaNTNB)*100) / 100
+		cresc := math.Min(math.Max(ativo.CrescimentoLucro5A, 0.0), 5.0)
+		ativo.TIRProjetada = math.Round((ativo.DY+cresc)*10) / 10
+
+		if ativo.SpreadNTNB >= 2.0 {
+			ativo.VereditoRisco = "COMPENSA_RISCO"
+			ativo.JustificativaRisco = fmt.Sprintf("🟢 Retorno Projetado atraente (+%.1f%% vs NTN-B). Remunera amplamente a volatilidade de equity.", ativo.SpreadNTNB)
+		} else if ativo.SpreadNTNB >= 0.0 {
+			ativo.VereditoRisco = "NEUTRO"
+			ativo.JustificativaRisco = fmt.Sprintf("🟡 Retorno moderado (+%.1f%% vs NTN-B). Preço próximo do equilíbrio justo com a renda fixa.", ativo.SpreadNTNB)
+		} else {
+			ativo.VereditoRisco = "RISCO_DESCOMPENSADO"
+			ativo.JustificativaRisco = fmt.Sprintf("🔴 Dividend Yield (%.1f%%) inferior à NTN-B (%.1f%% a.a.). Risco de equity descompensado.", ativo.DY, cenario.TaxaNTNB)
+		}
+
+		statusRisco := domain.ParecerReprovado
+		if ativo.VereditoRisco == "COMPENSA_RISCO" {
+			statusRisco = domain.ParecerAprovado
+		} else if ativo.VereditoRisco == "NEUTRO" {
+			statusRisco = domain.ParecerAtencao
+		}
+		ativo.Pareceres["VereditoRisco"] = domain.ParecerItem{
+			Status:  statusRisco,
+			Metrica: fmt.Sprintf("Spread: %+.1f%% vs NTN-B | Hurdle: %.1f%%", ativo.SpreadNTNB, ativo.YieldExigido),
+			Detalhe: ativo.JustificativaRisco,
+		}
+
 		// ==========================================
 		// CÁLCULO DO SCORE DE AÇÕES (0 a 100)
 		// ==========================================
 		score := 0.0
+
+		// Ajuste de Risco Macroeconômico no Score
+		if ativo.VereditoRisco == "COMPENSA_RISCO" {
+			score += 5.0
+		} else if ativo.VereditoRisco == "RISCO_DESCOMPENSADO" {
+			score = math.Max(0.0, score-8.0)
+		}
 
 		// Bloco 1: Bazin / Dividend Yield (até 15 pontos)
 		if ativo.IsProventoAtipico {
@@ -390,53 +441,88 @@ func (s *AnalisadorScore) Executar(ativo *domain.Ativo) error {
 			}
 		}
 
-		// Parecer 2: Spread de Renda vs NTN-B (IPCA+ 6.5% a.a.)
-		if ativo.IsProventoAtipico || ativo.DY >= 18.0 {
-			ativo.Pareceres["SpreadNTNB"] = domain.ParecerItem{
-				Status:  domain.ParecerReprovado,
-				Metrica: fmt.Sprintf("Spread: Inaplicável (DY %4.1f%%)", ativo.DY),
-				Detalhe: "Provento extraordinário de amortização não reflete renda perpétua",
-			}
-		} else if ativo.SpreadNTNB >= 2.0 {
-			ativo.Pareceres["SpreadNTNB"] = domain.ParecerItem{
-				Status:  domain.ParecerAprovado,
-				Metrica: fmt.Sprintf("Spread: %+.2f%% vs NTN-B", ativo.SpreadNTNB),
-				Detalhe: fmt.Sprintf("Yield Efetivo: %4.1f%% a.a.", ativo.DY),
-			}
-		} else if ativo.SpreadNTNB >= 0.0 {
-			ativo.Pareceres["SpreadNTNB"] = domain.ParecerItem{
-				Status:  domain.ParecerAtencao,
-				Metrica: fmt.Sprintf("Spread: %+.2f%% vs NTN-B", ativo.SpreadNTNB),
-				Detalhe: "Prêmio de risco moderado",
-			}
+		// Avaliação Macroeconômica de Risco Relativo de FIIs
+		cenario := macro.ObterCenario()
+		segUpper := strings.ToUpper(ativo.Segmento + " " + ativo.Setor)
+		isPapel := strings.Contains(segUpper, "PAP") || strings.Contains(segUpper, "CRI") || strings.Contains(segUpper, "RECEB")
+		isTijolo := strings.Contains(segUpper, "LOGÍST") || strings.Contains(segUpper, "LOGIST") || strings.Contains(segUpper, "SHOPPING") || strings.Contains(segUpper, "LAJES") || strings.Contains(segUpper, "IMÓVEIS") || strings.Contains(segUpper, "IMOVEIS") || strings.Contains(segUpper, "HOTEL") || strings.Contains(segUpper, "HOSPITAL") || strings.Contains(segUpper, "RENDA URBANA")
+
+		ativo.SpreadNTNB = math.Round((ativo.DY-cenario.TaxaNTNB)*100) / 100
+
+		if isPapel {
+			ativo.YieldExigido = math.Round(cenario.TaxaSelic*0.85*10) / 10 // ex: 10.0% a.a. (CDI líquido isento)
+			ativo.TIRProjetada = ativo.DY
+		} else if isTijolo {
+			spread := cenario.ObterSpreadSegmentoFII(ativo.Segmento)
+			ativo.YieldExigido = math.Round((cenario.TaxaNTNB+spread)*10) / 10
+			ativo.TIRProjetada = math.Round((ativo.DY+3.5)*10) / 10 // Dividend Yield + reajuste inflacionário longo
 		} else {
-			ativo.Pareceres["SpreadNTNB"] = domain.ParecerItem{
-				Status:  domain.ParecerReprovado,
-				Metrica: fmt.Sprintf("Spread: %+.2f%% vs NTN-B", ativo.SpreadNTNB),
-				Detalhe: "Rende menos que o Tesouro IPCA+",
+			ativo.YieldExigido = math.Round((cenario.TaxaNTNB+2.0)*10) / 10
+			ativo.TIRProjetada = math.Round((ativo.DY+2.5)*10) / 10
+		}
+
+		if ativo.IsProventoAtipico || ativo.DY >= 18.0 {
+			ativo.VereditoRisco = "RISCO_DESCOMPENSADO"
+			ativo.JustificativaRisco = "⚠️ Amortização extraordinária ou devolução de capital: yield não sustentável."
+		} else if isPapel {
+			if ativo.PVP > 1.02 {
+				ativo.VereditoRisco = "RISCO_DESCOMPENSADO"
+				ativo.JustificativaRisco = fmt.Sprintf("🔴 Ágio prejudicial em FII de Papel (P/VP %.2fx). Comprar crédito acima do VP corrói o retorno.", ativo.PVP)
+			} else if ativo.DY >= ativo.YieldExigido && ativo.PVP <= 1.01 {
+				ativo.VereditoRisco = "COMPENSA_RISCO"
+				ativo.JustificativaRisco = fmt.Sprintf("🟢 P/VP seguro (%.2fx) e Yield de %.1f%% a.a. supera o CDI isento (hurdle %.1f%%).", ativo.PVP, ativo.DY, ativo.YieldExigido)
+			} else {
+				ativo.VereditoRisco = "NEUTRO"
+				ativo.JustificativaRisco = "🟡 Preço justo e rendimento em linha com a renda fixa de crédito privado."
+			}
+		} else { // Tijolo / Híbridos
+			if ativo.DY >= ativo.YieldExigido && ativo.PVP <= 1.02 {
+				ativo.VereditoRisco = "COMPENSA_RISCO"
+				ativo.JustificativaRisco = fmt.Sprintf("🟢 Yield Real de %.1f%% a.a. supera o hurdle de %s (%.1f%%). Compensa o risco.", ativo.DY, ativo.Segmento, ativo.YieldExigido)
+			} else if ativo.DY >= cenario.TaxaNTNB {
+				ativo.VereditoRisco = "NEUTRO"
+				ativo.JustificativaRisco = fmt.Sprintf("🟡 Yield Real de %.1f%% a.a. supera a NTN-B básica, mas tem prêmio de risco reduzido.", ativo.DY)
+			} else {
+				ativo.VereditoRisco = "RISCO_DESCOMPENSADO"
+				ativo.JustificativaRisco = fmt.Sprintf("🔴 Yield Real (%.1f%%) inferior à NTN-B (%.1f%%). Não compensa o risco imobiliário.", ativo.DY, cenario.TaxaNTNB)
 			}
 		}
 
-		// Parecer 3: Teto Bazin FII
+		statusRiscoFII := domain.ParecerReprovado
+		if ativo.VereditoRisco == "COMPENSA_RISCO" {
+			statusRiscoFII = domain.ParecerAprovado
+		} else if ativo.VereditoRisco == "NEUTRO" {
+			statusRiscoFII = domain.ParecerAtencao
+		}
+		ativo.Pareceres["VereditoRisco"] = domain.ParecerItem{
+			Status:  statusRiscoFII,
+			Metrica: fmt.Sprintf("Spread: %+.1f%% vs NTN-B | Hurdle: %.1f%%", ativo.SpreadNTNB, ativo.YieldExigido),
+			Detalhe: ativo.JustificativaRisco,
+		}
+
+		// Parecer 2: Spread de Renda vs NTN-B (mantido para compatibilidade)
+		ativo.Pareceres["SpreadNTNB"] = ativo.Pareceres["VereditoRisco"]
+
+		// Parecer 3: Teto Bazin / Cap Rate FII
 		if ativo.IsProventoAtipico {
 			ativo.Pareceres["Bazin"] = domain.ParecerItem{
 				Status:  domain.ParecerReprovado,
 				Metrica: "Teto: Inaplicável",
 				Detalhe: "Fundo em amortização extraordinária ou liquidação",
 			}
-		} else if ativo.PrecoTetoBazin > 0 {
-			if ativo.PrecoAtual <= ativo.PrecoTetoBazin {
-				ativo.Pareceres["Bazin"] = domain.ParecerItem{
-					Status:  domain.ParecerAprovado,
-					Metrica: fmt.Sprintf("Teto: R$ %6.2f", ativo.PrecoTetoBazin),
-					Detalhe: fmt.Sprintf("Yield: %4.1f%% a.a.", ativo.DY),
-				}
-			} else {
-				ativo.Pareceres["Bazin"] = domain.ParecerItem{
-					Status:  domain.ParecerReprovado,
-					Metrica: fmt.Sprintf("Teto: R$ %6.2f", ativo.PrecoTetoBazin),
-					Detalhe: "Cotação acima do teto de 6%",
-				}
+		} else if ativo.PrecoTetoBazin > 0 || ativo.PrecoTetoBazin5A > 0 {
+			tetoRef := ativo.PrecoTetoBazin5A
+			if tetoRef <= 0 {
+				tetoRef = ativo.PrecoTetoBazin
+			}
+			status := domain.ParecerReprovado
+			if ativo.PrecoAtual <= tetoRef {
+				status = domain.ParecerAprovado
+			}
+			ativo.Pareceres["Bazin"] = domain.ParecerItem{
+				Status:  status,
+				Metrica: fmt.Sprintf("Teto 5A: R$ %6.2f | Teto 12M: R$ %6.2f", ativo.PrecoTetoBazin5A, ativo.PrecoTetoBazin),
+				Detalhe: fmt.Sprintf("Média 5A: R$ %.2f (Margem 5A: %+.1f%%)", ativo.MediaDividendos5A, ativo.MargemBazin5A),
 			}
 		}
 
@@ -444,6 +530,13 @@ func (s *AnalisadorScore) Executar(ativo *domain.Ativo) error {
 		// CÁLCULO DO SCORE DE FIIs (0 a 100)
 		// ==========================================
 		score := 0.0
+
+		// Ajuste Macroeconômico no Score de FIIs
+		if ativo.VereditoRisco == "COMPENSA_RISCO" {
+			score += 5.0
+		} else if ativo.VereditoRisco == "RISCO_DESCOMPENSADO" {
+			score = math.Max(0.0, score-10.0)
+		}
 
 		// Bloco 1: Desconto P/VP com trava de ágio (até 25 pontos)
 		if ativo.PVP > 0 {
@@ -580,5 +673,217 @@ func (s *AnalisadorScore) Executar(ativo *domain.Ativo) error {
 	// 2. Alinha o Status do Semáforo ao Score Consolidado e Regras de Segurança
 	ativo.AvaliarSemaforo()
 
+	// 3. Consolidação Consensual Multi-Modelo do Preço Teto e % de Prêmio/Upside
+	ConsolidarPrecoTeto(ativo)
+
 	return nil
+}
+
+// ConsolidarPrecoTeto calcula o Preço Teto Consensual e o Prêmio/Upside (%)
+// cruzando as diferentes metodologias de valuation de forma robusta e ponderada
+func ConsolidarPrecoTeto(ativo *domain.Ativo) {
+	if ativo.PrecoAtual <= 0 {
+		return
+	}
+
+	type modeloValuation struct {
+		nome string
+		teto float64
+		peso float64
+	}
+
+	var modelosValidos []modeloValuation
+
+	// ==========================================
+	// CASO 1: AÇÕES
+	// ==========================================
+	if ativo.Classe == domain.ClasseAcao {
+		// 1. Décio Bazin 5 Anos (Normalizado com Winsorização anti-outlier e calibrado com NTN-B)
+		cenario := macro.ObterCenario()
+		yieldMinimoAcoes := cenario.ObterYieldMinimoAcoes()
+		media5A := ativo.MediaDividendos5ANormalizada
+		if media5A <= 0 {
+			media5A = ativo.MediaDividendos5A
+		}
+		tetoBazin5A := ativo.PrecoTetoBazin5A
+		if media5A > 0 {
+			tetoBazin5A = math.Round((media5A/yieldMinimoAcoes)*100) / 100
+			ativo.PrecoTetoBazin5A = tetoBazin5A
+			if ativo.PrecoAtual > 0 {
+				ativo.MargemBazin5A = math.Round(((ativo.PrecoTetoBazin5A-ativo.PrecoAtual)/ativo.PrecoTetoBazin5A)*1000) / 10
+			}
+		}
+		if tetoBazin5A > 0 && tetoBazin5A <= ativo.PrecoAtual*3.5 {
+			modelosValidos = append(modelosValidos, modeloValuation{
+				nome: fmt.Sprintf("Bazin 5A (%.1f%%)", yieldMinimoAcoes*100),
+				teto: tetoBazin5A,
+				peso: 0.30,
+			})
+		}
+
+		// 2. Décio Bazin 12M Sustentável (limitado ao lucro para evitar yield trap)
+		tetoBazin12M := ativo.PrecoTetoBazin
+		if ativo.PrecoTetoBazinSustentavel > 0 {
+			tetoBazin12M = ativo.PrecoTetoBazinSustentavel
+		}
+		if tetoBazin12M > 0 && tetoBazin12M <= ativo.PrecoAtual*3.0 {
+			modelosValidos = append(modelosValidos, modeloValuation{
+				nome: "Bazin 12M",
+				teto: tetoBazin12M,
+				peso: 0.15,
+			})
+		}
+
+		// 3. Benjamin Graham (Valor Intrínseco)
+		if ativo.ValorGraham > 0 && ativo.LPA > 0 && ativo.VPA > 0 && ativo.ValorGraham <= ativo.PrecoAtual*3.5 {
+			modelosValidos = append(modelosValidos, modeloValuation{
+				nome: "Graham",
+				teto: ativo.ValorGraham,
+				peso: 0.30,
+			})
+		}
+
+		// 4. Gordon Growth Model (DDM calibrado via CAPM / Selic)
+		if ativo.PrecoTetoGordon > 0 && ativo.PrecoTetoGordon <= ativo.PrecoAtual*3.0 {
+			modelosValidos = append(modelosValidos, modeloValuation{
+				nome: "Gordon",
+				teto: ativo.PrecoTetoGordon,
+				peso: 0.20,
+			})
+		}
+
+		// 5. Peter Lynch (Preço Justo com Trava Prudencial de 18x LPA)
+		if ativo.PrecoJustoLynch > 0 && ativo.LPA > 0 {
+			tetoLynchPrudente := math.Min(ativo.PrecoJustoLynch, math.Max(ativo.PrecoAtual*1.5, 18.0*ativo.LPA))
+			if tetoLynchPrudente <= ativo.PrecoAtual*3.0 {
+				modelosValidos = append(modelosValidos, modeloValuation{
+					nome: "Lynch",
+					teto: tetoLynchPrudente,
+					peso: 0.05,
+				})
+			}
+		}
+	} else if ativo.Classe == domain.ClasseFII {
+		// ==========================================
+		// CASO 2: FUNDOS IMOBILIÁRIOS (FIIs)
+		// ==========================================
+		segUpper := strings.ToUpper(ativo.Segmento + " " + ativo.Setor)
+		isPapel := strings.Contains(segUpper, "PAP") || strings.Contains(segUpper, "CRI") || strings.Contains(segUpper, "RECEB")
+		isTijolo := strings.Contains(segUpper, "LOGÍST") || strings.Contains(segUpper, "LOGIST") || strings.Contains(segUpper, "SHOPPING") || strings.Contains(segUpper, "LAJES") || strings.Contains(segUpper, "IMÓVEIS") || strings.Contains(segUpper, "IMOVEIS") || strings.Contains(segUpper, "HOTEL") || strings.Contains(segUpper, "HOSPITAL") || strings.Contains(segUpper, "RENDA URBANA")
+
+		cenario := macro.ObterCenario()
+
+		if isPapel {
+			// FII de Papel (CRI): O valor do fundo é a carteira de crédito. Comprar com ágio destrói o carrego.
+			if ativo.VPCota > 0 {
+				modelosValidos = append(modelosValidos, modeloValuation{
+					nome: "VP Cota (Crédito)",
+					teto: math.Round(ativo.VPCota*100) / 100,
+					peso: 0.80,
+				})
+				modelosValidos = append(modelosValidos, modeloValuation{
+					nome: "Teto Máx (1.01x VP)",
+					teto: math.Round(ativo.VPCota*1.01*100) / 100,
+					peso: 0.20,
+				})
+			}
+		} else if isTijolo {
+			// FII de Tijolo: Valuation por Renda Imobiliária (Cap Rate sobre NTN-B + Spread) + Custo de Reposição
+			spread := cenario.ObterSpreadSegmentoFII(ativo.Segmento)
+			yieldExigido := (cenario.TaxaNTNB + spread) / 100.0
+
+			proventosRef := ativo.MediaDividendos5ANormalizada
+			if proventosRef <= 0 {
+				proventosRef = ativo.MediaDividendos5A
+			}
+			if proventosRef <= 0 {
+				proventosRef = ativo.Dividendos12M
+			}
+
+			if !ativo.IsProventoAtipico && proventosRef > 0 && yieldExigido > 0 {
+				tetoRenda := math.Round((proventosRef/yieldExigido)*100) / 100
+				if tetoRenda > 0 && tetoRenda <= ativo.PrecoAtual*2.5 {
+					modelosValidos = append(modelosValidos, modeloValuation{
+						nome: fmt.Sprintf("Cap Rate (NTN-B+%.1f%%)", spread),
+						teto: tetoRenda,
+						peso: 0.60,
+					})
+				}
+			}
+
+			if ativo.VPCota > 0 {
+				tetoPatrimonial := math.Round(ativo.VPCota*1.02*100) / 100
+				modelosValidos = append(modelosValidos, modeloValuation{
+					nome: "Custo Reposição (VP CVM)",
+					teto: tetoPatrimonial,
+					peso: 0.40,
+				})
+			}
+		} else {
+			// FOFs e Híbridos
+			if ativo.VPCota > 0 {
+				modelosValidos = append(modelosValidos, modeloValuation{
+					nome: "VP Cota (0.98x Desconto Duplo)",
+					teto: math.Round(ativo.VPCota*0.98*100) / 100,
+					peso: 0.70,
+				})
+			}
+			proventosRef := ativo.Dividendos12M
+			yieldExigido := (cenario.TaxaNTNB + 2.0) / 100.0
+			if proventosRef > 0 && yieldExigido > 0 {
+				tetoRenda := math.Round((proventosRef/yieldExigido)*100) / 100
+				modelosValidos = append(modelosValidos, modeloValuation{
+					nome: "Teto Renda FOF",
+					teto: tetoRenda,
+					peso: 0.30,
+				})
+			}
+		}
+	}
+
+	if len(modelosValidos) == 0 {
+		return
+	}
+
+	somaPonderada := 0.0
+	somaPesos := 0.0
+	var nomesModelos []string
+
+	for _, m := range modelosValidos {
+		somaPonderada += m.teto * m.peso
+		somaPesos += m.peso
+		nomesModelos = append(nomesModelos, fmt.Sprintf("%s: R$ %.2f", m.nome, m.teto))
+	}
+
+	tetoConsolidado := somaPonderada / somaPesos
+	tetoConsolidado = math.Round(tetoConsolidado*100) / 100
+
+	// % de Prêmio/Upside que o investidor pode conseguir: ((Teto - Preço) / Preço) * 100
+	premioUpside := ((tetoConsolidado - ativo.PrecoAtual) / ativo.PrecoAtual) * 100.0
+	// % de Margem de Segurança: ((Teto - Preço) / Teto) * 100
+	margemSeg := ((tetoConsolidado - ativo.PrecoAtual) / tetoConsolidado) * 100.0
+
+	ativo.PrecoTetoConsolidado = tetoConsolidado
+	ativo.PremioDescontoPercentual = math.Round(premioUpside*10) / 10
+	ativo.MargemSegurancaConsolidada = math.Round(margemSeg*10) / 10
+	ativo.ModelosTetoConsolidado = nomesModelos
+
+	// Parecer de Preço Teto & Prêmio Consensual
+	statusTeto := domain.ParecerReprovado
+	if ativo.PremioDescontoPercentual >= 15.0 {
+		statusTeto = domain.ParecerAprovado
+	} else if ativo.PremioDescontoPercentual >= 0.0 {
+		statusTeto = domain.ParecerAtencao
+	}
+
+	detalhe := fmt.Sprintf("Modelos: %s", strings.Join(nomesModelos, " | "))
+	if ativo.TeveOutlier5A && ativo.ObservacaoOutlier != "" {
+		detalhe += fmt.Sprintf(" • 🛡️ %s", ativo.ObservacaoOutlier)
+	}
+
+	ativo.Pareceres["Preço Teto"] = domain.ParecerItem{
+		Status:  statusTeto,
+		Metrica: fmt.Sprintf("Teto Consenso: R$ %.2f | Prêmio: %+.1f%%", tetoConsolidado, ativo.PremioDescontoPercentual),
+		Detalhe: detalhe,
+	}
 }

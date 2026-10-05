@@ -8,19 +8,27 @@ import (
 	"strings"
 	"time"
 
+	"carteira_investimentos/server/internal/b3"
 	"carteira_investimentos/server/internal/domain"
+	"carteira_investimentos/server/internal/macro"
+	"carteira_investimentos/server/internal/score"
 	"carteira_investimentos/server/internal/storage"
 )
 
 // Handler gerencia as requisições HTTP da plataforma
 type Handler struct {
-	store storage.SnapshotStore
+	store    storage.SnapshotStore
+	b3Client *b3.B3Client
 }
 
 // NovoHandler cria uma instância do Handler com as dependências injetadas
-func NovoHandler(store storage.SnapshotStore) *Handler {
+func NovoHandler(store storage.SnapshotStore, b3Client *b3.B3Client) *Handler {
+	if b3Client == nil {
+		b3Client = b3.NovoB3Client()
+	}
 	return &Handler{
-		store: store,
+		store:    store,
+		b3Client: b3Client,
 	}
 }
 
@@ -113,5 +121,73 @@ func (h *Handler) ObterAtivoPorTicker(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Enriquecimento sob demanda com dados oficiais de 5 anos (B3 e CVM) se ainda não carregados (Ações e FIIs)
+	if len(ativo.HistoricoDividendosAnual) == 0 && h.b3Client != nil {
+		analise := h.b3Client.ObterAnaliseProventos5A(ativo.Nome, ativo.Ticker, ativo.PrecoAtual, ativo.Dividendos12M)
+		if analise != nil && analise.TotalEventos > 0 {
+			ativo.MediaDividendos5A = analise.MediaDividendos5A
+			ativo.MediaDividendos5ANormalizada = analise.MediaDividendos5ANormalizada
+			ativo.PrecoTetoBazin5A = analise.PrecoTetoBazin5A
+			ativo.MargemBazin5A = analise.MargemBazin5A
+			ativo.Dividendos12MB3 = analise.Dividendos12MB3Liquido
+			ativo.HistoricoDividendosAnual = analise.ProventosPorAno
+			ativo.Diferenca12MB3StatusInvest = analise.Diferenca12M
+			ativo.AderenciaStatusInvest = analise.AderenciaStatusInvest
+			ativo.TeveOutlier5A = analise.TeveOutlier5A
+			ativo.ObservacaoOutlier = analise.ObservacaoOutlier
+			score.ConsolidarPrecoTeto(ativo)
+			_ = h.store.Salvar(ativo)
+		}
+	}
+
 	responderJSON(w, http.StatusOK, ativo)
 }
+
+// ObterAnaliseDividendos entrega a análise profunda dos últimos 5 anos da B3 comparada com StatusInvest
+func (h *Handler) ObterAnaliseDividendos(w http.ResponseWriter, r *http.Request) {
+	ticker := strings.ToUpper(strings.TrimSpace(r.PathValue("ticker")))
+	if ticker == "" {
+		responderJSON(w, http.StatusBadRequest, map[string]string{"erro": "Ticker não informado"})
+		return
+	}
+
+	ativo, _ := h.store.Obter(ticker)
+	precoAtual := 0.0
+	div12MSI := 0.0
+	nome := ""
+	if ativo != nil {
+		precoAtual = ativo.PrecoAtual
+		div12MSI = ativo.Dividendos12M
+		nome = ativo.Nome
+	}
+
+	if h.b3Client == nil {
+		responderJSON(w, http.StatusInternalServerError, map[string]string{"erro": "Cliente B3 não inicializado"})
+		return
+	}
+
+	analise := h.b3Client.ObterAnaliseProventos5A(nome, ticker, precoAtual, div12MSI)
+	if analise != nil && ativo != nil && analise.TotalEventos > 0 {
+		ativo.MediaDividendos5A = analise.MediaDividendos5A
+		ativo.MediaDividendos5ANormalizada = analise.MediaDividendos5ANormalizada
+		ativo.PrecoTetoBazin5A = analise.PrecoTetoBazin5A
+		ativo.MargemBazin5A = analise.MargemBazin5A
+		ativo.Dividendos12MB3 = analise.Dividendos12MB3Liquido
+		ativo.HistoricoDividendosAnual = analise.ProventosPorAno
+		ativo.Diferenca12MB3StatusInvest = analise.Diferenca12M
+		ativo.AderenciaStatusInvest = analise.AderenciaStatusInvest
+		ativo.TeveOutlier5A = analise.TeveOutlier5A
+		ativo.ObservacaoOutlier = analise.ObservacaoOutlier
+		score.ConsolidarPrecoTeto(ativo)
+		_ = h.store.Salvar(ativo)
+	}
+
+	responderJSON(w, http.StatusOK, analise)
+}
+
+// ObterCenarioMacro entrega o cenário macroeconômico ativo (Selic, NTN-B, Spreads)
+func (h *Handler) ObterCenarioMacro(w http.ResponseWriter, r *http.Request) {
+	cenario := macro.ObterCenario()
+	responderJSON(w, http.StatusOK, cenario)
+}
+
