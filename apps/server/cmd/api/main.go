@@ -13,6 +13,7 @@ import (
 	"carteira_investimentos/server/internal/bazin"
 	"carteira_investimentos/server/internal/catalog"
 	"carteira_investimentos/server/internal/config"
+	"carteira_investimentos/server/internal/dcf"
 	"carteira_investimentos/server/internal/domain"
 	"carteira_investimentos/server/internal/fii"
 	"carteira_investimentos/server/internal/gordon"
@@ -65,8 +66,9 @@ func main() {
 		gordon.NovoDinamico(), // 4. Gordon DDM: Custo de capital calibrado via CAPM / Selic
 		greenblatt.Novo(),     // 5. Joel Greenblatt: The Magic Formula (EV/EBIT + ROIC com adaptação p/ bancos)
 		piotroski.Novo(),      // 6. Joseph Piotroski: F-Score de Solvência & Saúde Contábil (0 a 9)
-		fii.Novo(0),           // 7. FIIs: Segmentação (Tijolo/Papel), Cap Rate Implícito e Spread NTN-B dinâmico
-		score.Novo(),          // 8. Score Fundamentalista Composto (0 a 100) com Veredito de Risco vs Renda Fixa
+		dcf.Novo(),            // 7. DCF Proxy: Fluxo de Caixa Descontado Institucional (FCFF/WACC)
+		fii.Novo(0),           // 8. FIIs: Segmentação (Tijolo/Papel), Cap Rate Implícito e Spread NTN-B dinâmico
+		score.Novo(),          // 9. Score Fundamentalista Composto com Consenso Multi-Modelo e Veredito de Risco
 	}
 
 	// 4. Inicializa o Cache e o Ingestion Service Consolidado (StatusInvest + B3)

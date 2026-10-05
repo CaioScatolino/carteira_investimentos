@@ -120,6 +120,8 @@ func (s *IngestionService) ExecutarSincronizacao(ctx context.Context) ([]*domain
 			MargemBruta:         a.MargemBruta,
 			MargemEbit:          a.MargemEbit,
 			MargemLiquida:       a.MargemLiquida,
+			PEbit:               a.PEbit,
+			EVEbit:              a.EVEbit,
 			DividaLiquidaPL:     a.DividaLiquidaPatrimonioLiquido,
 			DividaLiquidaEbit:   a.DividaLiquidaEbit,
 			LiquidezCorrente:    a.LiquidezCorrente,
@@ -221,7 +223,12 @@ func (s *IngestionService) ExecutarSincronizacao(ctx context.Context) ([]*domain
 			Setor:               f.SectorName,
 			Subsetor:            f.SubSectorName,
 			Segmento:            f.Segment,
+			CapRateImplicito:    0.0,
 			Pareceres:           make(map[string]domain.ParecerItem),
+		}
+
+		if ativo.PVP > 0 && ativo.DY > 0 {
+			ativo.CapRateImplicito = math.Round((ativo.DY/ativo.PVP)*100) / 100
 		}
 
 		// Décio Bazin FII: Média Histórica de 5 Anos (estimativa prudente padrão)

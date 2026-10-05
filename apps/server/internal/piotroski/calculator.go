@@ -78,6 +78,8 @@ func (p *AnalisadorPiotroski) Executar(ativo *domain.Ativo) error {
 		score++
 	}
 
+	ativo.PiotroskiScore = score
+
 	// Gera o Parecer
 	status := domain.ParecerReprovado
 	detalhe := "Risco de Solvência / Alerta de Value Trap"
@@ -97,4 +99,55 @@ func (p *AnalisadorPiotroski) Executar(ativo *domain.Ativo) error {
 	}
 
 	return nil
+}
+
+// CalcularFScore executa os 9 critérios de Piotroski e retorna a pontuação de 0 a 9
+func CalcularFScore(ativo *domain.Ativo) int {
+	if ativo.Classe != domain.ClasseAcao {
+		return 0
+	}
+	score := 0
+	isFinanceiro := strings.Contains(strings.ToUpper(ativo.Setor), "FINANC") ||
+		strings.Contains(strings.ToUpper(ativo.Setor), "SEGURO") ||
+		strings.Contains(strings.ToUpper(ativo.Segmento), "BANCO")
+
+	if ativo.ROA > 0 {
+		score++
+	}
+	if ativo.MargemLiquida > 0 {
+		score++
+	}
+	if ativo.MargemLiquida >= 8.0 {
+		score++
+	}
+	if ativo.ROE >= 12.0 {
+		score++
+	}
+
+	if isFinanceiro {
+		if ativo.LiquidezCorrente >= 1.0 || ativo.ROE >= 14.0 {
+			score++
+		}
+		if ativo.VPA > 0 {
+			score++
+		}
+	} else {
+		if (ativo.DividaLiquidaEbit >= 0 && ativo.DividaLiquidaEbit <= 2.5) || (ativo.DividaLiquidaPL >= 0 && ativo.DividaLiquidaPL <= 1.2) {
+			score++
+		}
+		if ativo.LiquidezCorrente >= 1.1 {
+			score++
+		}
+	}
+
+	if ativo.MargemBruta >= 20.0 {
+		score++
+	}
+	if ativo.GiroAtivos >= 0.4 || isFinanceiro {
+		score++
+	}
+	if ativo.CrescimentoLucro5A > 0 {
+		score++
+	}
+	return score
 }

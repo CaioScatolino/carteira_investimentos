@@ -75,11 +75,16 @@ type Ativo struct {
 	MargemBruta         float64 `json:"margem_bruta,omitempty"`
 	MargemEbit          float64 `json:"margem_ebit,omitempty"`
 	MargemLiquida       float64 `json:"margem_liquida,omitempty"`
+	PEbit               float64 `json:"p_ebit,omitempty"`
+	EVEbit              float64 `json:"ev_ebit,omitempty"`
 	DividaLiquidaPL     float64 `json:"divida_liquida_pl,omitempty"`
 	DividaLiquidaEbit   float64 `json:"divida_liquida_ebit,omitempty"`
 	LiquidezCorrente    float64 `json:"liquidez_corrente,omitempty"`
 	LiquidezMediaDiaria float64 `json:"liquidez_media_diaria,omitempty"`
 	ValorMercado        float64 `json:"valor_mercado,omitempty"`
+	CapRateImplicito    float64 `json:"cap_rate_implicito,omitempty"`
+	PiotroskiScore      int     `json:"piotroski_score,omitempty"`
+	PrecoTetoDCF        float64 `json:"preco_teto_dcf,omitempty"`
 	Setor               string  `json:"setor,omitempty"`
 	Subsetor            string  `json:"subsetor,omitempty"`
 	Segmento            string  `json:"segmento,omitempty"`

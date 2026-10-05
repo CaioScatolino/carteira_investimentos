@@ -37,6 +37,9 @@ export interface Ativo {
   roe: number;
   earnings_yield: number;
   preco_teto_gordon: number;
+  preco_teto_dcf?: number;
+  piotroski_score?: number;
+  cap_rate_implicito?: number;
   margem_bazin: number;
   margem_graham: number;
 
@@ -47,6 +50,8 @@ export interface Ativo {
   margem_bruta?: number;
   margem_ebit?: number;
   margem_liquida?: number;
+  p_ebit?: number;
+  ev_ebit?: number;
   divida_liquida_pl?: number;
   divida_liquida_ebit?: number;
   liquidez_corrente?: number;

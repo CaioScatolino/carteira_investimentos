@@ -2,6 +2,7 @@ package fii
 
 import (
 	"fmt"
+	"math"
 	"strings"
 
 	"carteira_investimentos/server/internal/domain"
@@ -30,9 +31,12 @@ func (f *AnalisadorFII) Executar(ativo *domain.Ativo) error {
 		ativo.Pareceres = make(map[string]domain.ParecerItem)
 	}
 
-	// 1. Cálculo do P/VP
+	// 1. Cálculo do P/VP e Cap Rate Implícito
 	if ativo.VPCota > 0 {
 		ativo.PVP = ativo.PrecoAtual / ativo.VPCota
+	}
+	if ativo.PVP > 0 && ativo.DY > 0 {
+		ativo.CapRateImplicito = math.Round((ativo.DY/ativo.PVP)*100) / 100
 	}
 
 	// 2. Cálculo do Spread sobre o Tesouro IPCA+
@@ -63,6 +67,9 @@ func (f *AnalisadorFII) Executar(ativo *domain.Ativo) error {
 	if isPapel {
 		// Regra de Ouro para FIIs de Papel: PROIBIDO comprar com ágio (> 1.02x)
 		if ativo.PVP > 1.02 {
+			ativo.AlertaRisco = "Ágio em FII de Papel"
+			ativo.VereditoRisco = "RISCO_DESCOMPENSADO"
+			ativo.JustificativaRisco = fmt.Sprintf("🔴 Ágio prejudicial em FII de Papel (P/VP %.2fx). Comprar crédito acima do VP corrói o retorno.", ativo.PVP)
 			ativo.Pareceres["FII Tipo & Ágio"] = domain.ParecerItem{
 				Status:  domain.ParecerReprovado,
 				Metrica: fmt.Sprintf("P/VP: %4.2fx (Papel/CRI)", ativo.PVP),

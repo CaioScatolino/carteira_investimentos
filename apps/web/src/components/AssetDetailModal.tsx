@@ -569,6 +569,18 @@ export function AssetDetailModal({ ativo, macro, onClose }: AssetModalProps) {
             {ativo.classe === "ACAO" ? (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
                 <div className="p-2 rounded bg-neutral-900/80 border border-neutral-800/60">
+                  <span className="text-neutral-500 block text-[10px] uppercase">Piotroski F-Score</span>
+                  <span className={`font-semibold ${ativo.piotroski_score && ativo.piotroski_score >= 7 ? "text-emerald-400" : ativo.piotroski_score && ativo.piotroski_score >= 5 ? "text-amber-400" : "text-rose-400"}`}>
+                    {ativo.piotroski_score !== undefined && ativo.piotroski_score > 0 ? `${ativo.piotroski_score}/9 pts` : "—"}
+                  </span>
+                </div>
+                <div className="p-2 rounded bg-neutral-900/80 border border-neutral-800/60">
+                  <span className="text-neutral-500 block text-[10px] uppercase">Preço Teto DCF</span>
+                  <span className="font-semibold text-cyan-400">
+                    {ativo.preco_teto_dcf && ativo.preco_teto_dcf > 0 ? formatCurrency(ativo.preco_teto_dcf) : "Inaplicável"}
+                  </span>
+                </div>
+                <div className="p-2 rounded bg-neutral-900/80 border border-neutral-800/60">
                   <span className="text-neutral-500 block text-[10px] uppercase">ROIC</span>
                   <span className="font-semibold text-neutral-200">{formatPercent(ativo.roic)}</span>
                 </div>
@@ -595,16 +607,18 @@ export function AssetDetailModal({ ativo, macro, onClose }: AssetModalProps) {
                   <span className="font-semibold text-neutral-200">{ativo.divida_liquida_pl !== undefined ? `${ativo.divida_liquida_pl.toFixed(2)}x` : "-"}</span>
                 </div>
                 <div className="p-2 rounded bg-neutral-900/80 border border-neutral-800/60">
-                  <span className="text-neutral-500 block text-[10px] uppercase">Dív. Líquida / EBIT</span>
-                  <span className="font-semibold text-neutral-200">{ativo.divida_liquida_ebit !== undefined ? `${ativo.divida_liquida_ebit.toFixed(2)}x` : "-"}</span>
-                </div>
-                <div className="p-2 rounded bg-neutral-900/80 border border-neutral-800/60">
-                  <span className="text-neutral-500 block text-[10px] uppercase">Liq. Média Diária</span>
-                  <span className="font-semibold text-[#d4af37]">{formatVolume(ativo.liquidez_media_diaria)}</span>
+                  <span className="text-neutral-500 block text-[10px] uppercase">P/EBIT</span>
+                  <span className="font-semibold text-neutral-200">{ativo.p_ebit !== undefined && ativo.p_ebit > 0 ? `${ativo.p_ebit.toFixed(1)}x` : "-"}</span>
                 </div>
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+                <div className="p-2 rounded bg-neutral-900/80 border border-neutral-800/60">
+                  <span className="text-neutral-500 block text-[10px] uppercase">Cap Rate Implícito</span>
+                  <span className="font-semibold text-emerald-400">
+                    {ativo.cap_rate_implicito ? formatPercent(ativo.cap_rate_implicito) : (ativo.pvp && ativo.pvp > 0 ? formatPercent(ativo.dy / ativo.pvp) : "—")}
+                  </span>
+                </div>
                 <div className="p-2 rounded bg-neutral-900/80 border border-neutral-800/60">
                   <span className="text-neutral-500 block text-[10px] uppercase">Segmento FII</span>
                   <span className="font-semibold text-neutral-200">{ativo.segmento || "-"}</span>
@@ -612,10 +626,6 @@ export function AssetDetailModal({ ativo, macro, onClose }: AssetModalProps) {
                 <div className="p-2 rounded bg-neutral-900/80 border border-neutral-800/60">
                   <span className="text-neutral-500 block text-[10px] uppercase">Gestão</span>
                   <span className="font-semibold text-neutral-200">{ativo.gestao || "-"}</span>
-                </div>
-                <div className="p-2 rounded bg-neutral-900/80 border border-neutral-800/60">
-                  <span className="text-neutral-500 block text-[10px] uppercase">Cotistas</span>
-                  <span className="font-semibold text-neutral-200">{ativo.numero_cotistas ? ativo.numero_cotistas.toLocaleString("pt-BR") : "-"}</span>
                 </div>
                 <div className="p-2 rounded bg-neutral-900/80 border border-neutral-800/60">
                   <span className="text-neutral-500 block text-[10px] uppercase">Último Provento</span>
