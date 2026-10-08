@@ -19,6 +19,7 @@ import (
 	"carteira_investimentos/server/internal/gordon"
 	"carteira_investimentos/server/internal/graham"
 	"carteira_investimentos/server/internal/greenblatt"
+	"carteira_investimentos/server/internal/history"
 	"carteira_investimentos/server/internal/lynch"
 	"carteira_investimentos/server/internal/macro"
 	"carteira_investimentos/server/internal/piotroski"
@@ -76,12 +77,31 @@ func main() {
 	b3Client := b3.NovoB3Client()
 	ingestionService := statusinvest.NovoIngestionService(nil, b3Client, store, motores)
 
+	// Repositório e Agendador de Histórico Diário (Snapshot 19h)
+	var historyScheduler *history.Scheduler
+	if err == nil && db != nil {
+		historyRepo := history.NovoMySQLRepository(db)
+		historyScheduler = history.NovoScheduler(historyRepo, store)
+	}
+
 	// 5. Ingestão consolidada em 2 requisições ultra-rápidas (<1s para 100% dos ativos da B3)
 	ctxIngest, cancelIngest := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancelIngest()
 
 	if _, err := ingestionService.ExecutarSincronizacao(ctxIngest); err != nil {
 		fmt.Printf("⚠️ Erro na sincronização inicial do StatusInvest: %v\n", err)
+	}
+	// Inicializa e agenda o Cron diário pós-fechamento do pregão (19h)
+	if historyScheduler != nil {
+		// 1. Executa um snapshot inicial de validação
+		ctxSnap, cancelSnap := context.WithTimeout(context.Background(), 10*time.Second)
+		if err := historyScheduler.ExecutarSnapshotAgora(ctxSnap, time.Now()); err != nil {
+			fmt.Printf("⚠️ [CRON 19H] Erro no snapshot inicial: %v\n", err)
+		}
+		cancelSnap()
+
+		// 2. Dispara a rotina perpétua que aguardará até as 19h dos dias úteis
+		historyScheduler.IniciarRotinaDiaria()
 	}
 
 	// Inicia rotina periódica em background a cada 1 hora
