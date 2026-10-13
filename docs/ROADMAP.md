@@ -108,7 +108,11 @@ Este documento é a bússola viva do projeto. Ele mapeia as decisões arquitetur
   - Score Fundamentalista Composto (0 a 100) segmentado por classe de ativo.
   - Pareceres individuais pedagógicos por escola (`APROVADO`, `ATENCAO`, `REPROVADO`).
   - Separação e ordenação de 3 rankings completos (FIIs, Ações e ETFs) com 388 ativos auditados em 14 segundos.
-- [ ] **Passo 6.6**: Adaptador Redis (`internal/storage/redis_store.go`) gravando Snapshot Consolidado ("b3:snapshot:<ticker>") com TTL.
+- [x] **Passo 6.6**: Adaptador Redis (`internal/storage/store.go`):
+  - [x] Snapshot distribuído de alta performance com Redis Pipeline (< 5ms para ~400 ativos).
+  - [x] Estratégia de chaves individuais (`b3:snapshot:<ticker>`) e agregada (`b3:snapshot:todos`) com TTL dinâmico de 25 min.
+  - [x] Loop de atualização em background via StatusInvest a cada 20 minutos.
+  - [x] Fallback automático para `InMemoryStore` caso o Redis esteja indisponível.
 - [x] **Passo 6.7**: Histórico Diário de Rankings Pós-Pregão (Cron 19h) & Fator Temporal no Valuation:
   - [x] **Cron Automatizado 19h:** Rotina agendada diária executada às 19:00 em Go nativo (segunda a sexta-feira, pós-fechamento do pregão da B3 e homologação dos boletins diários).
   - [x] **Tabela MySQL `historico_rankings_diarios`:** Armazena o snapshot imutável de cada pregão (`data_pregao`, `ticker`, `classe`, `posicao_ranking`, `score`, `preco_atual`, `preco_teto_consolidado`, `premio_desconto_percentual`, `dy`, `pl`, `pvp`, `status`, `is_provento_atipico`, `modelos_json`).

@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"sort"
+	"strconv"
 	"time"
 
 	"carteira_investimentos/server/internal/api"
@@ -72,8 +73,22 @@ func main() {
 		score.Novo(),          // 9. Score Fundamentalista Composto com Consenso Multi-Modelo e Veredito de Risco
 	}
 
-	// 4. Inicializa o Cache e o Ingestion Service Consolidado (StatusInvest + B3)
-	store := storage.NovoInMemoryStore()
+	// 4. Inicializa o Cache Distribuído (Redis) com Fallback Gracioso para In-Memory
+	var store storage.SnapshotStore
+	redisAddr := fmt.Sprintf("%s:%s", cfg.RedisHost, cfg.RedisPort)
+	redisDB, _ := strconv.Atoi(cfg.RedisDB)
+	// TTL de 25 minutos (5 minutos de folga para a sincronização de 20 min)
+	ttl := time.Duration(cfg.SyncIntervalMin+5) * time.Minute
+
+	redisStore, errRedis := storage.NovoRedisStore(redisAddr, cfg.RedisPassword, redisDB, ttl)
+	if errRedis == nil {
+		store = redisStore
+		fmt.Printf("⚡ [REDIS ATIVO] Cache distribuído conectado (%s) | TTL: %v\n", redisAddr, ttl)
+	} else {
+		store = storage.NovoInMemoryStore()
+		fmt.Printf("⚠️ [REDIS OFFLINE] %v: operando em modo Resiliente In-Memory\n", errRedis)
+	}
+
 	b3Client := b3.NovoB3Client()
 	ingestionService := statusinvest.NovoIngestionService(nil, b3Client, store, motores)
 
@@ -104,10 +119,12 @@ func main() {
 		historyScheduler.IniciarRotinaDiaria()
 	}
 
-	// Inicia rotina periódica em background a cada 1 hora
+	// Inicia rotina periódica em background configurável (20 minutos)
+	intervaloSync := time.Duration(cfg.SyncIntervalMin) * time.Minute
 	go func() {
-		ticker := time.NewTicker(1 * time.Hour)
+		ticker := time.NewTicker(intervaloSync)
 		defer ticker.Stop()
+		fmt.Printf("🔄 [BACKGROUND SYNC] Atualização periódica configurada a cada %v\n", intervaloSync)
 		for range ticker.C {
 			ctxBg, cancelBg := context.WithTimeout(context.Background(), 60*time.Second)
 			_, _ = ingestionService.ExecutarSincronizacao(ctxBg)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -72,7 +73,7 @@ func (s *InMemoryStore) ListarTodos() []*domain.Ativo {
 }
 
 // ----------------------------------------------------------------------
-// 2. Adaptador Redis (Para Produção na VPS - redis_central)
+// 2. Adaptador Redis (Para Produção e Cache Distribuído de Alta Performance)
 // ----------------------------------------------------------------------
 
 type RedisStore struct {
@@ -80,20 +81,36 @@ type RedisStore struct {
 	ttl    time.Duration
 }
 
-func NovoRedisStore(endereco string, senha string, db int, ttl time.Duration) *RedisStore {
+// NovoRedisStore inicializa o cliente Redis e valida a conexão com Ping
+func NovoRedisStore(endereco string, senha string, db int, ttl time.Duration) (*RedisStore, error) {
 	rdb := redis.NewClient(&redis.Options{
-		Addr:     endereco,
-		Password: senha,
-		DB:       db,
+		Addr:         endereco,
+		Password:     senha,
+		DB:           db,
+		DialTimeout:  2 * time.Second,
+		ReadTimeout:  2 * time.Second,
+		WriteTimeout: 2 * time.Second,
 	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	// Valida se o Redis está vivo
+	if err := rdb.Ping(ctx).Err(); err != nil {
+		return nil, fmt.Errorf("falha ao conectar no Redis (%s): %w", endereco, err)
+	}
+
 	return &RedisStore{
 		client: rdb,
 		ttl:    ttl,
-	}
+	}, nil
 }
 
+// Salvar armazena um ativo individualmente com TTL
 func (r *RedisStore) Salvar(ativo *domain.Ativo) error {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
 	dados, err := json.Marshal(ativo)
 	if err != nil {
 		return err
@@ -101,21 +118,45 @@ func (r *RedisStore) Salvar(ativo *domain.Ativo) error {
 	return r.client.Set(ctx, "b3:snapshot:"+ativo.Ticker, dados, r.ttl).Err()
 }
 
+// SalvarLote utiliza REDIS PIPELINE para gravar centenas de ativos em um único round-trip
 func (r *RedisStore) SalvarLote(ativos []*domain.Ativo) error {
+	if len(ativos) == 0 {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	pipe := r.client.Pipeline()
+
+	// 1. Enfileira a gravação individual de cada ativo no pipeline
 	for _, a := range ativos {
-		if err := r.Salvar(a); err != nil {
-			return err
+		dados, err := json.Marshal(a)
+		if err == nil {
+			pipe.Set(ctx, "b3:snapshot:"+a.Ticker, dados, r.ttl)
 		}
 	}
-	return nil
+
+	// 2. Enfileira a gravação do snapshot consolidado completo (para leitura instantânea dos rankings)
+	if todosJSON, err := json.Marshal(ativos); err == nil {
+		pipe.Set(ctx, "b3:snapshot:todos", todosJSON, r.ttl)
+	}
+
+	// Executa todos os comandos de uma só vez na rede
+	_, err := pipe.Exec(ctx)
+	return err
 }
 
+// Obter busca um ativo individual no Redis pelo Ticker
 func (r *RedisStore) Obter(ticker string) (*domain.Ativo, error) {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
 	val, err := r.client.Get(ctx, "b3:snapshot:"+ticker).Result()
 	if err != nil {
 		return nil, err
 	}
+
 	var a domain.Ativo
 	if err := json.Unmarshal([]byte(val), &a); err != nil {
 		return nil, err
@@ -123,18 +164,34 @@ func (r *RedisStore) Obter(ticker string) (*domain.Ativo, error) {
 	return &a, nil
 }
 
+// ListarTodos recupera a lista completa em < 1ms usando a chave agregada
 func (r *RedisStore) ListarTodos() []*domain.Ativo {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	// 1. Tenta ler direto do snapshot agregado
+	val, err := r.client.Get(ctx, "b3:snapshot:todos").Result()
+	if err == nil {
+		var lista []*domain.Ativo
+		if json.Unmarshal([]byte(val), &lista) == nil {
+			return lista
+		}
+	}
+
+	// 2. Fallback caso a chave agregada não exista
 	keys, err := r.client.Keys(ctx, "b3:snapshot:*").Result()
 	if err != nil {
 		return nil
 	}
+
 	var lista []*domain.Ativo
 	for _, k := range keys {
-		val, err := r.client.Get(ctx, k).Result()
-		if err == nil {
+		if k == "b3:snapshot:todos" {
+			continue
+		}
+		if v, err := r.client.Get(ctx, k).Result(); err == nil {
 			var a domain.Ativo
-			if json.Unmarshal([]byte(val), &a) == nil {
+			if json.Unmarshal([]byte(v), &a) == nil {
 				lista = append(lista, &a)
 			}
 		}

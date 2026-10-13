@@ -12,6 +12,12 @@ type Config struct {
 	DBUser     string
 	DBPassword string
 	DBName     string
+	// Redis Config
+	RedisHost       string
+	RedisPort       string
+	RedisPassword   string
+	RedisDB         string
+	SyncIntervalMin int
 }
 
 // Carregar lê o arquivo .env (se existir) e preenche as variáveis de configuração
@@ -19,11 +25,16 @@ func Carregar() *Config {
 	carregarArquivoEnv(".env")
 
 	cfg := &Config{
-		DBHost:     obterEnv("DB_HOST", "127.0.0.1"),
-		DBPort:     obterEnv("DB_PORT", "3306"),
-		DBUser:     obterEnv("DB_USER", "root"),
-		DBPassword: obterEnv("DB_PASSWORD", ""),
-		DBName:     obterEnv("DB_NAME", "carteira_investimentos"),
+		DBHost:          obterEnv("DB_HOST", "127.0.0.1"),
+		DBPort:          obterEnv("DB_PORT", "3306"),
+		DBUser:          obterEnv("DB_USER", "root"),
+		DBPassword:      obterEnv("DB_PASSWORD", ""),
+		DBName:          obterEnv("DB_NAME", "carteira_investimentos"),
+		RedisHost:       obterEnv("REDIS_HOST", "127.0.0.1"),
+		RedisPort:       obterEnv("REDIS_PORT", "6379"),
+		RedisPassword:   obterEnv("REDIS_PASSWORD", ""),
+		RedisDB:         obterEnv("REDIS_DB", "0"),
+		SyncIntervalMin: 20, // Sincronização a cada 20 minutos
 	}
 
 	return cfg
