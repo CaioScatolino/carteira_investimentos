@@ -127,14 +127,20 @@ Este documento é a bússola viva do projeto. Ele mapeia as decisões arquitetur
 ---
 
 ### ⏳ FASE 7: Autenticação Segura (Cybersegurança OWASP) & Gestão de Carteira do Usuário
-- [ ] **Passo 7.1: Arquitetura de Cibersegurança & Autenticação (`internal/auth`)**:
-  - **Tabela MySQL `usuarios`:** `id`, `uuid`, `nome`, `email`, `senha_hash`, `status`, `tentativas_falhas`, `bloqueado_ate`, `created_at`, `updated_at`.
-  - **Hashing Criptográfico Resistente:** Utilização de **Argon2id** (padrão OWASP) ou **bcrypt** (fator de custo 12+) com salt único por usuário contra ataques de rainbow tables e brute-force via GPU.
-  - **Autenticação JWT Stateless & Chaves Seguras:** Emissão de Access Tokens de curta duração (15 min) assinados criptograficamente, contendo apenas identificador público e perfil.
-  - **Refresh Tokens Rotativos:** Armazenados com hash no banco, com revogação sob demanda e tráfego exclusivo via cookies `HttpOnly`, `Secure` e `SameSite=Strict`.
-  - **Proteção Anti-Brute Force & Rate Limiting:** Middleware limitador de requisições por IP e por conta de usuário no endpoint de login (bloqueio temporário após 5 tentativas inválidas consecutivas).
-  - **Prevenção OWASP Top 10:** Prepared Statements estritos contra SQL Injection, validação e sanitização de inputs, proteção contra IDOR e injeção de headers de segurança HTTP (HSTS, CSP, X-Frame-Options: DENY, X-Content-Type-Options: nosniff).
-- [ ] **Passo 7.2: Gestão de Carteira Multi-Classe (`internal/portfolio`)**:
+- [x] **Passo 7.1: Arquitetura de Cibersegurança & Autenticação Backend (`internal/auth`)**:
+  - [x] **Tabela MySQL `usuarios`:** Migração `003_create_usuarios_table.sql` com UUID v4 público, e-mail único, hash bcrypt, controle de tentativas falhas e bloqueio temporário.
+  - [x] **Hashing Criptográfico Resistente:** Hashing com **bcrypt (custo 12)** com salt dinâmico e comparações em tempo constante contra *timing attacks*.
+  - [x] **Regras de Senha Forte (OWASP):** Validador estrito exigindo no mínimo 8 caracteres com maiúscula, minúscula, número e símbolo.
+  - [x] **Autenticação JWT Stateless:** Tokens assinados com HMAC-SHA256, expiração configurável e injeção de identidade no `context.Context` da requisição.
+  - [x] **Proteção Anti-Brute Force & Anti-Enumeração:** Bloqueio automático de 15 minutos após 5 erros consecutivos e mensagens neutras de erro.
+  - [x] **Endpoints REST:** `POST /api/v1/auth/register`, `POST /api/v1/auth/login` e rota protegida `GET /api/v1/auth/me`.
+- [x] **Passo 7.2: Interface de Autenticação no Front-end Next.js (`apps/web`)**:
+  - [x] **Modal de Autenticação Dual (Entrar / Criar Conta):** Design terminal/institucional em preto ônix e dourado champagne, alternância suave entre abas.
+  - [x] **Medidor Visual de Força de Senha (UX Pedagógica):** Checklist dinâmico OWASP com 4 critérios e barra de progresso colorida em tempo real.
+  - [x] **Gerenciador de Estado Global (`AuthContext` / `useAuth`):** Armazenamento de JWT, auto-hidratação via `/api/v1/auth/me`, ações `login`, `register`, `logout`.
+  - [x] **Header do Dashboard Integrado:** Alternância dinâmica entre botão "Entrar / Cadastrar" e badge com iniciais do usuário autenticado + "Sair".
+  - [x] **Tratamento Visual de Erros:** Alertas em vermelho carmim para credenciais inválidas e bloqueio temporário anti-brute force.
+- [ ] **Passo 7.3: Gestão de Carteira Multi-Classe (`internal/portfolio`)**:
   - **Classes Suportadas:**
     - `RENDA_FIXA`: Títulos do Tesouro Direto (Selic/IPCA+), CDBs, LCIs, LCAs e Debêntures (com indexador, taxa e vencimento).
     - `FII`: Fundos Imobiliários auditados na B3.
@@ -145,7 +151,7 @@ Este documento é a bússola viva do projeto. Ele mapeia as decisões arquitetur
   - **Tabela MySQL `carteira_transacoes`:** Histórico contábil de movimentações (compras e vendas) para cálculo automatizado de Preço Médio ponderado e apuração fiscal básica.
   - **Validação de Ativos B3:** Validação rigorosa dos tickers contra a tabela de catálogo oficial (`assets`), impedindo códigos inexistentes ou injeções de dados arbitrários.
   - **Isolamento Estrito Multi-Tenant (Anti-IDOR):** Todo acesso e mutação à carteira é obrigatoriamente filtrado por `WHERE usuario_id = ?`, extraído do contexto seguro do token JWT validado pelo middleware.
-- [ ] **Passo 7.3: Motor de Rebalanceamento Inteligente & Auditoria da Carteira (`internal/portfolio/rebalance.go`)**:
+- [ ] **Passo 7.4: Motor de Rebalanceamento Inteligente & Auditoria da Carteira (`internal/portfolio/rebalance.go`)**:
   - **Regra Institucional de Macro Alocação Patrimonial:**
     - 🏛️ **40,0% Renda Fixa** (Segurança, estabilidade e carrego de juros).
     - 🏢 **22,5% Fundos Imobiliários** (Geração mensal de proventos isentos).
@@ -164,16 +170,13 @@ Este documento é a bússola viva do projeto. Ele mapeia as decisões arquitetur
     - *Rentabilidade Real:* Preço Médio vs Preço Atual de Fechamento.
     - *Upside Potencial:* Margem de segurança sobre o Preço Teto Consolidado dos seus ativos.
     - *Yield on Cost (YoC):* Proventos reais recebidos em relação ao preço médio desembolsado.
-- [ ] **Passo 7.4: Endpoints da API REST & Interface no Frontend Next.js**:
-  - `POST /api/v1/auth/register` (Cadastro com regras de complexidade de senha).
-  - `POST /api/v1/auth/login` (Autenticação e geração de sessão segura).
-  - `POST /api/v1/auth/refresh` & `POST /api/v1/auth/logout`.
+- [ ] **Passo 7.5: Endpoints da Carteira REST & Interface de Gestão no Frontend Next.js**:
   - `GET /api/v1/carteira` (Listagem consolidada das posições do usuário autenticado).
   - `POST /api/v1/carteira/posicoes` (Cadastro/adição de ticker com quantidade e preço médio).
   - `PUT /api/v1/carteira/posicoes/{id}` & `DELETE /api/v1/carteira/posicoes/{id}`.
   - `POST /api/v1/carteira/rebalancear` (Simulador de aporte com cálculo automático de distribuição).
   - `GET /api/v1/carteira/auditoria` (Diagnóstico completo, desvios percentuais e semáforo da carteira).
-  - **Front-end:** Telas de Login, Cadastro, Dashboard de Carteira com Gráfico Donut de Macro Alocação (Atual vs Alvo: 40% RF | 22.5% FIIs | 21% Ações BR | 16% Int | 0.5% Caixa), e Módulo Interativo de Simulação de Aporte Inteligente.
+  - **Front-end:** Dashboard de Carteira com Gráfico Donut de Macro Alocação (Atual vs Alvo: 40% RF | 22.5% FIIs | 21% Ações BR | 16% Int | 0.5% Caixa), e Módulo Interativo de Simulação de Aporte Inteligente.
 
 ---
 
