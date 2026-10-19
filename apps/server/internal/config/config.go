@@ -18,6 +18,7 @@ type Config struct {
 	RedisPassword   string
 	RedisDB         string
 	SyncIntervalMin int
+	JWTSecret       string
 }
 
 // Carregar lê o arquivo .env (se existir) e preenche as variáveis de configuração
@@ -35,6 +36,7 @@ func Carregar() *Config {
 		RedisPassword:   obterEnv("REDIS_PASSWORD", ""),
 		RedisDB:         obterEnv("REDIS_DB", "0"),
 		SyncIntervalMin: 20, // Sincronização a cada 20 minutos
+		JWTSecret:       obterEnv("JWT_SECRET", "super-secret-jwt-key-carteira-investimentos-2026-b3"),
 	}
 
 	return cfg

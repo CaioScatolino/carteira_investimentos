@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"carteira_investimentos/server/internal/api"
+	"carteira_investimentos/server/internal/auth"
 	"carteira_investimentos/server/internal/b3"
 	"carteira_investimentos/server/internal/bazin"
 	"carteira_investimentos/server/internal/catalog"
@@ -201,7 +202,15 @@ func main() {
 	// ==================================================================
 	// 10. INICIALIZAÇÃO DA API REST (HTTP SERVER)
 	// ==================================================================
-	apiHandler := api.NovoHandler(store, b3Client)
+	// Inicializa o Gerenciador de Segurança e Serviço de Auth
+	tokenManager := auth.NovoGerenciadorToken(cfg.JWTSecret, 24*time.Hour)
+	var authService *auth.Service
+	if err == nil && db != nil {
+		authRepo := auth.NovoMySQLRepository(db)
+		authService = auth.NovoService(authRepo, tokenManager)
+	}
+
+	apiHandler := api.NovoHandler(store, b3Client, authService, tokenManager)
 	router := apiHandler.ConfigurarRotas()
 
 	servidor := &http.Server{

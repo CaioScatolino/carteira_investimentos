@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"carteira_investimentos/server/internal/auth"
 	"carteira_investimentos/server/internal/b3"
 	"carteira_investimentos/server/internal/domain"
 	"carteira_investimentos/server/internal/macro"
@@ -15,20 +16,27 @@ import (
 	"carteira_investimentos/server/internal/storage"
 )
 
-// Handler gerencia as requisições HTTP da plataforma
 type Handler struct {
-	store    storage.SnapshotStore
-	b3Client *b3.B3Client
+	store        storage.SnapshotStore
+	b3Client     *b3.B3Client
+	authService  *auth.Service
+	tokenManager *auth.GerenciadorToken
 }
 
-// NovoHandler cria uma instância do Handler com as dependências injetadas
-func NovoHandler(store storage.SnapshotStore, b3Client *b3.B3Client) *Handler {
+func NovoHandler(
+	store storage.SnapshotStore,
+	b3Client *b3.B3Client,
+	authService *auth.Service,
+	tokenManager *auth.GerenciadorToken,
+) *Handler {
 	if b3Client == nil {
 		b3Client = b3.NovoB3Client()
 	}
 	return &Handler{
-		store:    store,
-		b3Client: b3Client,
+		store:        store,
+		b3Client:     b3Client,
+		authService:  authService,
+		tokenManager: tokenManager,
 	}
 }
 
@@ -190,4 +198,3 @@ func (h *Handler) ObterCenarioMacro(w http.ResponseWriter, r *http.Request) {
 	cenario := macro.ObterCenario()
 	responderJSON(w, http.StatusOK, cenario)
 }
-
