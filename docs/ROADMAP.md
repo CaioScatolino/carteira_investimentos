@@ -140,43 +140,25 @@ Este documento é a bússola viva do projeto. Ele mapeia as decisões arquitetur
   - [x] **Gerenciador de Estado Global (`AuthContext` / `useAuth`):** Armazenamento de JWT, auto-hidratação via `/api/v1/auth/me`, ações `login`, `register`, `logout`.
   - [x] **Header do Dashboard Integrado:** Alternância dinâmica entre botão "Entrar / Cadastrar" e badge com iniciais do usuário autenticado + "Sair".
   - [x] **Tratamento Visual de Erros:** Alertas em vermelho carmim para credenciais inválidas e bloqueio temporário anti-brute force.
-- [ ] **Passo 7.3: Gestão de Carteira Multi-Classe (`internal/portfolio`)**:
-  - **Classes Suportadas:**
-    - `RENDA_FIXA`: Títulos do Tesouro Direto (Selic/IPCA+), CDBs, LCIs, LCAs e Debêntures (com indexador, taxa e vencimento).
-    - `FII`: Fundos Imobiliários auditados na B3.
-    - `ACAO_BR`: Ações de companhias abertas brasileiras cotadas na B3.
-    - `INTERNACIONAL`: BDRs, ETFs globais (ex: IVVB11, WRLD11) e Ações Internacionais (Stocks).
-    - `CAIXA`: Saldo livre e reserva de oportunidade líquida.
-  - **Tabela MySQL `carteira_posicoes`:** `id`, `usuario_id`, `ticker`, `classe`, `categoria_macro`, `quantidade`, `preco_medio`, `valor_aplicado`, `taxa_contratada`, `vencimento`, `corretora`, `observacoes`, `created_at`, `updated_at`.
-  - **Tabela MySQL `carteira_transacoes`:** Histórico contábil de movimentações (compras e vendas) para cálculo automatizado de Preço Médio ponderado e apuração fiscal básica.
-  - **Validação de Ativos B3:** Validação rigorosa dos tickers contra a tabela de catálogo oficial (`assets`), impedindo códigos inexistentes ou injeções de dados arbitrários.
-  - **Isolamento Estrito Multi-Tenant (Anti-IDOR):** Todo acesso e mutação à carteira é obrigatoriamente filtrado por `WHERE usuario_id = ?`, extraído do contexto seguro do token JWT validado pelo middleware.
-- [ ] **Passo 7.4: Motor de Rebalanceamento Inteligente & Auditoria da Carteira (`internal/portfolio/rebalance.go`)**:
-  - **Regra Institucional de Macro Alocação Patrimonial:**
-    - 🏛️ **40,0% Renda Fixa** (Segurança, estabilidade e carrego de juros).
-    - 🏢 **22,5% Fundos Imobiliários** (Geração mensal de proventos isentos).
-    - 📈 **21,0% Ações Brasileiras** (Crescimento de dividendos e valorização assimétrica).
-    - 🌐 **16,0% Ações Internacionais** (Dolarização e proteção geográfica/geopolítica).
-    - 💵 **0,5% Caixa / Reserva de Oportunidade** (Liquidez para compras táticas).
-  - **Algoritmo de Rebalanceamento sem Venda (Aporte Direcionado):**
-    - Calcula o patrimônio total e o desvio percentual ($\Delta = \%_{atual} - \%_{alvo}$) de cada macro classe.
-    - **Filosofia Buy & Hold:** Não força vendas nem giros tributáveis desnecessários; canaliza 100% dos novos aportes e dividendos para a classe mais defasada em relação à meta.
-    - **Rebalanceamento Hierárquico em 2 Níveis:**
-      1. *Nível 1 (Macro Alocação):* Identifica qual caixinha patrimonial está mais atrasada (ex: se FIIs caíram para 19%, o aporte deve ir para FIIs).
-      2. *Nível 2 (Micro Alocação Fundamentalista):* Dentro da classe escolhida, cruza com o **Score Fundamentalista e o Upside sobre o Preço Teto Consolidado** para escolher o melhor ativo, impedindo que o usuário aporte em ativos caros/reprovados.
-  - **Simulador de Aportes:**
-    - Usuário informa o valor a aportar no mês (ex: R$ 2.000,00) $\rightarrow$ O sistema calcula a alocação exata em cotas/ações para restabelecer o equilíbrio da carteira.
-  - **Indicadores Individuais da Carteira:**
-    - *Rentabilidade Real:* Preço Médio vs Preço Atual de Fechamento.
-    - *Upside Potencial:* Margem de segurança sobre o Preço Teto Consolidado dos seus ativos.
-    - *Yield on Cost (YoC):* Proventos reais recebidos em relação ao preço médio desembolsado.
-- [ ] **Passo 7.5: Endpoints da Carteira REST & Interface de Gestão no Frontend Next.js**:
-  - `GET /api/v1/carteira` (Listagem consolidada das posições do usuário autenticado).
-  - `POST /api/v1/carteira/posicoes` (Cadastro/adição de ticker com quantidade e preço médio).
-  - `PUT /api/v1/carteira/posicoes/{id}` & `DELETE /api/v1/carteira/posicoes/{id}`.
-  - `POST /api/v1/carteira/rebalancear` (Simulador de aporte com cálculo automático de distribuição).
-  - `GET /api/v1/carteira/auditoria` (Diagnóstico completo, desvios percentuais e semáforo da carteira).
-  - **Front-end:** Dashboard de Carteira com Gráfico Donut de Macro Alocação (Atual vs Alvo: 40% RF | 22.5% FIIs | 21% Ações BR | 16% Int | 0.5% Caixa), e Módulo Interativo de Simulação de Aporte Inteligente.
+- [x] **Passo 7.3: Gestão de Carteira Multi-Classe (`internal/portfolio`)**:
+  - [x] **Classes Suportadas:** `RENDA_FIXA`, `FII`, `ACAO_BR`, `INTERNACIONAL`, `CAIXA`.
+  - [x] **Tabela MySQL `carteira_posicoes`:** Migração `004_create_carteira_tables.sql` com controle multi-tenant, quantidade ponderada, corretoras e indexadores de renda fixa.
+  - [x] **Tabela MySQL `carteira_transacoes`:** Livro-razão contábil para histórico de operações (compras, vendas, aportes) e rastreabilidade contábil.
+  - [x] **Consolidação em Tempo Real com Snapshot B3:** Enriquecimento automático com cotação atual, Preço Teto consensual, Score Fundamentalista e Margem de Segurança.
+  - [x] **Isolamento Estrito Multi-Tenant (Anti-IDOR):** Todas as operações auditadas e filtradas por `WHERE usuario_id = ?` extraído do JWT.
+  - [x] **Endpoints REST:** `GET /api/v1/carteira`, `POST /api/v1/carteira/posicoes`, `DELETE /api/v1/carteira/posicoes/{id}`, `GET /api/v1/carteira/transacoes`.
+- [x] **Passo 7.4: Motor de Rebalanceamento Inteligente & Auditoria da Carteira (`internal/portfolio/rebalance.go`)**:
+  - [x] **Regra Institucional de Macro Alocação:** Metas oficiais (40% RF, 22.5% FIIs, 21% Ações BR, 16% Int, 0.5% Caixa).
+  - [x] **Algoritmo de Rebalanceamento sem Venda (Aporte Direcionado):** Filosofia Buy & Hold em 2 níveis (Nível 1: Macro Alocação; Nível 2: Micro Alocação Fundamentalista por Score e Margem de Segurança).
+  - [x] **Simulador de Aportes Financeiros (`POST /api/v1/carteira/rebalancear`):** Distribuição matemática ótima com suporte a cotas inteiras para ações/FIIs e aportes fracionários em Renda Fixa.
+  - [x] **Diagnóstico Macro com Semáforo de Desvio:** Identificação em tempo real de classes `DEFASADO_APORTAR`, `EQUILIBRADO` e `SOBREALOCADO`.
+- [x] **Passo 7.5: Endpoints da Carteira REST & Interface de Gestão no Frontend Next.js**:
+  - [x] **Endpoints REST:** `GET /api/v1/carteira`, `POST /api/v1/carteira/posicoes`, `DELETE /api/v1/carteira/posicoes/{id}`, `POST /api/v1/carteira/rebalancear`.
+  - [x] **Dashboard de Custódia (`PortfolioSummaryCards`):** Cards de Patrimônio Total consolidado a mercado, Custo Histórico, Lucro/Prejuízo nominal e rentabilidade percentual.
+  - [x] **Módulo de Macro Alocação (`MacroAllocationView`):** Comparativo visual da regra institucional 40% RF | 22.5% FIIs | 21% Ações BR | 16% Int | 0.5% Caixa com barras de progresso e semáforo de desvio ($\Delta$).
+  - [x] **Tabela Interativa de Posições (`PortfolioTable`):** Filtros por classe, cotação oficial em tempo real da B3, preço teto consensual, margem de segurança, score e botão de exclusão.
+  - [x] **Modal de Cadastro Dinâmico (`AddPositionModal`):** Suporte completo para Ações BR, FIIs e Renda Fixa (taxa contratada, indexador, vencimento).
+  - [x] **Simulador Interativo de Rebalanceamento (`RebalanceSimulatorModal`):** Cálculo automatizado de aportes direcionados Buy & Hold em cotas e frações sem vendas forçadas.
 
 ---
 

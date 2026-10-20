@@ -1,26 +1,27 @@
 package api
 
 import (
+	"carteira_investimentos/server/internal/auth"
+	"carteira_investimentos/server/internal/b3"
+	"carteira_investimentos/server/internal/domain"
+	"carteira_investimentos/server/internal/macro"
+	"carteira_investimentos/server/internal/portfolio"
+	"carteira_investimentos/server/internal/score"
+	"carteira_investimentos/server/internal/storage"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"sort"
 	"strings"
 	"time"
-
-	"carteira_investimentos/server/internal/auth"
-	"carteira_investimentos/server/internal/b3"
-	"carteira_investimentos/server/internal/domain"
-	"carteira_investimentos/server/internal/macro"
-	"carteira_investimentos/server/internal/score"
-	"carteira_investimentos/server/internal/storage"
 )
 
 type Handler struct {
-	store        storage.SnapshotStore
-	b3Client     *b3.B3Client
-	authService  *auth.Service
-	tokenManager *auth.GerenciadorToken
+	store            storage.SnapshotStore
+	b3Client         *b3.B3Client
+	authService      *auth.Service
+	tokenManager     *auth.GerenciadorToken
+	portfolioService *portfolio.Service
 }
 
 func NovoHandler(
@@ -28,15 +29,17 @@ func NovoHandler(
 	b3Client *b3.B3Client,
 	authService *auth.Service,
 	tokenManager *auth.GerenciadorToken,
+	portfolioService *portfolio.Service,
 ) *Handler {
 	if b3Client == nil {
 		b3Client = b3.NovoB3Client()
 	}
 	return &Handler{
-		store:        store,
-		b3Client:     b3Client,
-		authService:  authService,
-		tokenManager: tokenManager,
+		store:            store,
+		b3Client:         b3Client,
+		authService:      authService,
+		tokenManager:     tokenManager,
+		portfolioService: portfolioService,
 	}
 }
 

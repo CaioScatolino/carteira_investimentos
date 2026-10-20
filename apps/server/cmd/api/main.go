@@ -25,6 +25,7 @@ import (
 	"carteira_investimentos/server/internal/lynch"
 	"carteira_investimentos/server/internal/macro"
 	"carteira_investimentos/server/internal/piotroski"
+	"carteira_investimentos/server/internal/portfolio"
 	"carteira_investimentos/server/internal/score"
 	"carteira_investimentos/server/internal/statusinvest"
 	"carteira_investimentos/server/internal/storage"
@@ -205,12 +206,16 @@ func main() {
 	// Inicializa o Gerenciador de Segurança e Serviço de Auth
 	tokenManager := auth.NovoGerenciadorToken(cfg.JWTSecret, 24*time.Hour)
 	var authService *auth.Service
+	var portfolioService *portfolio.Service
 	if err == nil && db != nil {
 		authRepo := auth.NovoMySQLRepository(db)
 		authService = auth.NovoService(authRepo, tokenManager)
+
+		portfolioRepo := portfolio.NovoMySQLRepository(db)
+		portfolioService = portfolio.NovoService(portfolioRepo, store)
 	}
 
-	apiHandler := api.NovoHandler(store, b3Client, authService, tokenManager)
+	apiHandler := api.NovoHandler(store, b3Client, authService, tokenManager, portfolioService)
 	router := apiHandler.ConfigurarRotas()
 
 	servidor := &http.Server{

@@ -10,9 +10,18 @@ interface HeaderProps {
   loading: boolean;
   onRefresh: () => void;
   ultimaAtualizacao?: string;
+  abaAtiva?: "mercado" | "carteira";
+  onMudarAba?: (aba: "mercado" | "carteira") => void;
 }
 
-export function Header({ totalAtivos, loading, onRefresh, ultimaAtualizacao }: HeaderProps) {
+export function Header({
+  totalAtivos,
+  loading,
+  onRefresh,
+  ultimaAtualizacao,
+  abaAtiva = "mercado",
+  onMudarAba,
+}: HeaderProps) {
   const { usuario, logout, loading: authLoading } = useAuth();
   const [modalAuthAberto, setModalAuthAberto] = useState(false);
   const [tabInicial, setTabInicial] = useState<"login" | "register">("login");
@@ -35,25 +44,56 @@ export function Header({ totalAtivos, loading, onRefresh, ultimaAtualizacao }: H
       <header className="border-b border-[#1f1f26] bg-[#09090c]/90 backdrop-blur-md sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
           {/* Brand / Logo */}
-          <div className="flex items-center gap-3.5">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#d4af37] via-[#917726] to-[#0a0a0d] p-[1px] shadow-lg">
-              <div className="w-full h-full rounded-xl bg-[#0b0b0f] flex items-center justify-center">
-                <ShieldCheck className="w-5 h-5 text-[#d4af37]" />
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-3.5 cursor-pointer" onClick={() => onMudarAba?.("mercado")}>
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#d4af37] via-[#917726] to-[#0a0a0d] p-[1px] shadow-lg">
+                <div className="w-full h-full rounded-xl bg-[#0b0b0f] flex items-center justify-center">
+                  <ShieldCheck className="w-5 h-5 text-[#d4af37]" />
+                </div>
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xl font-extrabold tracking-wider text-white font-mono">
+                    B3<span className="text-[#d4af37]">CORE</span>
+                  </span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#d4af37]/10 text-[#d4af37] border border-[#d4af37]/30 font-semibold tracking-widest uppercase">
+                    Terminal
+                  </span>
+                </div>
+                <p className="text-[11px] text-neutral-400 hidden sm:block tracking-wide">
+                  Auditoria Institucional de Mercado & Valuation Fundamentalista
+                </p>
               </div>
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xl font-extrabold tracking-wider text-white font-mono">
-                  B3<span className="text-[#d4af37]">CORE</span>
-                </span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#d4af37]/10 text-[#d4af37] border border-[#d4af37]/30 font-semibold tracking-widest uppercase">
-                  Terminal
-                </span>
-              </div>
-              <p className="text-[11px] text-neutral-400 hidden sm:block tracking-wide">
-                Auditoria Institucional de Mercado & Valuation Fundamentalista
-              </p>
-            </div>
+
+            {/* Navegação Principal */}
+            {onMudarAba && (
+              <nav className="hidden md:flex items-center gap-1.5 p-1 rounded-xl bg-neutral-900/90 border border-neutral-800">
+                <button
+                  onClick={() => onMudarAba("mercado")}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                    abaAtiva === "mercado"
+                      ? "bg-[#d4af37] text-black font-bold shadow-md shadow-[#d4af37]/20"
+                      : "text-neutral-400 hover:text-white"
+                  }`}
+                >
+                  Mercado & Rankings
+                </button>
+                <button
+                  onClick={() => onMudarAba("carteira")}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                    abaAtiva === "carteira"
+                      ? "bg-[#d4af37] text-black font-bold shadow-md shadow-[#d4af37]/20"
+                      : "text-neutral-400 hover:text-white"
+                  }`}
+                >
+                  <span>Minha Carteira</span>
+                  <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-[#d4af37]/20 text-[#d4af37] font-mono border border-[#d4af37]/40">
+                    40/22.5/21
+                  </span>
+                </button>
+              </nav>
+            )}
           </div>
 
           {/* Live Status & Actions */}
