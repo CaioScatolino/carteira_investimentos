@@ -15,12 +15,12 @@ export function PortfolioTable({ posicoes, onExcluirPosicao }: PortfolioTablePro
 
   const filtradas = posicoes.filter((p) => {
     if (filtroClasse !== "TODAS" && p.classe !== filtroClasse) return false;
-    if (busca.trim()) {
-      const termo = busca.toLowerCase();
+    if (busca && typeof busca === "string" && busca.trim()) {
+      const termo = busca.toLowerCase().trim();
       return (
-        p.ticker.toLowerCase().includes(termo) ||
-        p.corretora.toLowerCase().includes(termo) ||
-        p.categoria_macro.toLowerCase().includes(termo)
+        (p.ticker && p.ticker.toLowerCase().includes(termo)) ||
+        (p.corretora && p.corretora.toLowerCase().includes(termo)) ||
+        (p.categoria_macro && p.categoria_macro.toLowerCase().includes(termo))
       );
     }
     return true;

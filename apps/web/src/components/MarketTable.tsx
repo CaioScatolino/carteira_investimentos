@@ -53,11 +53,11 @@ export function MarketTable({
       );
     }
 
-    if (busca.trim()) {
+    if (busca && typeof busca === "string" && busca.trim()) {
       const termo = busca.toLowerCase().trim();
       lista = lista.filter(
         (a) =>
-          a.ticker.toLowerCase().includes(termo) ||
+          (a.ticker && a.ticker.toLowerCase().includes(termo)) ||
           (a.nome && a.nome.toLowerCase().includes(termo))
       );
     }

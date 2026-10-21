@@ -31,13 +31,19 @@ export function Header({
     setModalAuthAberto(true);
   };
 
-  const getIniciais = (nome: string) => {
-    const partes = nome.trim().split(" ");
+  const getIniciais = (nome?: string) => {
+    if (!nome || typeof nome !== "string") return "US";
+    const limpo = nome.trim();
+    if (!limpo) return "US";
+    const partes = limpo.split(" ").filter(Boolean);
+    if (partes.length === 0) return "US";
     if (partes.length === 1) return partes[0].slice(0, 2).toUpperCase();
-    return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase();
+    return (partes[0][0] + (partes[partes.length - 1]?.[0] || "")).toUpperCase();
   };
 
-  const primeiroNome = usuario?.nome ? usuario.nome.split(" ")[0] : "";
+  const primeiroNome = usuario?.nome && typeof usuario.nome === "string"
+    ? usuario.nome.trim().split(" ")[0]
+    : (usuario?.email ? usuario.email.split("@")[0] : "Investidor");
 
   return (
     <>
@@ -129,7 +135,7 @@ export function Header({
                   {/* Badge do Usuário Logado */}
                   <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-neutral-900/90 border border-[#d4af37]/30 shadow-sm">
                     <div className="w-6 h-6 rounded-lg bg-[#d4af37] text-black font-bold text-[11px] flex items-center justify-center font-mono">
-                      {getIniciais(usuario.nome)}
+                      {getIniciais(usuario?.nome || usuario?.email || "US")}
                     </div>
                     <span className="text-xs font-medium text-neutral-200 hidden sm:inline">
                       Olá, <span className="font-semibold text-white">{primeiroNome}</span>
