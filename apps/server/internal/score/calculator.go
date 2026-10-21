@@ -233,15 +233,20 @@ func (s *AnalisadorScore) Executar(ativo *domain.Ativo) error {
 		cresc := math.Min(math.Max(ativo.CrescimentoLucro5A, 0.0), 5.0)
 		ativo.TIRProjetada = math.Round((ativo.DY+cresc)*10) / 10
 
-		if ativo.SpreadNTNB >= 2.0 {
+		if ativo.PrecoAtual > 0 && ativo.LPA > 0 {
+			ativo.EarningsYield = math.Round((ativo.LPA/ativo.PrecoAtual)*1000) / 10
+		}
+
+		// Para Ações: O prêmio de risco real sobre a NTN-B é ancorado em Earnings Yield (Fed Model) e TIR Projetada
+		if ativo.EarningsYield >= cenario.TaxaNTNB+2.0 || ativo.TIRProjetada >= ativo.YieldExigido || ativo.SpreadNTNB >= 1.5 {
 			ativo.VereditoRisco = "COMPENSA_RISCO"
-			ativo.JustificativaRisco = fmt.Sprintf("🟢 Retorno Projetado atraente (+%.1f%% vs NTN-B). Remunera amplamente a volatilidade de equity.", ativo.SpreadNTNB)
-		} else if ativo.SpreadNTNB >= 0.0 {
+			ativo.JustificativaRisco = fmt.Sprintf("🟢 Retorno Operacional atraente (Earnings Yield: %.1f%% | TIR: %.1f%% vs NTN-B %.1f%%). Remunera amplamente o capital.", ativo.EarningsYield, ativo.TIRProjetada, cenario.TaxaNTNB)
+		} else if ativo.EarningsYield >= cenario.TaxaNTNB || ativo.DY >= cenario.TaxaNTNB || ativo.TIRProjetada >= cenario.TaxaNTNB {
 			ativo.VereditoRisco = "NEUTRO"
-			ativo.JustificativaRisco = fmt.Sprintf("🟡 Retorno moderado (+%.1f%% vs NTN-B). Preço próximo do equilíbrio justo com a renda fixa.", ativo.SpreadNTNB)
+			ativo.JustificativaRisco = fmt.Sprintf("🟡 Retorno em linha com juro real (Earnings Yield: %.1f%% vs NTN-B %.1f%%). Preço próximo do equilíbrio justo.", ativo.EarningsYield, cenario.TaxaNTNB)
 		} else {
 			ativo.VereditoRisco = "RISCO_DESCOMPENSADO"
-			ativo.JustificativaRisco = fmt.Sprintf("🔴 Dividend Yield (%.1f%%) inferior à NTN-B (%.1f%% a.a.). Risco de equity descompensado.", ativo.DY, cenario.TaxaNTNB)
+			ativo.JustificativaRisco = fmt.Sprintf("🔴 Retorno total abaixo da NTN-B (Earnings Yield: %.1f%% vs NTN-B %.1f%%). Risco de equity descompensado.", ativo.EarningsYield, cenario.TaxaNTNB)
 		}
 
 		statusRisco := domain.ParecerReprovado
@@ -252,126 +257,196 @@ func (s *AnalisadorScore) Executar(ativo *domain.Ativo) error {
 		}
 		ativo.Pareceres["VereditoRisco"] = domain.ParecerItem{
 			Status:  statusRisco,
-			Metrica: fmt.Sprintf("Spread: %+.1f%% vs NTN-B | Hurdle: %.1f%%", ativo.SpreadNTNB, ativo.YieldExigido),
+			Metrica: fmt.Sprintf("Earnings Yield: %.1f%% | NTN-B: %.1f%%", ativo.EarningsYield, cenario.TaxaNTNB),
 			Detalhe: ativo.JustificativaRisco,
 		}
 
-		// ==========================================
-		// CÁLCULO DO SCORE DE AÇÕES (0 a 100)
-		// ==========================================
+		// =========================================================================
+		// NOVO SCORE FUNDAMENTALISTA DE AÇÕES (MODELO MULTI-FATOR INSTITUCIONAL - 0 a 100)
+		// =========================================================================
+		// 1. Qualidade & Eficiência Operacional (até 28 pontos)
+		// 2. Valuation & Margem de Segurança (até 30 pontos)
+		// 3. Saúde Financeira & Solvência (até 22 pontos)
+		// 4. Retorno ao Acionista & Geração de Valor (até 20 pontos)
+		// =========================================================================
 		score := 0.0
 
-		// Ajuste de Risco Macroeconômico no Score
-		if ativo.VereditoRisco == "COMPENSA_RISCO" {
-			score += 5.0
-		} else if ativo.VereditoRisco == "RISCO_DESCOMPENSADO" {
-			score = math.Max(0.0, score-8.0)
+		// PILAR 1: QUALIDADE & EFICIÊNCIA OPERACIONAL (até 28 pontos)
+		// 1.1 Rentabilidade de Capital (ROIC / ROE) (até 14 pontos)
+		rentab := ativo.ROIC
+		if rentab <= 0 {
+			rentab = ativo.ROE
+		}
+		if rentab >= 18.0 {
+			score += 14.0
+		} else if rentab >= 12.0 {
+			score += 11.0
+		} else if rentab >= 7.0 {
+			score += 7.0
+		} else if rentab > 0.0 {
+			score += 3.0
 		}
 
-		// Bloco 1: Bazin / Dividend Yield (até 15 pontos)
-		if ativo.IsProventoAtipico {
-			if ativo.PrecoTetoBazinSustentavel > 0 && ativo.PrecoAtual <= ativo.PrecoTetoBazinSustentavel {
-				score += 6.0
-			} else {
+		// 1.2 Margem Operacional / Líquida (até 7 pontos)
+		margemOp := ativo.MargemLiquida
+		if margemOp <= 0 {
+			margemOp = ativo.MargemEbit
+		}
+		if margemOp >= 18.0 {
+			score += 7.0
+		} else if margemOp >= 10.0 {
+			score += 5.0
+		} else if margemOp >= 4.0 {
+			score += 3.0
+		}
+
+		// 1.3 Crescimento Composto de Lucro 5A (até 7 pontos)
+		if ativo.CrescimentoLucro5A >= 10.0 {
+			score += 7.0
+		} else if ativo.CrescimentoLucro5A >= 4.0 {
+			score += 5.0
+		} else if ativo.CrescimentoLucro5A >= 0.0 {
+			score += 3.0
+		}
+
+		// PILAR 2: VALUATION & MARGEM DE SEGURANÇA (até 30 pontos)
+		// 2.1 Múltiplo Preço/Lucro & Earnings Yield (até 10 pontos)
+		if ativo.PL > 0 {
+			if ativo.PL <= 8.0 {
+				score += 10.0
+			} else if ativo.PL <= 12.0 {
+				score += 7.0
+			} else if ativo.PL <= 16.0 {
+				score += 4.0
+			} else if ativo.PL <= 22.0 {
 				score += 2.0
 			}
-		} else {
-			if ativo.DY >= 8.0 {
-				score += 15.0
-			} else if ativo.DY >= 6.0 {
-				score += 11.0 + (ativo.DY-6.0)*2.0
-			} else if ativo.DY >= 4.0 {
+		}
+
+		// 2.2 Desconto Patrimonial P/VP (até 8 pontos)
+		if ativo.PVPReal > 0 {
+			if ativo.PVPReal <= 0.9 {
+				score += 8.0 // Negociando abaixo do patrimônio/terras reais
+			} else if ativo.PVPReal <= 1.4 {
 				score += 6.0
-			} else if ativo.DY > 0.0 {
+			} else if ativo.PVPReal <= 2.2 {
 				score += 3.0
+			} else if ativo.PVPReal <= 3.5 {
+				score += 1.0
 			}
 		}
 
-		// Bloco 2: Graham / Desconto de Valor Intrínseco (até 15 pontos)
-		if ativo.MargemGraham >= 25.0 {
-			score += 15.0
-		} else if ativo.MargemGraham >= 0.0 {
-			score += 10.0 + (ativo.MargemGraham/25.0)*5.0
+		// 2.3 Margem de Segurança Consensual (Graham & Greenblatt) (até 12 pontos)
+		pGreen, okGreen := ativo.Pareceres["Greenblatt"]
+		greenAprovado := okGreen && pGreen.Status == domain.ParecerAprovado
+		greenAtencao := okGreen && pGreen.Status == domain.ParecerAtencao
+
+		if ativo.MargemGraham >= 20.0 || greenAprovado {
+			score += 12.0
+		} else if ativo.MargemGraham >= 0.0 || greenAtencao {
+			score += 8.0
 		} else if ativo.MargemGraham >= -15.0 {
 			score += 4.0
 		}
 
-		// Bloco 3: Greenblatt (Magic Formula) (até 18 pontos)
-		if pGreen, ok := ativo.Pareceres["Greenblatt"]; ok {
-			if pGreen.Status == domain.ParecerAprovado {
-				score += 18.0
-			} else if pGreen.Status == domain.ParecerAtencao {
-				score += 11.0
-			} else if pGreen.Status == domain.ParecerReprovado && ativo.PL > 0 {
-				score += 3.0
-			}
+		// PILAR 3: SAÚDE FINANCEIRA & SOLVÊNCIA (até 22 pontos)
+		// 3.1 Piotroski F-Score (até 12 pontos)
+		fScore := ativo.PiotroskiScore
+		if fScore == 0 {
+			fScore = piotroski.CalcularFScore(ativo)
+			ativo.PiotroskiScore = fScore
 		}
-
-		// Bloco 4: Piotroski (Solvência & Saúde Contábil) (até 18 pontos)
-		if pPio, ok := ativo.Pareceres["Piotroski"]; ok {
-			if pPio.Status == domain.ParecerAprovado {
-				score += 18.0
-			} else if pPio.Status == domain.ParecerAtencao {
-				score += 11.0
-			} else {
-				score += 3.0
-			}
-		}
-
-		// Bloco 5: Lynch PEG & Crescimento (até 9 pontos)
-		if ativo.PEGRatio > 0 {
-			if ativo.PEGRatio <= 0.8 {
-				score += 9.0
-			} else if ativo.PEGRatio <= 1.2 {
-				score += 6.0
-			} else if ativo.PEGRatio <= 1.6 {
-				score += 3.0
-			}
-		}
-
-		// Bloco 6: Gordon Dividend Growth (até 10 pontos)
-		if ativo.PrecoTetoGordon > 0 && ativo.PrecoAtual <= ativo.PrecoTetoGordon {
-			score += 10.0
-		} else if ativo.PrecoTetoGordon > 0 && ativo.PrecoAtual <= ativo.PrecoTetoGordon*1.15 {
-			score += 5.0
-		}
-
-		// Bloco 7: Robustez Institucional & Porte (até 15 pontos)
-		switch ativo.Porte {
-		case "BLUE_CHIP":
-			score += 15.0
-		case "MID_CAP":
-			score += 10.0
-		case "SMALL_CAP":
+		if fScore >= 7 {
+			score += 12.0
+		} else if fScore >= 5 {
+			score += 8.0
+		} else if fScore >= 3 {
 			score += 4.0
-		default:
-			score += 0.0
 		}
 
-		// --- BLINDAGEM CONTRA VALUE TRAPS & MICROCAPS ILÍQUIDAS ---
-		// Se a empresa opera em prejuízo (LPA <= 0) ou tem Patrimônio Negativo (VPA <= 0):
+		// 3.2 Alavancagem e Porte Institucional (até 10 pontos)
+		if ativo.DividaLiquidaEbit > 0 {
+			if ativo.DividaLiquidaEbit <= 1.5 {
+				score += 10.0
+			} else if ativo.DividaLiquidaEbit <= 2.5 {
+				score += 7.0
+			} else if ativo.DividaLiquidaEbit <= 3.5 {
+				score += 4.0
+			}
+		} else {
+			// Setor financeiro ou sem dívida informada
+			switch ativo.Porte {
+			case "BLUE_CHIP":
+				score += 10.0
+			case "MID_CAP":
+				score += 7.0
+			case "SMALL_CAP":
+				score += 4.0
+			default:
+				score += 2.0
+			}
+		}
+
+		// PILAR 4: RETORNO TOTAL AO ACIONISTA (até 20 pontos)
+		// 4.1 Dividend Yield Normalizado (12M ou Média 5 Anos) (até 12 pontos)
+		maxDY := ativo.DY
+		if ativo.MediaDividendos5A > 0 && ativo.PrecoAtual > 0 {
+			dy5A := (ativo.MediaDividendos5A / ativo.PrecoAtual) * 100.0
+			if dy5A > maxDY {
+				maxDY = dy5A
+			}
+		}
+		if maxDY >= 8.0 {
+			score += 12.0
+		} else if maxDY >= 6.0 {
+			score += 10.0
+		} else if maxDY >= 4.0 {
+			score += 7.0
+		} else if maxDY >= 2.0 {
+			score += 4.0
+		} else if maxDY > 0.0 {
+			score += 2.0
+		}
+
+		// 4.2 Upside e Alinhamento com Preço Teto (até 8 pontos)
+		if ativo.PrecoTetoBazin5A > 0 && ativo.PrecoAtual <= ativo.PrecoTetoBazin5A {
+			score += 8.0
+		} else if ativo.PrecoTetoGordon > 0 && ativo.PrecoAtual <= ativo.PrecoTetoGordon {
+			score += 6.0
+		} else if ativo.PrecoJustoLynch > 0 && ativo.PrecoAtual <= ativo.PrecoJustoLynch {
+			score += 4.0
+		} else if ativo.PrecoTetoBazin > 0 && ativo.PrecoAtual <= ativo.PrecoTetoBazin {
+			score += 2.0
+		}
+
+		// BÔNUS / AJUSTE MACRO: Prêmio real de Earnings Yield
+		if ativo.VereditoRisco == "COMPENSA_RISCO" {
+			score += 3.0
+		}
+
+		// --- BLINDAGEM CONTRA VALUE TRAPS & RISCOS SEVEROS ---
+		// 1. Prejuízo Operacional (LPA <= 0) ou Patrimônio Negativo (VPA <= 0)
 		if ativo.LPA <= 0 || ativo.VPA <= 0 {
 			score = math.Min(score, 25.0)
 		}
 
-		// Penalidade de Yield Trap (provento atípico / payout > 115% / DY > 18%):
+		// 2. Trava de Provento Atípico / Payout Insustentável (> 115% ou DY > 18%)
 		if ativo.IsProventoAtipico {
-			score = math.Max(0.0, score-15.0)
-			score = math.Min(score, 65.0) // Trava prudencial: Impede recomendação de COMPRAR_MAIS
+			score = math.Max(0.0, score-10.0)
+			score = math.Min(score, 68.0)
 		}
 
-		// Microcaps ou ativos de baixa liquidez (< R$ 1 milhão/dia):
-		// Não podem roubar o topo das gigantes sólidas no ranking geral
-		if ativo.Porte == "MICRO_CAP" || ativo.LiquidezMediaDiaria < 1_000_000.0 {
+		// 3. Microcaps ou ativos de baixa liquidez (< R$ 1M/dia)
+		if ativo.Porte == "MICRO_CAP" || (ativo.LiquidezMediaDiaria < 1_000_000.0 && ativo.LiquidezMediaDiaria > 0) {
 			score = math.Min(score, 78.0)
 		}
 
-		// Se a liquidez for menor que R$ 50k/dia (risco severo de saída):
+		// 4. Liquidez crítica (< R$ 50k/dia)
 		if ativo.LiquidezMediaDiaria < 50_000.0 && ativo.LiquidezMediaDiaria > 0 {
 			score = math.Max(0.0, score-20.0)
 		}
 
-		ativo.Score = math.Round(score)
+		ativo.Score = math.Min(100.0, math.Round(score))
 	}
 
 	// ==========================================
@@ -898,9 +973,9 @@ func ConsolidarPrecoTeto(ativo *domain.Ativo) {
 			if margemSeg >= 25.0 {
 				ativo.VereditoRisco = "COMPENSA_RISCO"
 				ativo.JustificativaRisco = fmt.Sprintf("🟢 Margem de segurança de %.1f%% supera o piso de 25%% exigido para saúde financeira moderada (F-Score %d/9).", margemSeg, fScore)
-			} else if margemSeg >= 0.0 {
+			} else if margemSeg >= 0.0 || (margemSeg >= -20.0 && ativo.EarningsYield >= 10.0) {
 				ativo.VereditoRisco = "NEUTRO"
-				ativo.JustificativaRisco = fmt.Sprintf("🟡 Margem de segurança de %.1f%% é positiva, mas inferior ao piso de 25%% recomendado (F-Score %d/9).", margemSeg, fScore)
+				ativo.JustificativaRisco = fmt.Sprintf("🟡 Empresa saudável com alto retorno operacional (Earnings Yield %.1f%%), negociando próxima ao preço justo (Margem %.1f%%, F-Score %d/9).", ativo.EarningsYield, margemSeg, fScore)
 			} else {
 				ativo.VereditoRisco = "RISCO_DESCOMPENSADO"
 				ativo.JustificativaRisco = fmt.Sprintf("🔴 Preço atual acima do teto de consenso (Margem %.1f%%, F-Score %d/9). Risco descompensado.", margemSeg, fScore)
@@ -910,9 +985,9 @@ func ConsolidarPrecoTeto(ativo *domain.Ativo) {
 			if margemSeg >= 15.0 {
 				ativo.VereditoRisco = "COMPENSA_RISCO"
 				ativo.JustificativaRisco = fmt.Sprintf("🟢 Alta solidez financeira (F-Score %d/9) e margem de segurança de %.1f%% acima dos 15%% mínimos.", fScore, margemSeg)
-			} else if margemSeg >= 0.0 {
+			} else if margemSeg >= 0.0 || (margemSeg >= -20.0 && ativo.EarningsYield >= 10.0) {
 				ativo.VereditoRisco = "NEUTRO"
-				ativo.JustificativaRisco = fmt.Sprintf("🟡 Empresa saudável (F-Score %d/9), mas negociando próxima ao preço justo (Margem %.1f%%).", fScore, margemSeg)
+				ativo.JustificativaRisco = fmt.Sprintf("🟡 Alta solidez (F-Score %d/9) e Earnings Yield atrativo (%.1f%%), negociando próxima ao preço justo (Margem %.1f%%).", fScore, ativo.EarningsYield, margemSeg)
 			} else {
 				ativo.VereditoRisco = "RISCO_DESCOMPENSADO"
 				ativo.JustificativaRisco = fmt.Sprintf("🔴 Negociando com ágio sobre o preço teto consensual (Margem %.1f%%, F-Score %d/9).", margemSeg, fScore)

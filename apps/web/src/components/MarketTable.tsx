@@ -14,7 +14,7 @@ interface MarketTableProps {
   onSelectAtivo: (ativo: Ativo) => void;
 }
 
-type SortKey = "SCORE" | "PREMIO" | "SPREAD_NTNB" | "DY" | "MARGEM" | "COTACAO";
+type SortKey = "SCORE" | "PREMIO" | "SPREAD_NTNB" | "ROIC" | "DY" | "MARGEM" | "COTACAO";
 
 export function MarketTable({
   titulo,
@@ -75,6 +75,10 @@ export function MarketTable({
         case "SPREAD_NTNB":
           valA = a.spread_ntnb ?? -999;
           valB = b.spread_ntnb ?? -999;
+          break;
+        case "ROIC":
+          valA = a.roic || a.roe || 0;
+          valB = b.roic || b.roe || 0;
           break;
         case "DY":
           valA = a.dy || 0;
@@ -271,20 +275,39 @@ export function MarketTable({
             )}
           </button>
 
-          <button
-            onClick={() => alternarOrdenacao("SPREAD_NTNB")}
-            title="Ordenar pelo maior Spread de Retorno sobre a NTN-B (Tesouro IPCA+)"
-            className={`px-2.5 py-1 rounded-lg font-medium transition-all flex items-center gap-1 shrink-0 ${
-              criterioOrdenacao === "SPREAD_NTNB"
-                ? "bg-cyan-400 text-black font-semibold shadow-sm"
-                : "bg-neutral-900 text-neutral-400 hover:text-cyan-400 border border-neutral-800"
-            }`}
-          >
-            <span>⚖️ Risco vs NTN-B</span>
-            {criterioOrdenacao === "SPREAD_NTNB" && (
-              <span className="text-[11px] font-bold">{direcaoOrdenacao === "DESC" ? "↓" : "↑"}</span>
-            )}
-          </button>
+          {classe === "FII" && (
+            <button
+              onClick={() => alternarOrdenacao("SPREAD_NTNB")}
+              title="Ordenar pelo maior Spread de Retorno sobre a NTN-B (Tesouro IPCA+)"
+              className={`px-2.5 py-1 rounded-lg font-medium transition-all flex items-center gap-1 shrink-0 ${
+                criterioOrdenacao === "SPREAD_NTNB"
+                  ? "bg-cyan-400 text-black font-semibold shadow-sm"
+                  : "bg-neutral-900 text-neutral-400 hover:text-cyan-400 border border-neutral-800"
+              }`}
+            >
+              <span>⚖️ Risco vs NTN-B</span>
+              {criterioOrdenacao === "SPREAD_NTNB" && (
+                <span className="text-[11px] font-bold">{direcaoOrdenacao === "DESC" ? "↓" : "↑"}</span>
+              )}
+            </button>
+          )}
+
+          {classe === "ACAO" && (
+            <button
+              onClick={() => alternarOrdenacao("ROIC")}
+              title="Ordenar por Maior Rentabilidade (ROIC / ROE)"
+              className={`px-2.5 py-1 rounded-lg font-medium transition-all flex items-center gap-1 shrink-0 ${
+                criterioOrdenacao === "ROIC"
+                  ? "bg-cyan-400 text-black font-semibold shadow-sm"
+                  : "bg-neutral-900 text-neutral-400 hover:text-cyan-400 border border-neutral-800"
+              }`}
+            >
+              <span>💎 ROIC / Rentab.</span>
+              {criterioOrdenacao === "ROIC" && (
+                <span className="text-[11px] font-bold">{direcaoOrdenacao === "DESC" ? "↓" : "↑"}</span>
+              )}
+            </button>
+          )}
 
           <button
             onClick={() => alternarOrdenacao("DY")}
@@ -368,13 +391,13 @@ export function MarketTable({
                     </div>
                   </th>
                   <th 
-                    onClick={() => alternarOrdenacao("SPREAD_NTNB")} 
+                    onClick={() => alternarOrdenacao("ROIC")} 
                     className="py-3 px-4 text-right cursor-pointer hover:text-cyan-400 transition-colors"
-                    title="Clique para ordenar por Spread de Retorno sobre a NTN-B (IPCA+ 6.5%)"
+                    title="Clique para ordenar por Retorno sobre Capital Investido (ROIC / Rentabilidade)"
                   >
                     <div className="flex items-center justify-end gap-1">
-                      <span>Spread NTN-B</span>
-                      {criterioOrdenacao === "SPREAD_NTNB" && (
+                      <span>ROIC</span>
+                      {criterioOrdenacao === "ROIC" && (
                         <span className="text-cyan-400 font-bold">{direcaoOrdenacao === "DESC" ? "↓" : "↑"}</span>
                       )}
                     </div>
@@ -552,35 +575,12 @@ export function MarketTable({
                           {formatPercent(ativo.dy)}
                         </td>
                         <td className="py-3 px-4 text-right font-mono tabular-numbers">
-                          <span
-                            className={
-                              ativo.spread_ntnb >= 2.0
-                                ? "text-emerald-400 font-semibold"
-                                : ativo.spread_ntnb >= 0
-                                ? "text-amber-400"
-                                : "text-rose-400"
-                            }
-                          >
-                            {ativo.spread_ntnb !== undefined
-                              ? `${ativo.spread_ntnb >= 0 ? "+" : ""}${ativo.spread_ntnb.toFixed(2)}%`
-                              : "—"}
-                          </span>
-                          {ativo.veredito_risco && (
-                            <span
-                              className={`block text-[9px] font-bold ${
-                                ativo.veredito_risco === "COMPENSA_RISCO"
-                                  ? "text-emerald-400"
-                                  : ativo.veredito_risco === "NEUTRO"
-                                  ? "text-amber-400"
-                                  : "text-rose-400"
-                              }`}
-                            >
-                              {ativo.veredito_risco === "COMPENSA_RISCO"
-                                ? "🟢 Compensa"
-                                : ativo.veredito_risco === "NEUTRO"
-                                ? "🟡 Neutro"
-                                : "🔴 Descompensado"}
-                            </span>
+                          {ativo.roic !== undefined && ativo.roic > 0 ? (
+                            <span className="text-cyan-400 font-semibold">{formatPercent(ativo.roic)}</span>
+                          ) : ativo.roe !== undefined && ativo.roe > 0 ? (
+                            <span className="text-neutral-400 text-[11px]" title="ROE (Financeiro / Sem ROIC)">{formatPercent(ativo.roe)}</span>
+                          ) : (
+                            <span className="text-neutral-600">—</span>
                           )}
                         </td>
                         <td className="py-3 px-4 text-right font-mono tabular-numbers bg-emerald-950/5 border-x border-emerald-500/10">

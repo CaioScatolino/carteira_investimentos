@@ -188,32 +188,40 @@ Este documento é a bússola viva do projeto. Ele mapeia as decisões arquitetur
 
 ---
 
-### ⏳ FASE 11: Infraestrutura, Dockerização e Deploy na VPS (`179.236.230.139`)
-- [ ] **Passo 11.1: Dockerização Multi-Stage de Alta Performance**:
-  - **Back-end em Go (`apps/server/Dockerfile`):**
-    - Multi-stage build com `golang:alpine` para compilação estática (`CGO_ENABLED=0 GOOS=linux`) e imagem final `alpine` ou `scratch` ultra-enxuta (< 25 MB).
-    - Inclusão de `ca-certificates` (para requisições HTTPS à CVM/B3) e `tzdata` (para o Cron 19h respeitar o timezone `America/Sao_Paulo`).
-    - Execução com usuário não-privilegiado (*non-root*) por segurança de container.
-  - **Front-end Next.js (`apps/web/Dockerfile`):**
-    - Build otimizado com modo standalone (`output: 'standalone'` no Next.js) reduzindo o container de 1 GB para < 120 MB.
-- [ ] **Passo 11.2: Orquestração com Docker Compose (`docker-compose.prod.yml`)**:
-  - Serviços orquestrados:
-    - `b3-api`: Servidor HTTP Go com healthcheck automático (`/health`).
-    - `b3-web`: Servidor Next.js conectado internamente à API.
-  - Integração com a infraestrutura existente na VPS:
-    - Conexão com os containers existentes via rede Docker compartilhada (`mysql_central`, `redis_central`).
-  - Configurações de resiliência: `restart: unless-stopped`, limites de recursos (RAM/CPU) e volumes para logs persistentes.
-- [ ] **Passo 11.3: Configuração do Domínio, Nginx Reverse Proxy e SSL/HTTPS**:
-  - **Roteamento por Domínio Próprio:**
-    - `invest.seudominio.com.br` $\rightarrow$ Front-end Next.js (`b3-web:3000`).
-    - `api.invest.seudominio.com.br` (ou `/api/`) $\rightarrow$ Back-end Go (`b3-api:8080`).
-  - **Certificado SSL/TLS Gratuito:** Let's Encrypt com renovação automática via Certbot ou interface do Nginx Proxy Manager.
-  - **Configurações Especiais no Nginx:**
-    - Streaming de Server-Sent Events (SSE): `proxy_buffering off;` e `proxy_read_timeout 3600s;` para a transmissão em tempo real do assistente/IA sem cortes.
-    - Headers de Cibersegurança: HSTS (`Strict-Transport-Security`), X-Frame-Options (`DENY`), X-Content-Type-Options (`nosniff`).
-- [ ] **Passo 11.4: Script de Deploy Automatizado (Zero Downtime)**:
-  - Script bash `scripts/deploy.sh` executável via SSH:
-    - Execução automática de novas migrações SQL no MySQL da VPS (`scripts/migrations/*.sql`).
-    - Build e subida limpa dos containers com `docker compose -f docker-compose.prod.yml up -d --build`.
-    - Health check pós-deploy confirmando que a API e o Web estão respondendo 200 OK.
+### ✅ FASE 11: Infraestrutura, Dockerização e Deploy na VPS (`179.236.230.139`)
+- [x] **Passo 11.1: Dockerização Multi-Stage de Alta Performance**:
+  - [x] **Back-end em Go (`apps/server/Dockerfile`):**
+    - Multi-stage build com `golang:alpine` (`GOTOOLCHAIN=auto`), compilação estática (`CGO_ENABLED=0 GOOS=linux`) e imagem final `alpine:3.20` ultra-enxuta (< 25 MB).
+    - Inclusão de `ca-certificates` e `tzdata` (`America/Sao_Paulo`).
+    - Execução com usuário `appuser` não-privilegiado por segurança de container.
+  - [x] **Front-end Next.js (`apps/web/Dockerfile`):**
+    - Build otimizado standalone (`output: 'standalone'`) reduzindo o container para < 120 MB.
+- [x] **Passo 11.2: Orquestração com Docker Compose (`docker-compose.prod.yml`)**:
+  - [x] Serviços `b3_invest_api` e `b3_invest_web` orquestrados com restart automático e healthcheck calibrado (90s start period para ingestão dos 1092 ativos da B3).
+  - [x] Integração perfeita com a infraestrutura compartilhada na rede `rede-compartilhada` consumindo `mysql_central` e `redis_central`.
+- [x] **Passo 11.3: Configuração do Domínio, Nginx Reverse Proxy e SSL/HTTPS**:
+  - [x] Roteamento de produção em **`https://invest.caioscatolino.com.br/`** com SSL Let's Encrypt ativo.
+  - [x] Backend API isolado e roteado via Nginx Proxy Manager.
+- [x] **Passo 11.4: Script de Deploy e Pipeline CI/CD Automatizado**:
+  - [x] Script `scripts/deploy.sh` com automação de migrations MySQL (`001` a `004`), auto-detecção de rede e subida limpa dos containers.
+  - [x] Pipeline GitHub Actions `.github/workflows/deploy.yml` com disparo automático a cada push na branch `main`.
+
+---
+
+### 🚀 FASE 12: Modelo Multi-Fator Institucional de Ações & Desacoplamento Macroeconômico NTN-B
+- [x] **Passo 12.1: Diagnóstico e Desacoplamento Macroeconômico de Risco em Ações**:
+  - [x] **Eliminação da Penalidade Rígida de Dividend Yield:** Ações não são títulos de renda fixa; cessou a punição de -8 pontos para ações com DY < 6.5% quando reinvestem capital de forma lucrativa (ex: SLCE3, WEGE3, PRIO3).
+  - [x] **Introdução do Fed Model (Earnings Yield vs NTN-B):** Avaliação do poder de lucro operacional real ($1/\text{P/L}$) contra a taxa livre de risco da NTN-B, reconhecendo empresas de alto retorno operacional mesmo em fundos de ciclo de commodities/agro.
+- [x] **Passo 12.2: Implementação do Score Fundamentalista de 4 Pilares (0 a 100)**:
+  - [x] **Pilar 1: Qualidade & Eficiência Operacional (até 28 pts):** ROIC/ROE (até 14 pts), Margens Operacionais/Líquidas (até 7 pts), Crescimento de Lucros 5A (até 7 pts).
+  - [x] **Pilar 2: Valuation & Margem de Segurança (até 30 pts):** P/L e Earnings Yield (até 10 pts), P/VP e Desconto Patrimonial Real (até 8 pts), Margem de Segurança Graham/Greenblatt (até 12 pts).
+  - [x] **Pilar 3: Saúde Financeira & Solvência (até 22 pts):** Piotroski F-Score (até 12 pts), Alavancagem Dívida Líquida/EBITDA e Porte (até 10 pts).
+  - [x] **Pilar 4: Retorno Total ao Acionista (até 20 pts):** Dividend Yield Normalizado (máximo entre 12M e média de 5 anos) (até 12 pts), Alinhamento de Preço Teto Consensual (até 8 pts).
+  - [x] **Bônus Macroeconômico & Travas Prudenciais:** Bônus de +3 pts para Earnings Yield elevado; travas anti-Value Trap mantidas para prejuízo (LPA <= 0), PL negativo e microcaps ilíquidas.
+- [x] **Passo 12.3: Atualização da Interface do Usuário (Frontend Next.js)**:
+  - [x] **Substituição na Tabela Principal de Ações:** Remoção da coluna de ruído "Spread NTN-B" e rótulo indevido de "Descompensado", substituindo pela métrica rainha de rentabilidade: **ROIC**.
+  - [x] **Filtros de Ordenação Dedicados:** Botão "💎 ROIC / Rentab." adicionado para ações; filtro "⚖️ Risco vs NTN-B" mantido exclusivamente para FIIs onde a métrica é mandatória.
+  - [x] **Preservação de Contexto:** Análise de Spread NTN-B mantida exclusivamente no modal analítico de detalhes e na tabela de Fundos Imobiliários.
+- [ ] **Passo 12.4: Integração de Scraper Automático da NTN-B (Tesouro Direto / Anbima)**:
+  - [ ] Sincronização em tempo real do juro real das NTN-Bs longas (Tesouro IPCA+ 2035/2045) via API oficial ou scraper diário, complementando a Selic do BCB SGS.
 

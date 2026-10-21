@@ -216,3 +216,52 @@ func TestVereditoRisco(t *testing.T) {
 		t.Errorf("BBAS3 SpreadNTNB deveria ser >= 3.0, obteve %.2f", bbas3.SpreadNTNB)
 	}
 }
+
+func TestScoreMultiFatorSLCE3(t *testing.T) {
+	analisador := Novo()
+
+	// Simulação real de SLCE3 (SLC Agrícola):
+	// DY moderado (5.3%), mas ROIC robusto, P/VP descontado, alavancagem saudável
+	slce3 := &domain.Ativo{
+		Ticker:              "SLCE3",
+		Nome:                "SLC AGRICOLA S.A.",
+		Classe:              domain.ClasseAcao,
+		Setor:               "Consumo não Cíclico",
+		Subsetor:            "Agropecuária",
+		Segmento:            "Agricultura",
+		PrecoAtual:          16.99,
+		LPA:                 2.05,  // P/L = 8.3x -> Earnings Yield = 12.1%
+		VPA:                 19.50, // P/VP = 0.87x (desconto patrimonial em terras)
+		Dividendos12M:       0.90,  // DY = 5.3%
+		MediaDividendos5A:   1.15,  // Média 5A = 6.8%
+		ROIC:                14.5,  // ROIC de 14.5%
+		ROE:                 10.5,
+		MargemLiquida:       12.0,
+		CrescimentoLucro5A:  6.0,
+		DividaLiquidaEbit:   1.8,   // Alavancagem saudável < 2.5x
+		PiotroskiScore:      6,     // Solidez financeira
+		Porte:               "MID_CAP",
+		LiquidezMediaDiaria: 35_000_000.0, // Alta liquidez
+		Pareceres:           make(map[string]domain.ParecerItem),
+	}
+
+	_ = analisador.Executar(slce3)
+
+	t.Logf("SLCE3 Score Calculado: %.0f/100", slce3.Score)
+	t.Logf("SLCE3 Veredito de Risco: %s", slce3.VereditoRisco)
+	t.Logf("SLCE3 Earnings Yield: %.1f%%", slce3.EarningsYield)
+	t.Logf("SLCE3 PrecoTetoConsolidado: R$ %.2f", slce3.PrecoTetoConsolidado)
+	t.Logf("SLCE3 MargemSegurancaConsolidada: %.1f%%", slce3.MargemSegurancaConsolidada)
+	t.Logf("SLCE3 Modelos: %v", slce3.ModelosTetoConsolidado)
+
+	// Com o novo motor institucional de 4 pilares:
+	// SLCE3 não deve ficar com score 30 (antigo). Deve ficar com score >= 70!
+	if slce3.Score < 70 {
+		t.Errorf("SLCE3 deveria ter Score >= 70 no novo modelo de 4 pilares, mas obteve %.0f", slce3.Score)
+	}
+
+	// Com Earnings Yield de 12.1% vs NTN-B 6.5%, o Veredito de Risco não deve ser RISCO_DESCOMPENSADO!
+	if slce3.VereditoRisco == "RISCO_DESCOMPENSADO" {
+		t.Errorf("SLCE3 com Earnings Yield de 12.1%% não deve ter RISCO_DESCOMPENSADO, obteve %s", slce3.VereditoRisco)
+	}
+}
