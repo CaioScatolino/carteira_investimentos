@@ -34,7 +34,7 @@ if [ -z "$DOCKER_NETWORK" ]; then
         echo "   • Rede detectada no mysql_central: $DETECTED_NETWORK"
         export DOCKER_NETWORK="$DETECTED_NETWORK"
     else
-        export DOCKER_NETWORK="infra-compartilhada_default"
+        export DOCKER_NETWORK="rede-compartilhada"
         echo "   • Usando rede fallback: $DOCKER_NETWORK"
     fi
 else
