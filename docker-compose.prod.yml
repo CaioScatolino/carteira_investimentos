@@ -21,7 +21,7 @@ services:
       - JWT_SECRET=${JWT_SECRET:-super-secret-jwt-key-carteira-investimentos-2026-b3}
       - TZ=America/Sao_Paulo
     networks:
-      - infra-compartilhada_default
+      - infra_network
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
       interval: 30s
@@ -44,7 +44,7 @@ services:
       - NODE_ENV=production
       - PORT=3000
     networks:
-      - infra-compartilhada_default
+      - infra_network
     depends_on:
       b3_invest_api:
         condition: service_healthy
@@ -53,5 +53,6 @@ services:
 # Conexão com a rede existente da infra-compartilhada na VPS
 # ==============================================================================
 networks:
-  infra-compartilhada_default:
+  infra_network:
+    name: ${DOCKER_NETWORK:-infra-compartilhada_default}
     external: true
