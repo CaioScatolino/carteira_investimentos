@@ -24,10 +24,10 @@ services:
       - infra_network
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
-      interval: 30s
+      interval: 15s
       timeout: 5s
-      retries: 3
-      start_period: 15s
+      retries: 5
+      start_period: 90s
 
   # ============================================================================
   # 2. Front-end Next.js Standalone
