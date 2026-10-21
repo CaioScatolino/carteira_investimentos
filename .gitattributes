@@ -1,0 +1,4 @@
+# Forçar quebra de linha UNIX (LF) em scripts shell e arquivos SQL
+*.sh text eol=lf
+*.sql text eol=lf
+Dockerfile text eol=lf
