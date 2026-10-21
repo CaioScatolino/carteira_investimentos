@@ -23,6 +23,7 @@ jobs:
           password: ${{ secrets.VPS_PASSWORD }} # Senha SSH (caso não use chave SSH)
           port: ${{ secrets.VPS_PORT || 22 }}
           script: |
+            set -e
             TARGET_DIR=""
             for dir in "$HOME/apps/carteira_investimentos" "/apps/carteira_investimentos" "/root/apps/carteira_investimentos" "apps/carteira_investimentos"; do
               if [ -d "$dir" ]; then
@@ -39,6 +40,8 @@ jobs:
 
             echo "📂 Acessando $TARGET_DIR..."
             cd "$TARGET_DIR"
-            git pull origin main
+            echo "🔄 Sincronizando com origin/main..."
+            git fetch origin main
+            git reset --hard origin/main
             chmod +x scripts/deploy.sh
             ./scripts/deploy.sh
