@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { Ativo, RespostaRankings, CenarioMacro } from "@/types/market";
 import { ResumoCarteira, CriarPosicaoRequest, ResultadoRebalanceamento } from "@/types/portfolio";
+import { API_BASE_URL, API_V1_URL } from "@/config/api";
 import { Header } from "@/components/Header";
 import { SummaryCards } from "@/components/SummaryCards";
 import { MarketTable } from "@/components/MarketTable";
@@ -64,8 +65,8 @@ export default function Dashboard() {
     setError(null);
     try {
       const [resRankings, resMacro] = await Promise.all([
-        fetch("http://localhost:8080/api/v1/rankings", { headers: { Accept: "application/json" } }),
-        fetch("http://localhost:8080/api/v1/macro", { headers: { Accept: "application/json" } }).catch(() => null),
+        fetch(`${API_V1_URL}/rankings`, { headers: { Accept: "application/json" } }),
+        fetch(`${API_V1_URL}/macro`, { headers: { Accept: "application/json" } }).catch(() => null),
       ]);
 
       if (!resRankings.ok) {
@@ -88,7 +89,7 @@ export default function Dashboard() {
     } catch (err: any) {
       console.warn("Erro ao buscar dados da API B3 Core:", err);
       setError(
-        "Não foi possível conectar ao servidor em http://localhost:8080. Verifique se o backend Go está rodando."
+        `Não foi possível conectar ao servidor em ${API_BASE_URL}. Verifique se o backend Go está rodando.`
       );
     } finally {
       setLoading(false);
@@ -105,7 +106,7 @@ export default function Dashboard() {
     setLoadingCarteira(true);
     setErroCarteira(null);
     try {
-      const res = await fetch("http://localhost:8080/api/v1/carteira", {
+      const res = await fetch(`${API_V1_URL}/carteira`, {
         headers: {
           Accept: "application/json",
           Authorization: `Bearer ${token}`,
@@ -140,7 +141,7 @@ export default function Dashboard() {
   const handleSalvarPosicao = async (req: CriarPosicaoRequest) => {
     if (!token) throw new Error("Usuário não autenticado.");
 
-    const res = await fetch("http://localhost:8080/api/v1/carteira/posicoes", {
+    const res = await fetch(`${API_V1_URL}/carteira/posicoes`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -162,7 +163,7 @@ export default function Dashboard() {
     if (!window.confirm(`Tem certeza que deseja remover ${ticker} da sua carteira?`)) return;
 
     try {
-      const res = await fetch(`http://localhost:8080/api/v1/carteira/posicoes/${id}`, {
+      const res = await fetch(`${API_V1_URL}/carteira/posicoes/${id}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -182,7 +183,7 @@ export default function Dashboard() {
   const handleSimularRebalanceamento = async (valorAporte: number): Promise<ResultadoRebalanceamento> => {
     if (!token) throw new Error("Usuário não autenticado.");
 
-    const res = await fetch("http://localhost:8080/api/v1/carteira/rebalancear", {
+    const res = await fetch(`${API_V1_URL}/carteira/rebalancear`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

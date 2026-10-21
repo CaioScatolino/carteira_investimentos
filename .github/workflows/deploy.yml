@@ -1,0 +1,44 @@
+name: CI/CD Pipeline - Deploy na VPS
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy Automático na VPS
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do Repositório
+        uses: actions/checkout@v4
+
+      - name: Conectar via SSH e Executar Deploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}       # 179.236.230.139
+          username: ${{ secrets.VPS_USER }}   # root ou seu usuário
+          key: ${{ secrets.VPS_SSH_KEY }}     # Chave privada SSH (se configurada)
+          password: ${{ secrets.VPS_PASSWORD }} # Senha SSH (caso não use chave SSH)
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            TARGET_DIR=""
+            for dir in "$HOME/apps/carteira_investimentos" "/apps/carteira_investimentos" "/root/apps/carteira_investimentos" "apps/carteira_investimentos"; do
+              if [ -d "$dir" ]; then
+                TARGET_DIR="$dir"
+                break
+              fi
+            done
+
+            if [ -z "$TARGET_DIR" ]; then
+              echo "❌ Diretório carteira_investimentos não encontrado na pasta apps da VPS!"
+              echo "💡 Certifique-se de clonar o repositório dentro de apps: cd apps && git clone https://github.com/CaioScatolino/carteira_investimentos.git"
+              exit 1
+            fi
+
+            echo "📂 Acessando $TARGET_DIR..."
+            cd "$TARGET_DIR"
+            git pull origin main
+            chmod +x scripts/deploy.sh
+            ./scripts/deploy.sh

@@ -5,6 +5,8 @@ import { Ativo, AnaliseProventos5A, CenarioMacro } from "@/types/market";
 import { StatusBadge, ParecerBadge } from "./StatusBadge";
 import { X, ExternalLink, ShieldCheck, TrendingUp, DollarSign, PieChart, Landmark, BarChart3, Coins, AlertCircle, Target, Scale } from "lucide-react";
 
+import { API_V1_URL } from "@/config/api";
+
 interface AssetModalProps {
   ativo: Ativo | null;
   macro?: CenarioMacro | null;
@@ -21,7 +23,7 @@ export function AssetDetailModal({ ativo, macro, onClose }: AssetModalProps) {
     let cancelado = false;
     if (ativo && (ativo.classe === "ACAO" || ativo.classe === "FII")) {
       setCarregandoB3(true);
-      fetch(`http://localhost:8080/api/v1/ativos/${ativo.ticker}/dividendos`)
+      fetch(`${API_V1_URL}/ativos/${ativo.ticker}/dividendos`)
         .then((res) => {
           if (!res.ok) throw new Error("Erro HTTP");
           return res.json();

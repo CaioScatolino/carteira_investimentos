@@ -14,7 +14,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const API_BASE_URL = "http://localhost:8080/api/v1";
+import { API_V1_URL } from "@/config/api";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [usuario, setUsuario] = useState<UsuarioPublico | null>(null);
@@ -34,7 +34,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setToken(tokenSalvo);
 
         // Valida o token no backend chamando /api/v1/auth/me
-        const res = await fetch(`${API_BASE_URL}/auth/me`, {
+        const res = await fetch(`${API_V1_URL}/auth/me`, {
           headers: {
             Authorization: `Bearer ${tokenSalvo}`,
             Accept: "application/json",
@@ -61,7 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = async (email: string, senha: string) => {
-    const res = await fetch(`${API_BASE_URL}/auth/login`, {
+    const res = await fetch(`${API_V1_URL}/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, senha }),
@@ -79,7 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const register = async (nome: string, email: string, senha: string) => {
-    const res = await fetch(`${API_BASE_URL}/auth/register`, {
+    const res = await fetch(`${API_V1_URL}/auth/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ nome, email, senha }),

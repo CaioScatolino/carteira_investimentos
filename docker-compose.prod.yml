@@ -1,0 +1,59 @@
+version: "3.8"
+
+services:
+  # ============================================================================
+  # 1. Back-end Go (B3 Core API)
+  # ============================================================================
+  b3_invest_api:
+    build:
+      context: ./apps/server
+      dockerfile: Dockerfile
+    container_name: b3_invest_api
+    restart: unless-stopped
+    environment:
+      - DB_HOST=mysql_central
+      - DB_PORT=3306
+      - DB_USER=root
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=carteira_investimentos
+      - REDIS_HOST=redis_central
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_DB=0
+      - JWT_SECRET=${JWT_SECRET:-super-secret-jwt-key-carteira-investimentos-2026-b3}
+      - TZ=America/Sao_Paulo
+    networks:
+      - infra-compartilhada_default
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ============================================================================
+  # 2. Front-end Next.js Standalone
+  # ============================================================================
+  b3_invest_web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+    container_name: b3_invest_web
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    networks:
+      - infra-compartilhada_default
+    depends_on:
+      b3_invest_api:
+        condition: service_healthy
+
+# ==============================================================================
+# Conexão com a rede existente da infra-compartilhada na VPS
+# ==============================================================================
+networks:
+  infra-compartilhada_default:
+    external: true
