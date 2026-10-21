@@ -1,12 +1,15 @@
 # ==============================================================================
 # ESTÁGIO 1: Compilação Estática em Go
 # ==============================================================================
-FROM golang:1.24-alpine AS builder
+FROM golang:alpine AS builder
 
 WORKDIR /app
 
-# Instala certificados SSL e timezone
-RUN apk add --no-cache ca-certificates tzdata
+# Permite que o Go baixe ou adeque a toolchain automaticamente conforme o go.mod
+ENV GOTOOLCHAIN=auto
+
+# Instala certificados SSL, git e timezone
+RUN apk add --no-cache ca-certificates tzdata git
 
 # Cache de dependências do Go
 COPY go.mod go.sum ./
