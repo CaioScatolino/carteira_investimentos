@@ -7,7 +7,11 @@ echo "=========================================================="
 
 # 1. Carrega variáveis de ambiente de produção
 if [ -f .env.prod ]; then
-    export $(cat .env.prod | xargs)
+    set -a
+    . ./.env.prod
+    set +a
+else
+    echo "⚠️  Aviso: Arquivo .env.prod não encontrado! Usando variáveis do sistema."
 fi
 
 # 2. Garante que o banco de dados carteira_investimentos existe no MySQL Central
@@ -24,7 +28,11 @@ done
 
 # 4. Build e subida dos containers com Docker Compose
 echo "🐳 Construindo e subindo containers..."
-docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
+if [ -f .env.prod ]; then
+    docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build --remove-orphans
+else
+    docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
+fi
 
 # 5. Limpeza de imagens antigas não utilizadas (economiza disco na VPS)
 docker image prune -f
