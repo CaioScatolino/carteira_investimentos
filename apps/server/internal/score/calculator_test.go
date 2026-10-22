@@ -217,6 +217,63 @@ func TestVereditoRisco(t *testing.T) {
 	}
 }
 
+func TestValuationBBAS3Institucional(t *testing.T) {
+	analisador := Novo()
+
+	// 1. Cenário Real com Série Auditada B3 (R$ 2.69/ano e ROE de 18.5%)
+	bbas3 := &domain.Ativo{
+		Ticker:                       "BBAS3",
+		Nome:                         "BANCO DO BRASIL S.A.",
+		Classe:                       domain.ClasseAcao,
+		Setor:                        "Financeiro e Outros",
+		Subsetor:                     "Intermediários Financeiros",
+		Segmento:                     "Bancos",
+		PrecoAtual:                   23.83,
+		LPA:                          5.60,
+		VPA:                          32.47,
+		ROE:                          18.5,
+		DY:                           10.8,
+		Dividendos12M:                2.69,
+		MediaDividendos5A:            2.69,
+		MediaDividendos5ANormalizada: 2.69,
+		PrecoTetoGordon:              28.50,
+		ValorGraham:                  63.90,
+		Pareceres:                    make(map[string]domain.ParecerItem),
+	}
+
+	_ = analisador.Executar(bbas3)
+	ConsolidarPrecoTeto(bbas3)
+
+	t.Logf("BBAS3 Normalizado Teto Consensual: R$ %.2f | Modelos: %v", bbas3.PrecoTetoConsolidado, bbas3.ModelosTetoConsolidado)
+
+	if bbas3.PrecoTetoConsolidado < 24.0 || bbas3.PrecoTetoConsolidado > 36.0 {
+		t.Errorf("Teto de BBAS3 (%.2f) fora da faixa institucional (R$ 24 a R$ 36)", bbas3.PrecoTetoConsolidado)
+	}
+
+	// 2. Cenário de Estresse (Scraper com dados truncados para R$ 0.69)
+	bbas3Truncado := &domain.Ativo{
+		Ticker:        "BBAS3",
+		Nome:          "BANCO DO BRASIL S.A.",
+		Classe:        domain.ClasseAcao,
+		Setor:         "Financeiro e Outros",
+		Subsetor:      "Intermediários Financeiros",
+		Segmento:      "Bancos",
+		PrecoAtual:    23.83,
+		LPA:           3.25, // Lucro recorrente
+		VPA:           32.47,
+		ROE:           10.5,
+		Dividendos12M: 0.69,
+		Pareceres:     make(map[string]domain.ParecerItem),
+	}
+
+	ConsolidarPrecoTeto(bbas3Truncado)
+	t.Logf("BBAS3 Truncado Teto com Piso de Sanidade: R$ %.2f | Modelos: %v", bbas3Truncado.PrecoTetoConsolidado, bbas3Truncado.ModelosTetoConsolidado)
+
+	if bbas3Truncado.PrecoTetoConsolidado < 18.0 {
+		t.Errorf("Piso de sanidade falhou! Teto (%.2f) não deveria cair abaixo de R$ 18.00", bbas3Truncado.PrecoTetoConsolidado)
+	}
+}
+
 func TestScoreMultiFatorSLCE3(t *testing.T) {
 	analisador := Novo()
 

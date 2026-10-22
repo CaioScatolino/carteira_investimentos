@@ -45,8 +45,15 @@ func (g *AnalisadorGordon) Executar(ativo *domain.Ativo) error {
 		kEfetivo = macro.ObterCenario().ObterCustoCapitalGordon()
 	}
 
-	// Se provento for atípico ou payout > 100%, usa a base sustentável (60% do LPA)
+	// Se houver série histórica auditada de 5 anos (B3), prioriza a média normalizada sobre cortes pontuais de 12M
 	baseDividendo := ativo.Dividendos12M
+	if ativo.MediaDividendos5ANormalizada > 0 && ativo.MediaDividendos5ANormalizada > baseDividendo {
+		baseDividendo = ativo.MediaDividendos5ANormalizada
+	} else if ativo.MediaDividendos5A > 0 && ativo.MediaDividendos5A > baseDividendo {
+		baseDividendo = ativo.MediaDividendos5A
+	}
+
+	// Se provento for atípico ou payout > 100%, usa a base sustentável (60% do LPA)
 	if ativo.IsProventoAtipico || ativo.Payout > 100.0 {
 		divSustentavel := ativo.LPA * 0.60
 		if divSustentavel < baseDividendo {

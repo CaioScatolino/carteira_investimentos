@@ -12,7 +12,7 @@ import (
 
 // IsSetorFinanceiro identifica se o ativo pertence ao setor bancário, seguros ou serviços financeiros.
 // Bancos e instituições financeiras não possuem EBIT/Dívida Líquida padrão da firma (FCFF/WACC),
-// sendo avaliados exclusivamente por Dividendos/Patrimônio (Bazin 5A, Gordon e Lynch).
+// sendo avaliados por Patrimônio (Justified P/B pelo ROE), Bazin Normalizado e Graham Adaptado.
 func IsSetorFinanceiro(setor, subsetor, segmento string) bool {
 	s := strings.ToUpper(setor + " " + subsetor + " " + segmento)
 	return strings.Contains(s, "FINANC") ||
@@ -24,6 +24,40 @@ func IsSetorFinanceiro(setor, subsetor, segmento string) bool {
 		strings.Contains(s, "INTERMEDIARIOS") ||
 		strings.Contains(s, "SERVIÇOS FINANCEIROS") ||
 		strings.Contains(s, "SERVICOS FINANCEIROS")
+}
+
+// IsSetorUtilities identifica concessões públicas reguladas com receita previsível e alta distribuição (Elétricas, Saneamento, Telecom)
+func IsSetorUtilities(setor, subsetor, segmento string) bool {
+	s := strings.ToUpper(setor + " " + subsetor + " " + segmento)
+	return strings.Contains(s, "UTILIDADE PÚBLICA") ||
+		strings.Contains(s, "UTILIDADE PUBLICA") ||
+		strings.Contains(s, "ENERGIA") ||
+		strings.Contains(s, "ELÉTRICA") ||
+		strings.Contains(s, "ELETRICA") ||
+		strings.Contains(s, "SANEAMENTO") ||
+		strings.Contains(s, "ÁGUA") ||
+		strings.Contains(s, "AGUA") ||
+		strings.Contains(s, "GÁS") ||
+		strings.Contains(s, "GAS") ||
+		strings.Contains(s, "TELECOMUNICA")
+}
+
+// IsSetorCommodities identifica empresas cíclicas de materiais básicos, mineração, siderurgia, petróleo e celulose
+func IsSetorCommodities(setor, subsetor, segmento string) bool {
+	s := strings.ToUpper(setor + " " + subsetor + " " + segmento)
+	return strings.Contains(s, "MATERIAIS BÁSICOS") ||
+		strings.Contains(s, "MATERIAIS BASICOS") ||
+		strings.Contains(s, "MINERA") ||
+		strings.Contains(s, "SIDERURG") ||
+		strings.Contains(s, "METALURG") ||
+		strings.Contains(s, "PETRÓLEO") ||
+		strings.Contains(s, "PETROLEO") ||
+		strings.Contains(s, "BIOCOMBUSTÍVEIS") ||
+		strings.Contains(s, "BIOCOMBUSTIVEIS") ||
+		strings.Contains(s, "CELULOSE") ||
+		strings.Contains(s, "PAPEL") ||
+		strings.Contains(s, "AGROPECUÁRIA") ||
+		strings.Contains(s, "AGROPECUARIA")
 }
 
 // CalcularDCF calcula o Preço Teto por Ação baseado em Fluxo de Caixa Descontado (FCFF / WACC Damodaran Proxy).

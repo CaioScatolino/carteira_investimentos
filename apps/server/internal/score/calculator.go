@@ -837,15 +837,25 @@ func ConsolidarPrecoTeto(ativo *domain.Ativo) {
 	// ==========================================
 	if ativo.Classe == domain.ClasseAcao {
 		isFinanceiro := dcf.IsSetorFinanceiro(ativo.Setor, ativo.Subsetor, ativo.Segmento)
+		isUtilities := dcf.IsSetorUtilities(ativo.Setor, ativo.Subsetor, ativo.Segmento)
+		isCommodities := dcf.IsSetorCommodities(ativo.Setor, ativo.Subsetor, ativo.Segmento)
 
-		// 1. Décio Bazin 5 Anos (Normalizado com Winsorização anti-outlier e calibrado com NTN-B)
+		// 1. Saneamento Institucional da Base de Proventos (Bazin 5A B3 Auditado)
 		yieldMinimoAcoes := cenario.ObterYieldMinimoAcoes()
 		media5A := ativo.MediaDividendos5ANormalizada
 		if media5A <= 0 {
 			media5A = ativo.MediaDividendos5A
 		}
+		if media5A <= 0 {
+			media5A = ativo.Dividendos12M
+		}
+		// Para empresas financeiras e utilities lucrativas sem histórico prévio, ancora em payout de 40% do LPA
+		if media5A <= 0 && ativo.LPA > 0 && (isFinanceiro || isUtilities) {
+			media5A = math.Round(ativo.LPA*0.40*100) / 100
+		}
+
 		tetoBazin5A := ativo.PrecoTetoBazin5A
-		if media5A > 0 && yieldMinimoAcoes > 0 {
+		if tetoBazin5A <= 0 && media5A > 0 && yieldMinimoAcoes > 0 {
 			tetoBazin5A = math.Round((media5A/yieldMinimoAcoes)*100) / 100
 			ativo.PrecoTetoBazin5A = tetoBazin5A
 			if ativo.PrecoAtual > 0 {
@@ -853,16 +863,76 @@ func ConsolidarPrecoTeto(ativo *domain.Ativo) {
 			}
 		}
 
+		// -------------------------------------------------------------
+		// FAMÍLIA 1: SETOR FINANCEIRO (Bancos, Seguros e Previdência)
+		// -------------------------------------------------------------
 		if isFinanceiro {
-			// Setor Financeiro / Bancos / Seguradoras:
-			// Ponderação: 50% Bazin 5A + 30% Gordon + 20% Lynch
-			ativo.PrecoTetoDCF = 0 // DCF nulo para bancos
+			ativo.PrecoTetoDCF = 0 // DCF da firma é inaplicável para bancos
 
+			// 1. Décio Bazin 5 Anos Normalizado B3 (40%)
 			if tetoBazin5A > 0 {
 				modelosValidos = append(modelosValidos, ModeloValuation{
 					Nome: fmt.Sprintf("Bazin 5A (%.1f%%)", yieldMinimoAcoes*100),
 					Teto: tetoBazin5A,
-					Peso: 0.50,
+					Peso: 0.40,
+				})
+			}
+
+			// 2. Gordon DDM Normalizado (30%)
+			if ativo.PrecoTetoGordon > 0 {
+				modelosValidos = append(modelosValidos, ModeloValuation{
+					Nome: "Gordon DDM",
+					Teto: ativo.PrecoTetoGordon,
+					Peso: 0.30,
+				})
+			}
+
+			// 3. Justified P/B (P/VP Justo pelo ROE vs Custo de Capital Próprio Ke) (30%)
+			if ativo.VPA > 0 {
+				roe := ativo.ROE / 100.0
+				if roe <= 0 && ativo.LPA > 0 {
+					roe = ativo.LPA / ativo.VPA
+				}
+				ke := cenario.ObterCustoCapitalGordon()
+				if ke > 0.14 {
+					ke = 0.135 // Custo de oportunidade de equilíbrio do setor bancário (13.5% a.a.)
+				}
+				g := 0.035
+				if roe > g && ke > g {
+					pvpJusto := (roe - g) / (ke - g)
+					// Desconto prudencial de governança para instituições de controle estatal (ex: BBAS3, Banrisul)
+					isEstatal := strings.Contains(strings.ToUpper(ativo.Nome+" "+ativo.Ticker), "BRASIL") ||
+						strings.Contains(strings.ToUpper(ativo.Nome+" "+ativo.Ticker), "BANRISUL") ||
+						strings.Contains(strings.ToUpper(ativo.Nome+" "+ativo.Ticker), "CAIXA")
+					if isEstatal {
+						pvpJusto *= 0.75 // 25% de desconto de governança pública
+					}
+					// Trava prudencial: P/VP entre 0.65x e 1.75x
+					if pvpJusto > 1.75 {
+						pvpJusto = 1.75
+					} else if pvpJusto < 0.65 && roe >= 0.12 {
+						pvpJusto = 0.65
+					}
+					tetoJustifiedPB := math.Round(pvpJusto*ativo.VPA*100) / 100
+					if tetoJustifiedPB > 0 {
+						modelosValidos = append(modelosValidos, ModeloValuation{
+							Nome: fmt.Sprintf("Justified P/B (%.2fx VPA)", pvpJusto),
+							Teto: tetoJustifiedPB,
+							Peso: 0.30,
+						})
+					}
+				}
+			}
+
+		// -------------------------------------------------------------
+		// FAMÍLIA 2: UTILITIES & CONCESSIONÁRIAS (Elétricas e Saneamento)
+		// -------------------------------------------------------------
+		} else if isUtilities {
+			if tetoBazin5A > 0 {
+				modelosValidos = append(modelosValidos, ModeloValuation{
+					Nome: fmt.Sprintf("Bazin 5A (%.1f%%)", yieldMinimoAcoes*100),
+					Teto: tetoBazin5A,
+					Peso: 0.40,
 				})
 			}
 
@@ -874,21 +944,18 @@ func ConsolidarPrecoTeto(ativo *domain.Ativo) {
 				})
 			}
 
-			if ativo.PrecoJustoLynch > 0 && ativo.LPA > 0 {
-				tetoLynchPrudente := math.Min(ativo.PrecoJustoLynch, 18.0*ativo.LPA)
-				if tetoLynchPrudente > 0 {
-					modelosValidos = append(modelosValidos, ModeloValuation{
-						Nome: "Peter Lynch",
-						Teto: tetoLynchPrudente,
-						Peso: 0.20,
-					})
-				}
+			if ativo.ValorGraham > 0 && ativo.LPA > 0 && ativo.VPA > 0 {
+				modelosValidos = append(modelosValidos, ModeloValuation{
+					Nome: "Graham",
+					Teto: ativo.ValorGraham,
+					Peso: 0.30,
+				})
 			}
-		} else {
-			// Setor Real / Empresas Operacionais:
-			// Ponderação: 35% DCF Proxy + 35% Bazin 5A + 15% Graham + 15% Gordon
 
-			// Se DCF ainda não tiver sido calculado, calcula agora
+		// -------------------------------------------------------------
+		// FAMÍLIA 3: COMMODITIES & CÍCLICAS PESADAS (Mineração, Petróleo, Papel)
+		// -------------------------------------------------------------
+		} else if isCommodities {
 			if ativo.PrecoTetoDCF <= 0 {
 				tetoDCF, _, _, _, err := dcf.CalcularDCF(ativo, cenario)
 				if err == nil && tetoDCF > 0 {
@@ -914,17 +981,47 @@ func ConsolidarPrecoTeto(ativo *domain.Ativo) {
 
 			if ativo.ValorGraham > 0 && ativo.LPA > 0 && ativo.VPA > 0 {
 				modelosValidos = append(modelosValidos, ModeloValuation{
-					Nome: "Graham",
+					Nome: "Graham de Ciclo",
 					Teto: ativo.ValorGraham,
-					Peso: 0.15,
+					Peso: 0.30,
 				})
 			}
 
-			if ativo.PrecoTetoGordon > 0 {
+		// -------------------------------------------------------------
+		// FAMÍLIA 4: CRESCIMENTO, CONSUMO & INDÚSTRIA (Empresas de Reinvestimento)
+		// -------------------------------------------------------------
+		} else {
+			if ativo.PrecoTetoDCF <= 0 {
+				tetoDCF, _, _, _, err := dcf.CalcularDCF(ativo, cenario)
+				if err == nil && tetoDCF > 0 {
+					ativo.PrecoTetoDCF = tetoDCF
+				}
+			}
+
+			if ativo.PrecoTetoDCF > 0 {
 				modelosValidos = append(modelosValidos, ModeloValuation{
-					Nome: "Gordon DDM",
-					Teto: ativo.PrecoTetoGordon,
-					Peso: 0.15,
+					Nome: "DCF Proxy",
+					Teto: ativo.PrecoTetoDCF,
+					Peso: 0.50,
+				})
+			}
+
+			if ativo.PrecoJustoLynch > 0 && ativo.LPA > 0 {
+				tetoLynchPrudente := math.Min(ativo.PrecoJustoLynch, 25.0*ativo.LPA)
+				if tetoLynchPrudente > 0 {
+					modelosValidos = append(modelosValidos, ModeloValuation{
+						Nome: "Peter Lynch",
+						Teto: tetoLynchPrudente,
+						Peso: 0.30,
+					})
+				}
+			}
+
+			if ativo.ValorGraham > 0 && ativo.LPA > 0 && ativo.VPA > 0 {
+				modelosValidos = append(modelosValidos, ModeloValuation{
+					Nome: "Graham",
+					Teto: ativo.ValorGraham,
+					Peso: 0.20,
 				})
 			}
 		}
@@ -948,6 +1045,25 @@ func ConsolidarPrecoTeto(ativo *domain.Ativo) {
 			tetoConsolidado += m.Teto * pesoNorm
 			nomesModelos = append(nomesModelos, fmt.Sprintf("%s: R$ %.2f (%.0f%%)", m.Nome, m.Teto, pesoNorm*100))
 		}
+
+		// Trava de Sanidade de Piso Institucional (Sanity Floor):
+		// Impede que distorções numéricas gerem preços teto absurdamente abaixo do valor patrimonial
+		// para empresas solventes com lucros recorrentes e ROE saudável.
+		if ativo.VPA > 0 && ativo.LPA > 0 && (ativo.ROE >= 10.0 || (ativo.LPA/ativo.VPA) >= 0.10) {
+			pisoPatrimonial := 0.70 * ativo.VPA
+			isEstatal := strings.Contains(strings.ToUpper(ativo.Nome+" "+ativo.Ticker), "BRASIL") ||
+				strings.Contains(strings.ToUpper(ativo.Nome+" "+ativo.Ticker), "BANRISUL") ||
+				strings.Contains(strings.ToUpper(ativo.Nome+" "+ativo.Ticker), "PETROBRAS")
+			if isEstatal {
+				pisoPatrimonial = 0.60 * ativo.VPA // Piso defensivo para empresas de controle estatal
+			}
+			pisoPatrimonial = math.Round(pisoPatrimonial*100) / 100
+			if tetoConsolidado < pisoPatrimonial {
+				tetoConsolidado = pisoPatrimonial
+				nomesModelos = append(nomesModelos, fmt.Sprintf("Piso Patrimonial Prudencial: R$ %.2f", pisoPatrimonial))
+			}
+		}
+
 		tetoConsolidado = math.Round(tetoConsolidado*100) / 100
 
 		premioUpside := ((tetoConsolidado - ativo.PrecoAtual) / ativo.PrecoAtual) * 100.0
