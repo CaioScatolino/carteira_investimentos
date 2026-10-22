@@ -57,6 +57,20 @@ func (s *AnalisadorScore) Executar(ativo *domain.Ativo) error {
 			ativo.MargemGraham = ((ativo.ValorGraham - ativo.PrecoAtual) / ativo.ValorGraham) * 100.0
 		}
 
+		// Porte e Robustez Institucional da Ação
+		if ativo.ValorMercado >= 15_000_000_000.0 && ativo.LiquidezMediaDiaria >= 10_000_000.0 {
+			ativo.Porte = "BLUE_CHIP"
+		} else if ativo.ValorMercado >= 3_000_000_000.0 && ativo.LiquidezMediaDiaria >= 2_000_000.0 {
+			ativo.Porte = "MID_CAP"
+		} else if ativo.ValorMercado >= 500_000_000.0 && ativo.LiquidezMediaDiaria >= 500_000.0 {
+			ativo.Porte = "SMALL_CAP"
+		} else {
+			ativo.Porte = "MICRO_CAP"
+		}
+
+		// Consolidação Consensual Multi-Modelo do Preço Teto e Upside (roda antes do Score)
+		ConsolidarPrecoTeto(ativo)
+
 		// Parecer 1: Décio Bazin
 		if ativo.IsProventoAtipico && ativo.PrecoTetoBazinSustentavel > 0 {
 			ativo.Pareceres["Bazin"] = domain.ParecerItem{
@@ -187,17 +201,6 @@ func (s *AnalisadorScore) Executar(ativo *domain.Ativo) error {
 			}
 		}
 
-		// Porte e Robustez Institucional da Ação
-		if ativo.ValorMercado >= 15_000_000_000.0 && ativo.LiquidezMediaDiaria >= 10_000_000.0 {
-			ativo.Porte = "BLUE_CHIP"
-		} else if ativo.ValorMercado >= 3_000_000_000.0 && ativo.LiquidezMediaDiaria >= 2_000_000.0 {
-			ativo.Porte = "MID_CAP"
-		} else if ativo.ValorMercado >= 500_000_000.0 && ativo.LiquidezMediaDiaria >= 500_000.0 {
-			ativo.Porte = "SMALL_CAP"
-		} else {
-			ativo.Porte = "MICRO_CAP"
-		}
-
 		// Parecer 5: Porte & Robustez Institucional
 		switch ativo.Porte {
 		case "BLUE_CHIP":
@@ -312,8 +315,17 @@ func (s *AnalisadorScore) Executar(ativo *domain.Ativo) error {
 		// PILAR 2: VALUATION & MARGEM DE SEGURANÇA (até 30 pontos)
 		// 2.1 Múltiplo Preço/Lucro & Earnings Yield (até 10 pontos)
 		if ativo.PL > 0 {
-			if ativo.PL <= 8.0 {
-				score += 10.0
+			if ativo.PL >= 3.5 && ativo.PL <= 8.0 {
+				score += 10.0 // Faixa ótima de valuation saudável
+			} else if ativo.PL < 3.5 {
+				// Alerta de distorção de P/L: em micro/small caps é frequentemente ganho contábil ou fiscal não-recorrente
+				if ativo.Porte == "BLUE_CHIP" {
+					score += 8.0 // Blue chips de alta liquidez com P/L deprimido em fundo de ciclo
+				} else if ativo.Porte == "MID_CAP" {
+					score += 7.0
+				} else {
+					score += 4.0 // Micro e Small caps com P/L < 3.5x pontuam de forma conservadora
+				}
 			} else if ativo.PL <= 12.0 {
 				score += 7.0
 			} else if ativo.PL <= 16.0 {
@@ -408,20 +420,48 @@ func (s *AnalisadorScore) Executar(ativo *domain.Ativo) error {
 			score += 2.0
 		}
 
-		// 4.2 Upside e Alinhamento com Preço Teto (até 8 pontos)
-		if ativo.PrecoTetoBazin5A > 0 && ativo.PrecoAtual <= ativo.PrecoTetoBazin5A {
-			score += 8.0
-		} else if ativo.PrecoTetoGordon > 0 && ativo.PrecoAtual <= ativo.PrecoTetoGordon {
-			score += 6.0
-		} else if ativo.PrecoJustoLynch > 0 && ativo.PrecoAtual <= ativo.PrecoJustoLynch {
-			score += 4.0
-		} else if ativo.PrecoTetoBazin > 0 && ativo.PrecoAtual <= ativo.PrecoTetoBazin {
-			score += 2.0
+		// 4.2 Upside e Alinhamento com Preço Teto Consensual (até 8 pontos)
+		if ativo.PrecoTetoConsolidado > 0 {
+			if ativo.MargemSegurancaConsolidada >= 25.0 {
+				score += 8.0 // Desconto institucional robusto (>= 25% de margem)
+			} else if ativo.MargemSegurancaConsolidada >= 15.0 {
+				score += 6.0
+			} else if ativo.MargemSegurancaConsolidada >= 5.0 {
+				score += 4.0
+			} else if ativo.MargemSegurancaConsolidada >= 0.0 {
+				score += 2.0
+			} else if ativo.MargemSegurancaConsolidada < -20.0 {
+				// Penalidade por ágio severo sobre o preço teto consensual (> 20% acima do teto)
+				score -= 4.0
+			}
+		} else {
+			// Fallback para modelos individuais caso não haja teto consolidado
+			if ativo.PrecoTetoBazin5A > 0 && ativo.PrecoAtual <= ativo.PrecoTetoBazin5A {
+				score += 8.0
+			} else if ativo.PrecoTetoGordon > 0 && ativo.PrecoAtual <= ativo.PrecoTetoGordon {
+				score += 6.0
+			} else if ativo.PrecoJustoLynch > 0 && ativo.PrecoAtual <= ativo.PrecoJustoLynch {
+				score += 4.0
+			} else if ativo.PrecoTetoBazin > 0 && ativo.PrecoAtual <= ativo.PrecoTetoBazin {
+				score += 2.0
+			}
 		}
 
 		// BÔNUS / AJUSTE MACRO: Prêmio real de Earnings Yield
 		if ativo.VereditoRisco == "COMPENSA_RISCO" {
 			score += 3.0
+		}
+
+		// BÔNUS INSTITUCIONAL DE PORTE & GOVERNANÇA (Size Factor Fama-French)
+		switch ativo.Porte {
+		case "BLUE_CHIP":
+			score += 6.0 // Fortaleza Institucional / Baixo risco de liquidez e governança
+		case "MID_CAP":
+			score += 3.0
+		case "SMALL_CAP":
+			score += 0.0
+		case "MICRO_CAP":
+			score -= 5.0 // Penalidade por iliquidez e fragilidade de balanço
 		}
 
 		// --- BLINDAGEM CONTRA VALUE TRAPS & RISCOS SEVEROS ---
@@ -436,12 +476,18 @@ func (s *AnalisadorScore) Executar(ativo *domain.Ativo) error {
 			score = math.Min(score, 68.0)
 		}
 
-		// 3. Microcaps ou ativos de baixa liquidez (< R$ 1M/dia)
-		if ativo.Porte == "MICRO_CAP" || (ativo.LiquidezMediaDiaria < 1_000_000.0 && ativo.LiquidezMediaDiaria > 0) {
-			score = math.Min(score, 78.0)
+		// 3. Microcaps ou ativos de baixa liquidez (< R$ 1.5B de MktCap ou < R$ 2M/dia de Liquidez):
+		// Teto rígido de 74 pts impede que distorções numéricas coloquem microcaps no Top 1 do Ranking da B3
+		if ativo.Porte == "MICRO_CAP" || ativo.ValorMercado < 1_500_000_000.0 || (ativo.LiquidezMediaDiaria < 2_000_000.0 && ativo.LiquidezMediaDiaria > 0) {
+			score = math.Min(score, 74.0)
 		}
 
-		// 4. Liquidez crítica (< R$ 50k/dia)
+		// 4. Liquidez reduzida (< R$ 500k/dia)
+		if ativo.LiquidezMediaDiaria < 500_000.0 && ativo.LiquidezMediaDiaria > 0 {
+			score = math.Min(score, 65.0)
+		}
+
+		// 5. Liquidez crítica (< R$ 50k/dia)
 		if ativo.LiquidezMediaDiaria < 50_000.0 && ativo.LiquidezMediaDiaria > 0 {
 			score = math.Max(0.0, score-20.0)
 		}
@@ -453,6 +499,9 @@ func (s *AnalisadorScore) Executar(ativo *domain.Ativo) error {
 	// CASO 2: FUNDOS IMOBILIÁRIOS (FIIs)
 	// ==========================================
 	if ativo.Classe == domain.ClasseFII {
+		// Consolidação Consensual Multi-Modelo do Preço Teto de FIIs
+		ConsolidarPrecoTeto(ativo)
+
 		if ativo.PrecoTetoBazin > 0 && ativo.PrecoAtual > 0 {
 			ativo.MargemBazin = ((ativo.PrecoTetoBazin - ativo.PrecoAtual) / ativo.PrecoTetoBazin) * 100.0
 		}
@@ -748,11 +797,8 @@ func (s *AnalisadorScore) Executar(ativo *domain.Ativo) error {
 		ativo.Score = score
 	}
 
-	// 2. Alinha o Status do Semáforo ao Score Consolidado e Regras de Segurança
+	// Alinha o Status do Semáforo ao Score Consolidado e Regras de Segurança
 	ativo.AvaliarSemaforo()
-
-	// 3. Consolidação Consensual Multi-Modelo do Preço Teto e % de Prêmio/Upside
-	ConsolidarPrecoTeto(ativo)
 
 	return nil
 }

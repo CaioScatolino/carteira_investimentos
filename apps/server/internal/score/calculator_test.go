@@ -322,3 +322,80 @@ func TestScoreMultiFatorSLCE3(t *testing.T) {
 		t.Errorf("SLCE3 com Earnings Yield de 12.1%% não deve ter RISCO_DESCOMPENSADO, obteve %s", slce3.VereditoRisco)
 	}
 }
+
+func TestSizeFactorEBlindagemMicrocapALLD3(t *testing.T) {
+	analisador := Novo()
+
+	// 1. ALLD3 (Allied Tecnologia): Microcap com P/L artificial de 1.86x por ganhos tributários,
+	// DY atípico de 14.8% e baixa liquidez diária (~R$ 380k/dia)
+	alld3 := &domain.Ativo{
+		Ticker:              "ALLD3",
+		Nome:                "ALLIED TECNOLOGIA S.A.",
+		Classe:              domain.ClasseAcao,
+		Setor:               "Consumo Cíclico",
+		Subsetor:            "Comércio",
+		Segmento:            "Eletrodomésticos",
+		PrecoAtual:          5.80,
+		LPA:                 3.12,  // P/L = 1.86x (Trap quantitativo)
+		VPA:                 13.53, // P/VP = 0.43x
+		Dividendos12M:       0.86,  // DY = 14.8%
+		MediaDividendos5A:   0.45,
+		ROIC:                16.0,
+		ROE:                 23.0,
+		ValorMercado:        670_000_000.0, // R$ 670M (Microcap)
+		LiquidezMediaDiaria: 380_000.0,     // R$ 380k/dia (Baixa Liquidez)
+		PiotroskiScore:      7,
+		Pareceres:           make(map[string]domain.ParecerItem),
+	}
+
+	// 2. PETR4 (Petrobras): Blue Chip de R$ 450 Bilhões com liquidez de R$ 1.5 Bi/dia
+	petr4 := &domain.Ativo{
+		Ticker:              "PETR4",
+		Nome:                "PETROLEO BRASILEIRO S.A. PETROBRAS",
+		Classe:              domain.ClasseAcao,
+		Setor:               "Petróleo, Gás e Biocombustíveis",
+		PrecoAtual:          36.50,
+		LPA:                 9.20,  // P/L = 3.97x (Faixa saudável institucional)
+		VPA:                 33.00, // P/VP = 1.10x
+		Dividendos12M:       5.50,  // DY = 15.0%
+		MediaDividendos5A:   5.10,
+		ROIC:                22.0,
+		ROE:                 27.8,
+		MargemLiquida:       24.0,
+		CrescimentoLucro5A:  8.0,
+		DividaLiquidaEbit:   0.8,
+		ValorMercado:        450_000_000_000.0,
+		LiquidezMediaDiaria: 1_200_000_000.0,
+		PiotroskiScore:      8,
+		Pareceres:           make(map[string]domain.ParecerItem),
+	}
+
+	_ = analisador.Executar(alld3)
+	_ = analisador.Executar(petr4)
+
+	t.Logf("ALLD3 Porte: %s | Score: %.0f/100 | Teto: R$ %.2f", alld3.Porte, alld3.Score, alld3.PrecoTetoConsolidado)
+	t.Logf("PETR4 Porte: %s | Score: %.0f/100 | Teto: R$ %.2f", petr4.Porte, petr4.Score, petr4.PrecoTetoConsolidado)
+
+	// Validação 1: ALLD3 deve ser classificada como MICRO_CAP
+	if alld3.Porte != "MICRO_CAP" {
+		t.Errorf("ALLD3 deveria ser MICRO_CAP, obteve %s", alld3.Porte)
+	}
+
+	// Validação 2: ALLD3 deve estar blindada pelo teto de liquidez (Score <= 65 ou <= 74)
+	if alld3.Score > 74 {
+		t.Errorf("ALLD3 não pode ultrapassar o teto de 74 pts para microcaps! Obteve %.0f", alld3.Score)
+	}
+
+	// Validação 3: PETR4 deve ser classificada como BLUE_CHIP e pontuar fortemente no Topo
+	if petr4.Porte != "BLUE_CHIP" {
+		t.Errorf("PETR4 deveria ser BLUE_CHIP, obteve %s", petr4.Porte)
+	}
+	if petr4.Score < 85 {
+		t.Errorf("PETR4 deveria ter Score >= 85, obteve %.0f", petr4.Score)
+	}
+
+	// Validação 4: PETR4 (Blue Chip consolidada) DEVE superar ALLD3 no ranking
+	if petr4.Score <= alld3.Score {
+		t.Errorf("PETR4 (%.0f) deveria ter pontuação superior a ALLD3 (%.0f) após o ajuste de porte", petr4.Score, alld3.Score)
+	}
+}

@@ -45,11 +45,15 @@ export function MarketTable({
   const filtrados = useMemo(() => {
     let lista = [...ativos];
 
-    if (filtroPorte === "BLUE_CHIPS") {
-      lista = lista.filter((a) => a.porte === "BLUE_CHIP" || a.porte === "FII_GIGANTE");
-    } else if (filtroPorte === "MID_SMALL") {
+    if (filtroPorte === "LIDERES") {
       lista = lista.filter(
-        (a) => a.porte === "MID_CAP" || a.porte === "SMALL_CAP" || a.porte === "FII_CONSOLIDADO"
+        (a) => a.porte === "BLUE_CHIP" || a.porte === "MID_CAP" || a.porte === "FII_GIGANTE" || a.porte === "FII_CONSOLIDADO"
+      );
+    } else if (filtroPorte === "BLUE_CHIPS") {
+      lista = lista.filter((a) => a.porte === "BLUE_CHIP" || a.porte === "FII_GIGANTE");
+    } else if (filtroPorte === "SMALL_MICRO") {
+      lista = lista.filter(
+        (a) => a.porte === "SMALL_CAP" || a.porte === "MICRO_CAP" || a.porte === "FII_MEDIO" || a.porte === "FII_CONCENTRADO"
       );
     }
 
@@ -177,14 +181,15 @@ export function MarketTable({
       <div className="px-5 py-3 bg-[#0a0a0e] border-b border-neutral-800/60 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
         {/* Lado Esquerdo: Filtros de Porte (Ações e FIIs) */}
         {classe !== "ETF" ? (
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
             <span className="text-[11px] text-neutral-500 uppercase tracking-wider font-mono mr-1">Porte:</span>
+            
             <button
               onClick={() => {
                 setFiltroPorte("TODOS");
                 setPagina(1);
               }}
-              className={`px-3 py-1 rounded-lg font-medium transition-all ${
+              className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
                 filtroPorte === "TODOS"
                   ? "bg-[#d4af37] text-black font-semibold shadow-sm"
                   : "bg-neutral-900 text-neutral-400 hover:text-white border border-neutral-800"
@@ -195,10 +200,32 @@ export function MarketTable({
 
             <button
               onClick={() => {
+                setFiltroPorte("LIDERES");
+                setPagina(1);
+              }}
+              title="Líderes de Mercado: Empresas consolidadas (Blue Chips e Mid Caps)"
+              className={`px-2.5 py-1 rounded-lg font-medium transition-all flex items-center gap-1.5 ${
+                filtroPorte === "LIDERES"
+                  ? "bg-[#d4af37] text-black font-semibold shadow-sm"
+                  : "bg-neutral-900 text-neutral-400 hover:text-white border border-neutral-800"
+              }`}
+            >
+              <span>{classe === "ACAO" ? "👑 Líderes (Blue & Mid)" : "🏰 Grandes & Médios"}</span>
+              <span
+                className={`text-[10px] px-1.5 rounded-full ${
+                  filtroPorte === "LIDERES" ? "bg-black/20 text-black font-bold" : "bg-neutral-800 text-[#d4af37]"
+                }`}
+              >
+                {ativos.filter((a) => a.porte === "BLUE_CHIP" || a.porte === "MID_CAP" || a.porte === "FII_GIGANTE" || a.porte === "FII_CONSOLIDADO").length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => {
                 setFiltroPorte("BLUE_CHIPS");
                 setPagina(1);
               }}
-              className={`px-3 py-1 rounded-lg font-medium transition-all flex items-center gap-1.5 ${
+              className={`px-2.5 py-1 rounded-lg font-medium transition-all flex items-center gap-1.5 ${
                 filtroPorte === "BLUE_CHIPS"
                   ? "bg-[#d4af37] text-black font-semibold shadow-sm"
                   : "bg-neutral-900 text-neutral-400 hover:text-white border border-neutral-800"
@@ -216,22 +243,23 @@ export function MarketTable({
 
             <button
               onClick={() => {
-                setFiltroPorte("MID_SMALL");
+                setFiltroPorte("SMALL_MICRO");
                 setPagina(1);
               }}
-              className={`px-3 py-1 rounded-lg font-medium transition-all flex items-center gap-1.5 ${
-                filtroPorte === "MID_SMALL"
+              title="Small & Micro Caps: Maior potencial de crescimento com maior volatilidade"
+              className={`px-2.5 py-1 rounded-lg font-medium transition-all flex items-center gap-1.5 ${
+                filtroPorte === "SMALL_MICRO"
                   ? "bg-[#d4af37] text-black font-semibold shadow-sm"
                   : "bg-neutral-900 text-neutral-400 hover:text-white border border-neutral-800"
               }`}
             >
-              <span>{classe === "ACAO" ? "⚡ Mid & Small" : "🏢 Consolidados"}</span>
+              <span>{classe === "ACAO" ? "🚀 Small & Micro" : "🏢 Médios & Concentrados"}</span>
               <span
                 className={`text-[10px] px-1.5 rounded-full ${
-                  filtroPorte === "MID_SMALL" ? "bg-black/20 text-black font-bold" : "bg-neutral-800 text-neutral-300"
+                  filtroPorte === "SMALL_MICRO" ? "bg-black/20 text-black font-bold" : "bg-neutral-800 text-neutral-300"
                 }`}
               >
-                {ativos.filter((a) => a.porte === "MID_CAP" || a.porte === "SMALL_CAP" || a.porte === "FII_CONSOLIDADO").length}
+                {ativos.filter((a) => a.porte === "SMALL_CAP" || a.porte === "MICRO_CAP" || a.porte === "FII_MEDIO" || a.porte === "FII_CONCENTRADO").length}
               </span>
             </button>
           </div>
@@ -520,7 +548,23 @@ export function MarketTable({
                             title="Mid Cap: Empresa consolidada de médio porte (> R$ 3B)"
                             className="px-1.5 py-0.5 text-[9px] font-medium rounded bg-neutral-800 text-neutral-300 border border-neutral-700 shrink-0"
                           >
-                            Mid Cap
+                            💎 Mid Cap
+                          </span>
+                        )}
+                        {ativo.porte === "SMALL_CAP" && (
+                          <span
+                            title="Small Cap: Empresa de menor porte (R$ 500M - R$ 3B) com potencial de expansão"
+                            className="px-1.5 py-0.5 text-[9px] font-medium rounded bg-cyan-950/40 text-cyan-300 border border-cyan-800/40 shrink-0"
+                          >
+                            🚀 Small Cap
+                          </span>
+                        )}
+                        {ativo.porte === "MICRO_CAP" && (
+                          <span
+                            title="Micro Cap: Ativo de menor capitalização (< R$ 1.5B) ou baixa liquidez (< R$ 2M/dia)"
+                            className="px-1.5 py-0.5 text-[9px] font-medium rounded bg-neutral-900 text-neutral-400 border border-neutral-800 shrink-0"
+                          >
+                            ⚠️ Micro Cap
                           </span>
                         )}
                         {ativo.is_provento_atipico && (

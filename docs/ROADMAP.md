@@ -225,3 +225,19 @@ Este documento é a bússola viva do projeto. Ele mapeia as decisões arquitetur
 - [ ] **Passo 12.4: Integração de Scraper Automático da NTN-B (Tesouro Direto / Anbima)**:
   - [ ] Sincronização em tempo real do juro real das NTN-Bs longas (Tesouro IPCA+ 2035/2045) via API oficial ou scraper diário, complementando a Selic do BCB SGS.
 
+### 🏆 FASE 13: Ranking Institucional por Porte (Size Factor), Blindagem contra Micro-Caps & Alinhamento com Margem de Preço Teto Consensual
+- [x] **Passo 13.1: Fator de Porte Institucional (Fama-French Size Factor)**:
+  - [x] Bônus de solidez institucional: `BLUE_CHIP` (+6.0 pts) e `MID_CAP` (+3.0 pts).
+  - [x] Penalidade por iliquidez e fragilidade de balanço: `MICRO_CAP` (-5.0 pts).
+- [x] **Passo 13.2: P/L Trap Filter (Distorções Fiscais e Não-Recorrentes)**:
+  - [x] P/L ótimo entre 3.5x e 8.0x ganha pontuação máxima (10 pts).
+  - [x] P/L artificialmente deprimido (< 3.5x) em small/micro-caps (ex: créditos fiscais de PIS/COFINS em ALLD3) pontua conservadoramente (4 pts) para evitar armadilhas de valor.
+- [x] **Passo 13.3: Alinhamento Direto do Score ao Preço Teto Consensual**:
+  - [x] Chamada antecipada de `ConsolidarPrecoTeto` garantindo que o Score pondere diretamente a `MargemSegurancaConsolidada` (+2 a +8 pts para margem >= 25%, com penalidade de -4 pts para ágio severo > 20%).
+- [x] **Passo 13.4: Blindagem Rigorosa de Top 1 contra Micro-Caps**:
+  - [x] Teto máximo de pontuação (74 pts para microcaps com MktCap < R$ 1.5B ou liquidez < R$ 2M/dia; 65 pts para liquidez < R$ 500k/dia), impedindo que microcaps tomem o topo das Blue Chips (PETR4, VALE3, BBAS3, ITUB4).
+- [x] **Passo 13.5: Segmentação e Badges Visuais no Frontend**:
+  - [x] Filtros de visualização na barra superior: `👑 Líderes (Blue & Mid)`, `👑 Blue Chips`, `🚀 Small & Micro` e `Todos`.
+  - [x] Badges visuais de porte na tabela: `👑 Blue Chip`, `💎 Mid Cap`, `🚀 Small Cap`, `⚠️ Micro Cap`.
+
+
