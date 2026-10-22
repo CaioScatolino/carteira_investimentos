@@ -79,22 +79,21 @@ func (b *AnalisadorBazin) Executar(ativo *domain.Ativo) error {
 	}
 
 	// Se o provento é atípico (venda de ativos, redução de capital, payout > 115% ou DY > 18%):
-	// Aplica Bazin Prudencial: limita o dividendo à capacidade de lucro (payout sustentável de 60% do LPA)
+	// Aplica Bazin Prudencial no 12M: limita o dividendo à capacidade de lucro (payout sustentável de 60% do LPA)
 	if ativo.IsProventoAtipico {
 		divSustentavel := math.Min(ativo.Dividendos12M, ativo.LPA*0.60)
 		tetoSustentavel, _ := Calcular(divSustentavel, yieldEfetivo)
 		ativo.PrecoTetoBazinSustentavel = tetoSustentavel
-		ativo.PrecoTetoBazin = tetoSustentavel // Previne teto inflado no dashboard
-		return nil
+		ativo.PrecoTetoBazin = tetoSustentavel // Previne teto inflado no dashboard no indicador 12M
+	} else {
+		// Caso regular de dividendos sustentáveis
+		teto, err := Calcular(ativo.Dividendos12M, yieldEfetivo)
+		if err != nil {
+			return err
+		}
+		ativo.PrecoTetoBazin = teto
+		ativo.PrecoTetoBazinSustentavel = teto
 	}
-
-	// Caso regular de dividendos sustentáveis
-	teto, err := Calcular(ativo.Dividendos12M, yieldEfetivo)
-	if err != nil {
-		return err
-	}
-	ativo.PrecoTetoBazin = teto
-	ativo.PrecoTetoBazinSustentavel = teto
 
 	// Cálculo do Preço Teto Bazin com Média dos Últimos 5 Anos (Regra Clássica de Décio Bazin)
 	// Prioriza a média saneada com Winsorização anti-outliers para evitar tetos artificiais (ex: PETR4)

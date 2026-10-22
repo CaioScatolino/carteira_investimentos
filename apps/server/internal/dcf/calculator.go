@@ -171,6 +171,12 @@ func CalcularDCF(ativo *domain.Ativo, cenario macro.CenarioMacro) (float64, floa
 	crescDec := math.Max(0.0, ativo.CrescimentoLucro5A/100.0)
 	g := math.Min(crescDec*0.5, 0.0361) // Travada no teto real do PIB de 3,61% a.a.
 
+	// Para setores perenes (commodities essenciais e concessões de utilidade pública),
+	// o crescimento perpétuo de longo prazo não zera após picos de ciclo (piso prudencial de 1.8% a.a.)
+	if g < 0.018 && (IsSetorCommodities(ativo.Setor, ativo.Subsetor, ativo.Segmento) || IsSetorUtilities(ativo.Setor, ativo.Subsetor, ativo.Segmento)) {
+		g = 0.018
+	}
+
 	denominador := wacc - g
 	if denominador < 0.02 {
 		denominador = 0.02 // Evita singularidades matemáticas

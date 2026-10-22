@@ -807,7 +807,8 @@ func FiltrarSanidadeEstatistica(modelos []ModeloValuation) []ModeloValuation {
 		return validos
 	}
 
-	limite := 1.5 * desvioPadrao
+	// Margem de tolerância: elimina apenas anomalias extremas (> 50% da mediana ou > 2 desvios-padrão)
+	limite := math.Max(0.50*mediana, 2.0*desvioPadrao)
 	var sobreviventes []ModeloValuation
 	for _, m := range validos {
 		if math.Abs(m.Teto-mediana) <= limite {
@@ -854,13 +855,17 @@ func ConsolidarPrecoTeto(ativo *domain.Ativo) {
 			media5A = math.Round(ativo.LPA*0.40*100) / 100
 		}
 
-		tetoBazin5A := ativo.PrecoTetoBazin5A
-		if tetoBazin5A <= 0 && media5A > 0 && yieldMinimoAcoes > 0 {
+		// Recalcula o Preço Teto Bazin 5A sempre ancorado no Yield Mínimo Real de Ações (Hurdle NTN-B + Spread)
+		// Isso evita que tetos legados calculados com a taxa fixa de 6% (ex: R$ 112.67) sejam descartados pelo filtro estatístico
+		tetoBazin5A := 0.0
+		if media5A > 0 && yieldMinimoAcoes > 0 {
 			tetoBazin5A = math.Round((media5A/yieldMinimoAcoes)*100) / 100
 			ativo.PrecoTetoBazin5A = tetoBazin5A
 			if ativo.PrecoAtual > 0 {
 				ativo.MargemBazin5A = math.Round(((ativo.PrecoTetoBazin5A-ativo.PrecoAtual)/ativo.PrecoTetoBazin5A)*1000) / 10
 			}
+		} else if ativo.PrecoTetoBazin5A > 0 {
+			tetoBazin5A = ativo.PrecoTetoBazin5A
 		}
 
 		// -------------------------------------------------------------
