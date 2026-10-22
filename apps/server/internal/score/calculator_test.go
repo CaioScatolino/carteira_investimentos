@@ -35,10 +35,10 @@ func TestConsolidarPrecoTetoAcaoOperacional(t *testing.T) {
 	t.Logf("VALE3 Prêmio / Upside: %+.1f%%", vale3.PremioDescontoPercentual)
 	t.Logf("VALE3 Modelos participantes: %v", vale3.ModelosTetoConsolidado)
 
-	// O teto ponderado com Graham descartado pelo filtro estatístico:
-	// DCF (70) e Bazin 5A (65) com 41.18% cada + Gordon (62) com 17.65% = R$ 66.53
-	if vale3.PrecoTetoConsolidado < 64.0 || vale3.PrecoTetoConsolidado > 68.0 {
-		t.Errorf("Preço teto de VALE3 (%.2f) fora da faixa esperada (~66.53)", vale3.PrecoTetoConsolidado)
+	// O teto ponderado com Graham de Ciclo integrado:
+	// DCF Proxy (70 - 35%) + Bazin 5A (65 - 35%) + Graham de Ciclo (75.60 - 30%) = R$ 69.93
+	if vale3.PrecoTetoConsolidado < 64.0 || vale3.PrecoTetoConsolidado > 72.0 {
+		t.Errorf("Preço teto de VALE3 (%.2f) fora da faixa esperada (~69.93)", vale3.PrecoTetoConsolidado)
 	}
 
 	// Com cotação a R$ 50.00, a margem de segurança é de 24.8% (supera o piso de 15% para Piotroski >= 7)

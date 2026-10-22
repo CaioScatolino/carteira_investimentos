@@ -979,12 +979,31 @@ func ConsolidarPrecoTeto(ativo *domain.Ativo) {
 				})
 			}
 
-			if ativo.ValorGraham > 0 && ativo.LPA > 0 && ativo.VPA > 0 {
-				modelosValidos = append(modelosValidos, ModeloValuation{
-					Nome: "Graham de Ciclo",
-					Teto: ativo.ValorGraham,
-					Peso: 0.30,
-				})
+			// Graham de Ciclo com Normalização Operacional:
+			// Em commodities, o LPA contábil sofre distorções severas de provisões não-caixa e câmbio.
+			// Derivamos o LPA de ciclo a partir do EBIT operacional recorrente.
+			lpaCiclo := ativo.LPA
+			if ativo.PEbit > 0 && ativo.PrecoAtual > 0 {
+				ebitPorAcao := ativo.PrecoAtual / ativo.PEbit
+				// Conversão de EBIT em Lucro Líquido normalizado de ciclo (margem após tributos/juros ~55%)
+				lpaEstimadoCiclo := ebitPorAcao * 0.55
+				if lpaEstimadoCiclo > lpaCiclo {
+					lpaCiclo = lpaEstimadoCiclo
+				}
+			}
+
+			if lpaCiclo > 0 && ativo.VPA > 0 {
+				viCiclo := math.Sqrt(22.5 * lpaCiclo * ativo.VPA)
+				// Trava de prudência de ciclo: limita a 1.80x VPA para evitar euforia de pico
+				viCicloPrudente := math.Min(viCiclo, 1.80*ativo.VPA)
+				viCicloPrudente = math.Round(viCicloPrudente*100) / 100
+				if viCicloPrudente > 0 {
+					modelosValidos = append(modelosValidos, ModeloValuation{
+						Nome: "Graham de Ciclo",
+						Teto: viCicloPrudente,
+						Peso: 0.30,
+					})
+				}
 			}
 
 		// -------------------------------------------------------------
