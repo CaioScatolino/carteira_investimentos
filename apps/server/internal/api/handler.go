@@ -3,6 +3,7 @@ package api
 import (
 	"carteira_investimentos/server/internal/auth"
 	"carteira_investimentos/server/internal/b3"
+	"carteira_investimentos/server/internal/calendar"
 	"carteira_investimentos/server/internal/domain"
 	"carteira_investimentos/server/internal/macro"
 	"carteira_investimentos/server/internal/portfolio"
@@ -12,6 +13,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -22,6 +24,7 @@ type Handler struct {
 	authService      *auth.Service
 	tokenManager     *auth.GerenciadorToken
 	portfolioService *portfolio.Service
+	calendarService  *calendar.Service
 }
 
 func NovoHandler(
@@ -30,9 +33,13 @@ func NovoHandler(
 	authService *auth.Service,
 	tokenManager *auth.GerenciadorToken,
 	portfolioService *portfolio.Service,
+	calendarService *calendar.Service,
 ) *Handler {
 	if b3Client == nil {
 		b3Client = b3.NovoB3Client()
+	}
+	if calendarService == nil {
+		calendarService = calendar.NovoService(store, b3Client)
 	}
 	return &Handler{
 		store:            store,
@@ -40,6 +47,7 @@ func NovoHandler(
 		authService:      authService,
 		tokenManager:     tokenManager,
 		portfolioService: portfolioService,
+		calendarService:  calendarService,
 	}
 }
 
@@ -201,3 +209,70 @@ func (h *Handler) ObterCenarioMacro(w http.ResponseWriter, r *http.Request) {
 	cenario := macro.ObterCenario()
 	responderJSON(w, http.StatusOK, cenario)
 }
+
+// ObterCalendarioProventos retorna a matriz preditiva de proventos calculada sobre o histórico B3
+func (h *Handler) ObterCalendarioProventos(w http.ResponseWriter, r *http.Request) {
+	if h.calendarService == nil {
+		responderJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"erro": "serviço de calendário não inicializado",
+		})
+		return
+	}
+
+	q := r.URL.Query()
+	tipoData := strings.ToUpper(strings.TrimSpace(q.Get("tipo_data")))
+	if tipoData != string(calendar.TipoDataPagamento) {
+		tipoData = string(calendar.TipoDataCom)
+	}
+
+	probMin := 0.0
+	if pStr := q.Get("prob_min"); pStr != "" {
+		if pVal, err := strconv.ParseFloat(pStr, 64); err == nil {
+			probMin = pVal
+		}
+	}
+
+	apenasCarteira := strings.EqualFold(q.Get("apenas_carteira"), "true") || q.Get("apenas_carteira") == "1"
+
+	filtro := calendar.FiltroCalendario{
+		TipoData:            tipoData,
+		ProbabilidadeMinima: probMin,
+		Classe:              strings.ToUpper(strings.TrimSpace(q.Get("classe"))),
+		Setor:               strings.TrimSpace(q.Get("setor")),
+		ApenasCarteira:      apenasCarteira,
+		Busca:               strings.TrimSpace(q.Get("busca")),
+	}
+
+	// Se o usuário solicitou apenas carteira ou enviou token, tentamos identificar o usuário para filtrar seus tickers
+	if apenasCarteira {
+		authHeader := r.Header.Get("Authorization")
+		var usuarioID int64
+		if authHeader != "" && h.tokenManager != nil {
+			partes := strings.SplitN(authHeader, " ", 2)
+			if len(partes) == 2 && strings.ToLower(partes[0]) == "bearer" {
+				if claims, err := h.tokenManager.ValidarToken(strings.TrimSpace(partes[1])); err == nil {
+					usuarioID = claims.UsuarioID
+				}
+			}
+		}
+
+		if usuarioID > 0 && h.portfolioService != nil {
+			if resumo, err := h.portfolioService.ObterResumoCarteira(r.Context(), usuarioID); err == nil && resumo != nil {
+				tickers := make([]string, 0, len(resumo.Posicoes))
+				for _, p := range resumo.Posicoes {
+					tickers = append(tickers, p.Ticker)
+				}
+				filtro.TickersCarteira = tickers
+			}
+		}
+	}
+
+	resumo, err := h.calendarService.ObterCalendario(r.Context(), filtro)
+	if err != nil {
+		responderJSON(w, http.StatusInternalServerError, map[string]string{"erro": err.Error()})
+		return
+	}
+
+	responderJSON(w, http.StatusOK, resumo)
+}
+

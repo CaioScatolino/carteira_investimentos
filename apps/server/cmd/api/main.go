@@ -13,6 +13,7 @@ import (
 	"carteira_investimentos/server/internal/auth"
 	"carteira_investimentos/server/internal/b3"
 	"carteira_investimentos/server/internal/bazin"
+	"carteira_investimentos/server/internal/calendar"
 	"carteira_investimentos/server/internal/catalog"
 	"carteira_investimentos/server/internal/config"
 	"carteira_investimentos/server/internal/dcf"
@@ -215,7 +216,8 @@ func main() {
 		portfolioService = portfolio.NovoService(portfolioRepo, store)
 	}
 
-	apiHandler := api.NovoHandler(store, b3Client, authService, tokenManager, portfolioService)
+	calendarService := calendar.NovoService(store, b3Client)
+	apiHandler := api.NovoHandler(store, b3Client, authService, tokenManager, portfolioService, calendarService)
 	router := apiHandler.ConfigurarRotas()
 
 	servidor := &http.Server{

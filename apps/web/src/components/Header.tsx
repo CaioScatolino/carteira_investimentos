@@ -10,8 +10,8 @@ interface HeaderProps {
   loading: boolean;
   onRefresh: () => void;
   ultimaAtualizacao?: string;
-  abaAtiva?: "mercado" | "carteira";
-  onMudarAba?: (aba: "mercado" | "carteira") => void;
+  abaAtiva?: "mercado" | "carteira" | "calendario";
+  onMudarAba?: (aba: "mercado" | "carteira" | "calendario") => void;
 }
 
 export function Header({
@@ -96,6 +96,19 @@ export function Header({
                   <span>Minha Carteira</span>
                   <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-[#d4af37]/20 text-[#d4af37] font-mono border border-[#d4af37]/40">
                     40/22.5/21
+                  </span>
+                </button>
+                <button
+                  onClick={() => onMudarAba("calendario")}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                    abaAtiva === "calendario"
+                      ? "bg-[#d4af37] text-black font-bold shadow-md shadow-[#d4af37]/20"
+                      : "text-neutral-400 hover:text-white"
+                  }`}
+                >
+                  <span>Calendário MDI</span>
+                  <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 font-mono border border-emerald-500/40 font-bold uppercase">
+                    B3 5A
                   </span>
                 </button>
               </nav>

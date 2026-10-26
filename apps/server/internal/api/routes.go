@@ -16,6 +16,7 @@ func (h *Handler) ConfigurarRotas() http.Handler {
 	mux.HandleFunc("GET /api/v1/rankings", h.ObterRankings)
 	mux.HandleFunc("GET /api/v1/ativos/{ticker}", h.ObterAtivoPorTicker)
 	mux.HandleFunc("GET /api/v1/ativos/{ticker}/dividendos", h.ObterAnaliseDividendos)
+	mux.HandleFunc("GET /api/v1/proventos/calendario", h.ObterCalendarioProventos)
 	// Endpoints Públicos de Autenticação
 	mux.HandleFunc("POST /api/v1/auth/register", h.RegistrarUsuario)
 	mux.HandleFunc("POST /api/v1/auth/login", h.LoginUsuario)

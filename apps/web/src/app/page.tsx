@@ -14,6 +14,7 @@ import { PortfolioTable } from "@/components/PortfolioTable";
 import { AddPositionModal } from "@/components/AddPositionModal";
 import { RebalanceSimulatorModal } from "@/components/RebalanceSimulatorModal";
 import { AuthModal } from "@/components/AuthModal";
+import { DividendCalendar } from "@/components/DividendCalendar";
 import { useAuth } from "@/context/AuthContext";
 import {
   TrendingUp,
@@ -34,7 +35,7 @@ export default function Dashboard() {
   const { usuario, token, loading: authLoading } = useAuth();
 
   // Estado de navegação
-  const [abaAtiva, setAbaAtiva] = useState<"mercado" | "carteira">("mercado");
+  const [abaAtiva, setAbaAtiva] = useState<"mercado" | "carteira" | "calendario">("mercado");
 
   // Dados do Mercado
   const [data, setData] = useState<RespostaRankings>({
@@ -234,6 +235,14 @@ export default function Dashboard() {
             }`}
           >
             Minha Carteira
+          </button>
+          <button
+            onClick={() => setAbaAtiva("calendario")}
+            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
+              abaAtiva === "calendario" ? "bg-[#d4af37] text-black" : "text-neutral-400"
+            }`}
+          >
+            MDI
           </button>
         </div>
 
@@ -493,6 +502,16 @@ export default function Dashboard() {
               </div>
             )}
           </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* ABA 3: CALENDÁRIO MDI (MAPA DE DIVIDENDOS INTELIGENTE)                    */}
+        {/* ========================================================================= */}
+        {abaAtiva === "calendario" && (
+          <DividendCalendar
+            onSelecionarAtivo={(ativo) => setAtivoSelecionado(ativo)}
+            todosAtivosMercado={[...data.acoes, ...data.fiis, ...data.etfs]}
+          />
         )}
       </main>
 

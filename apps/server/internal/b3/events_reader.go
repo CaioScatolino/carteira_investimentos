@@ -71,8 +71,11 @@ type AnaliseProventos5A struct {
 }
 
 var (
-	cacheAnalise5A   = make(map[string]*AnaliseProventos5A)
-	cacheAnalise5AMu sync.RWMutex
+	cacheAnalise5A         = make(map[string]*AnaliseProventos5A)
+	cacheAnalise5AMu       sync.RWMutex
+	cacheEventosBrutosB3   = make(map[string][]B3ProventoItem)
+	cacheTradingNameB3     = make(map[string]string)
+	cacheEventosBrutosB3Mu sync.RWMutex
 
 	// Dicionário canônico de Trading Names da B3 para Blue Chips, Mid Caps e principais pagadoras
 	mapaTradingNamesB3 = map[string]string{
@@ -330,16 +333,17 @@ func NormalizarProventos5A(proventosPorAno map[int]float64, anosReferencia []int
 	return mediaBruta, mediaBruta, false, ""
 }
 
-// ObterAnaliseProventos5A consulta a API oficial da B3, calcula os dividendos dos últimos 5 anos e compara com o StatusInvest
-func (c *B3Client) ObterAnaliseProventos5A(tradingName, ticker string, precoAtual, div12MStatusInvest float64) *AnaliseProventos5A {
+// ConsultarEventosBrutosB3 busca a lista completa de eventos em dinheiro direto da B3 com cache inteligente
+func (c *B3Client) ConsultarEventosBrutosB3(tradingName, ticker string) ([]B3ProventoItem, string, error) {
 	tickerUpper := strings.ToUpper(strings.TrimSpace(ticker))
 
-	cacheAnalise5AMu.RLock()
-	if val, ok := cacheAnalise5A[tickerUpper]; ok {
-		cacheAnalise5AMu.RUnlock()
-		return val
+	cacheEventosBrutosB3Mu.RLock()
+	if eventos, ok := cacheEventosBrutosB3[tickerUpper]; ok {
+		tn := cacheTradingNameB3[tickerUpper]
+		cacheEventosBrutosB3Mu.RUnlock()
+		return eventos, tn, nil
 	}
-	cacheAnalise5AMu.RUnlock()
+	cacheEventosBrutosB3Mu.RUnlock()
 
 	var candidatos []string
 
@@ -398,7 +402,7 @@ func (c *B3Client) ObterAnaliseProventos5A(tradingName, ticker string, precoAtua
 		adicionarCandidato(tickerUpper[:4])
 	}
 
-	var b3Resp B3ProventosResponse
+	var eventos []B3ProventoItem
 	var tradingNameUsado string
 
 	for _, cand := range candidatos {
@@ -432,11 +436,36 @@ func (c *B3Client) ObterAnaliseProventos5A(tradingName, ticker string, precoAtua
 
 		var tempResp B3ProventosResponse
 		if err := json.Unmarshal(body, &tempResp); err == nil && len(tempResp.Results) > 0 {
-			b3Resp = tempResp
+			eventos = tempResp.Results
 			tradingNameUsado = cand
 			break
 		}
 	}
+
+	if len(eventos) > 0 {
+		cacheEventosBrutosB3Mu.Lock()
+		cacheEventosBrutosB3[tickerUpper] = eventos
+		cacheTradingNameB3[tickerUpper] = tradingNameUsado
+		cacheEventosBrutosB3Mu.Unlock()
+	}
+
+	return eventos, tradingNameUsado, nil
+}
+
+// ObterAnaliseProventos5A consolida a série histórica, média de 5 anos de Bazin e a auditoria B3 vs StatusInvest
+func (c *B3Client) ObterAnaliseProventos5A(tradingName, ticker string, precoAtual, div12MStatusInvest float64) *AnaliseProventos5A {
+	tickerUpper := strings.ToUpper(strings.TrimSpace(ticker))
+
+	cacheAnalise5AMu.RLock()
+	if val, ok := cacheAnalise5A[tickerUpper]; ok {
+		cacheAnalise5AMu.RUnlock()
+		return val
+	}
+	cacheAnalise5AMu.RUnlock()
+
+	eventosB3, tradingNameUsado, _ := c.ConsultarEventosBrutosB3(tradingName, tickerUpper)
+	var b3Resp B3ProventosResponse
+	b3Resp.Results = eventosB3
 
 	// Se não retornou nada da B3 (caso dos FIIs ou ativos fora do CompanyCall da B3),
 	// consulta o histórico auditado do StatusInvest (cobre todos os FIIs e ações com histórico de anos anteriores)
