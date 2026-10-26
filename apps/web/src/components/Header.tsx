@@ -41,9 +41,20 @@ export function Header({
     return (partes[0][0] + (partes[partes.length - 1]?.[0] || "")).toUpperCase();
   };
 
-  const primeiroNome = usuario?.nome && typeof usuario.nome === "string"
-    ? usuario.nome.trim().split(" ")[0]
-    : (usuario?.email ? usuario.email.split("@")[0] : "Investidor");
+  const primeiroNome = (() => {
+    if (usuario?.nome && typeof usuario.nome === "string" && usuario.nome.trim()) {
+      const parte = usuario.nome.trim().split(" ")[0];
+      return parte.charAt(0).toUpperCase() + parte.slice(1).toLowerCase();
+    }
+    if (usuario?.email) {
+      const parteEmail = usuario.email.split("@")[0];
+      const limpo = parteEmail.split(/[._-]/)[0];
+      if (limpo) {
+        return limpo.charAt(0).toUpperCase() + limpo.slice(1).toLowerCase();
+      }
+    }
+    return "Investidor";
+  })();
 
   return (
     <>
@@ -87,29 +98,23 @@ export function Header({
                 </button>
                 <button
                   onClick={() => onMudarAba("carteira")}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                     abaAtiva === "carteira"
                       ? "bg-[#d4af37] text-black font-bold shadow-md shadow-[#d4af37]/20"
                       : "text-neutral-400 hover:text-white"
                   }`}
                 >
-                  <span>Minha Carteira</span>
-                  <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-[#d4af37]/20 text-[#d4af37] font-mono border border-[#d4af37]/40">
-                    40/22.5/21
-                  </span>
+                  Minha Carteira
                 </button>
                 <button
                   onClick={() => onMudarAba("calendario")}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                     abaAtiva === "calendario"
                       ? "bg-[#d4af37] text-black font-bold shadow-md shadow-[#d4af37]/20"
                       : "text-neutral-400 hover:text-white"
                   }`}
                 >
-                  <span>Calendário MDI</span>
-                  <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 font-mono border border-emerald-500/40 font-bold uppercase">
-                    B3 5A
-                  </span>
+                  Calendário MDI
                 </button>
               </nav>
             )}
@@ -117,12 +122,6 @@ export function Header({
 
           {/* Live Status & Actions */}
           <div className="flex items-center gap-3 sm:gap-4">
-            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-neutral-900/80 border border-neutral-800 text-xs">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span className="text-neutral-400">Feed B3/CVM:</span>
-              <span className="text-white font-mono font-medium">{totalAtivos} Ativos</span>
-            </div>
-
             {ultimaAtualizacao && (
               <span className="text-[11px] text-neutral-500 hidden lg:inline font-mono">
                 {ultimaAtualizacao}

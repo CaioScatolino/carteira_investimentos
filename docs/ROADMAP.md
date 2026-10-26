@@ -244,36 +244,43 @@ Este documento é a bússola viva do projeto. Ele mapeia as decisões arquitetur
   - [x] Gerador automático de variações corporativas (`S.A.`, `S/A`, `SA` e raiz), blindando qualquer ticker contra discrepâncias de pontuação.
   - [x] Filtro estrito por tipo de ação (`ON`, `PN` e `UNT`), garantindo que units e preferenciais (ex: `KLBN4`, `KLBN11`) capturem com 100% de precisão seu histórico oficial auditado.
 
-### 📅 FASE 14: Mapa de Dividendos Inteligente (MDI) & Calendário Preditivo de Proventos (Próximo Passo)
-- [ ] **Passo 14.1: Motor Preditivo de Sazonalidade de Proventos no Backend (`internal/calendar`)**:
-  - [ ] **Extração Estatística Mensal:** Processamento da série histórica de 3 a 5 anos de proventos auditados da B3 e StatusInvest, calculando a frequência de eventos para cada um dos 12 meses (Janeiro a Dezembro).
-  - [ ] **Cálculo de Probabilidade:**
+### 📅 FASE 14: Mapa de Dividendos Inteligente (MDI) & Calendário Preditivo de Proventos (Concluída)
+- [x] **Passo 14.1: Motor Preditivo de Sazonalidade de Proventos no Backend (`internal/calendar`)**:
+  - [x] **Extração Estatística Mensal:** Processamento da série histórica de 3 a 5 anos de proventos auditados da B3 e StatusInvest, calculando a frequência de eventos para cada um dos 12 meses (Janeiro a Dezembro).
+  - [x] **Cálculo de Probabilidade:**
     $$P(\text{mês}) = \frac{\text{Quantidade de Anos com Provento no Mês}}{\text{Total de Anos Analisados (ex: 5)}} \times 100\%$$
-  - [ ] **Dupla Modalidade Analítica:** Suporte a cálculo por **Data-Com** (mês de corte/anúncio) e por **Data de Pagamento** (mês de entrada efetiva do fluxo de caixa na conta).
-  - [ ] **Endpoint REST (`GET /api/v1/proventos/calendario`)**:
-    - Parâmetros: `tipo_data` (`DATA_COM` ou `DATA_PAGAMENTO`), `periodo_anos` (padrão 5 anos), `probabilidade_minima` (ex: 50%), `apenas_carteira` (filtro multi-tenant via JWT).
-    - Retorna a matriz consolidada: Ticker, Nome, Logo/Ícone, Setor, e array com os 12 meses contendo probabilidade percentual (0 a 100%), valor médio pago e quantidade histórica de ocorrências.
-- [ ] **Passo 14.2: Interface do Calendário de Proventos no Frontend Next.js (`apps/web`)**:
-  - [ ] **Navegação & Aba Dedicada:** Inclusão da aba **"📅 Calendário de Proventos"** no menu principal da plataforma.
-  - [ ] **Barra Superior de Filtros:**
+  - [x] **Dupla Modalidade Analítica:** Suporte a cálculo por **Data-Com** (mês de corte/anúncio) e por **Data de Pagamento** (mês de entrada efetiva do fluxo de caixa na conta).
+  - [x] **Endpoint REST (`GET /api/v1/proventos/calendario`)**:
+    - Parâmetros: `tipo_data` (`DATA_COM` ou `DATA_PAGAMENTO`), `periodo_anos` (padrão 5 anos), `probabilidade_minima` (ex: 50%), `apenas_carteira` (filtro multi-tenant via JWT), ordenação por volume financeiro e paginação Top 20 com Infinite Scroll.
+    - Retorna a matriz consolidada: Ticker, Nome, Logo/Ícone, Setor, e array com os 12 meses contendo probabilidade percentual calibrada (0% a 100% em múltiplos de 20%), valor médio pago e quantidade histórica de ocorrências.
+- [x] **Passo 14.2: Interface do Calendário de Proventos no Frontend Next.js (`apps/web`)**:
+  - [x] **Navegação & Aba Dedicada:** Inclusão da aba **"📅 Calendário MDI"** no menu principal da plataforma.
+  - [x] **Barra Superior de Filtros:**
     - Seletor de visualização: **"Minha Carteira"** (fluxo projetado da custódia do investidor) vs **"Todos os Ativos"**.
     - Alternador de modalidade: **"Data Com"** vs **"Data de Pagamento"**.
-    - Slider/Seletor de Probabilidade Mínima: ex: $\ge 40\%$, $\ge 50\%$, $\ge 70\%$, ou "Todas as Ocorrências".
-    - Toggle "Um ticker por empresa" (agrupamento ON/PN/UNT).
-    - Filtro por Setores e campo de busca rápida por Ticker ou Razão Social.
-  - [ ] **Tabela Matriz de 12 Meses (Janeiro a Dezembro)**:
-    - Coluna fixa de Ativo (Logo, Ticker, Nome da Empresa).
-    - Colunas dos 12 meses com células visuais intuitivas (ícone de moeda com badge de probabilidade).
-    - **Gradiente Dinâmico de Cores (Heatmap):**
-      - Verde esmeralda intenso e brilhante para alta probabilidade ($\ge 80\%$).
-      - Verde jade intermediário para probabilidade moderada ($\ge 50\%$).
-      - Verde escuro sutil para probabilidades menores ($< 50\%$).
-    - **Tooltips Ricos ao Passar o Mouse:** Exibição detalhada:
-      - Probabilidade histórica (ex: *"90% de chance da Data-Com de PETR4 ocorrer em Abril"*).
-      - Valor médio pago no mês nos últimos 5 anos.
-      - Histórico de pagamentos nos anos anteriores naquele mês específico.
-- [ ] **Passo 14.3: Integração com a Carteira do Usuário (Planejador de Renda Passiva)**:
-  - [ ] Cruzamento dinâmico com as posições cadastradas na carteira do usuário autenticado para destacar quais meses do ano o investidor receberá proventos e identificar eventuais "meses vazios" sem renda passiva, auxiliando no rebalanceamento e diversificação temporal.
+    - Filtro de Probabilidade Mínima: Todos, $\ge 40\%$, $\ge 60\%$, $\ge 80\%$, $100\%$ com mascaramento inteligente de células com `-`.
+    - Alternador de Visualização: **"Tabela Matriz"** vs **"Visão Calendário (Cards de 12 Meses)"**.
+    - Filtro por Classes (Ações, FIIs), Setores B3 e campo de busca rápida por Ticker ou Razão Social.
+  - [x] **Tabela Matriz de 12 Meses (Janeiro a Dezembro)**:
+    - Coluna fixa de Ativo (Ticker, Razão Social, Segmento).
+    - Colunas dos 12 meses com células visuais intuitivas e heatmap calibrado.
+    - **Tooltips Ricos Flutuantes (`position: fixed`):** Exibição sem cortes de probabilidade, valor médio histórico e anos em que pagou proventos.
+    - **Modal de Detalhes 12M:** Acesso rápido ao resumo anual expandido ao clicar no ticker ou no botão expandir.
+- [x] **Passo 14.3: Integração com a Carteira do Usuário (Planejador de Renda Passiva)**:
+  - [x] Cruzamento dinâmico com as posições cadastradas na carteira do usuário autenticado para destacar quais meses do ano o investidor receberá proventos e identificar eventuais meses vazios.
+
+### 📈 FASE 15: Gestão Contábil Avançada de Carteira, Novos Aportes & Preço Médio Ponderado (Próximo Passo)
+- [ ] **Passo 15.1: Recálculo Automático de Preço Médio (Média Ponderada Contábil)**:
+  - Ao realizar um novo aporte ou compra de um ativo já existente na custódia do investidor:
+    $$Q_{\text{total}} = Q_{\text{antiga}} + Q_{\text{nova}}$$
+    $$\text{Preço Médio Novo} = \frac{(Q_{\text{antiga}} \times \text{PM}_{\text{antigo}}) + (Q_{\text{nova}} \times \text{Preço}_{\text{compra}})}{Q_{\text{total}}}$$
+  - Atualização automática do Livro-Razão Contábil (`carteira_transacoes`) preservando rastreabilidade fiscal para apuração de IR.
+- [ ] **Passo 15.2: Ação Rápida de Aporte ("Comprar Mais") no Frontend**:
+  - Botão de atalho direto na tabela de custódia da carteira (`PortfolioTable`) ao lado de cada ativo cadastrado.
+  - Modal dedicado de Aporte com ticker travado, exibindo posição atual e calculando em tempo real o novo Preço Médio resultante antes da confirmação.
+- [ ] **Passo 15.3: Histórico de Transações e Extrato de Aportes/Vendas**:
+  - Aba ou gaveta de visualização do histórico de operações (`carteira_transacoes`) por ativo, exibindo datas, preços unitários e evolução do preço médio ao longo do tempo.
+
 
 
 
