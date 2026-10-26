@@ -38,7 +38,7 @@ func NovoService(store storage.SnapshotStore, b3Client *b3.B3Client) *Service {
 	}
 }
 
-// ObterCalendario processa os proventos históricos de todos os ativos ou da carteira e calcula a matriz sazonal
+// ObterCalendario processa os proventos históricos dos ativos (top volume / carteira) e calcula a matriz sazonal
 func (s *Service) ObterCalendario(ctx context.Context, filtro FiltroCalendario) (*ResumoCalendario, error) {
 	todosAtivos := s.store.ListarTodos()
 	if len(todosAtivos) == 0 {
@@ -56,6 +56,18 @@ func (s *Service) ObterCalendario(ctx context.Context, filtro FiltroCalendario) 
 		tipoData = "DATA_COM"
 	}
 
+	limite := filtro.Limite
+	if limite <= 0 {
+		limite = 20
+	} else if limite > 100 {
+		limite = 100
+	}
+
+	offset := filtro.Offset
+	if offset < 0 {
+		offset = 0
+	}
+
 	mapaTickersCarteira := make(map[string]bool)
 	for _, tk := range filtro.TickersCarteira {
 		mapaTickersCarteira[strings.ToUpper(strings.TrimSpace(tk))] = true
@@ -64,10 +76,8 @@ func (s *Service) ObterCalendario(ctx context.Context, filtro FiltroCalendario) 
 	anoAtual := time.Now().Year()
 	anosReferencia := []int{anoAtual - 5, anoAtual - 4, anoAtual - 3, anoAtual - 2, anoAtual - 1}
 
-	var resultado []AtivoCalendario
-	mesesFrequentes := make(map[string]int)
-
-	// Processa os ativos da base
+	// 1. Filtragem preliminar em memória (sem chamadas I/O de rede)
+	var candidatos []*domain.Ativo
 	for _, a := range todosAtivos {
 		if a.PrecoAtual <= 0 {
 			continue
@@ -75,23 +85,23 @@ func (s *Service) ObterCalendario(ctx context.Context, filtro FiltroCalendario) 
 
 		tkUpper := strings.ToUpper(strings.TrimSpace(a.Ticker))
 
-		// 1. Filtro: Apenas Carteira
+		// Filtro Carteira
 		naCarteira := mapaTickersCarteira[tkUpper]
 		if filtro.ApenasCarteira && !naCarteira {
 			continue
 		}
 
-		// 2. Filtro: Classe
+		// Filtro Classe
 		if filtro.Classe != "" && !strings.EqualFold(string(a.Classe), filtro.Classe) {
 			continue
 		}
 
-		// 3. Filtro: Setor
+		// Filtro Setor
 		if filtro.Setor != "" && !strings.EqualFold(a.Setor, filtro.Setor) {
 			continue
 		}
 
-		// 4. Filtro: Busca por texto (Ticker ou Nome)
+		// Filtro Busca (Ticker ou Nome)
 		if filtro.Busca != "" {
 			termo := strings.ToLower(strings.TrimSpace(filtro.Busca))
 			match := strings.Contains(strings.ToLower(a.Ticker), termo) || strings.Contains(strings.ToLower(a.Nome), termo)
@@ -100,30 +110,92 @@ func (s *Service) ObterCalendario(ctx context.Context, filtro FiltroCalendario) 
 			}
 		}
 
-		// Consulta ou recupera do cache o cálculo deste ativo
-		chaveCache := tkUpper + "_" + tipoData
-		s.cacheMu.RLock()
-		itemCal, emCache := s.cacheDados[chaveCache]
-		s.cacheMu.RUnlock()
+		candidatos = append(candidatos, a)
+	}
 
-		if !emCache {
-			itemCal = s.calcularSazonalidadeAtivo(a, tipoData, anosReferencia)
-			s.cacheMu.Lock()
-			s.cacheDados[chaveCache] = itemCal
-			s.cacheMu.Unlock()
+	// 2. Ordenação Institucional por Volume / Liquidez
+	// Ativos na carteira têm prioridade no topo; em seguida, ordenados por Volume Total e Score
+	sort.Slice(candidatos, func(i, j int) bool {
+		tkI := strings.ToUpper(strings.TrimSpace(candidatos[i].Ticker))
+		tkJ := strings.ToUpper(strings.TrimSpace(candidatos[j].Ticker))
+		posI := mapaTickersCarteira[tkI]
+		posJ := mapaTickersCarteira[tkJ]
+		if posI != posJ {
+			return posI
 		}
+		if candidatos[i].VolumeTotal != candidatos[j].VolumeTotal {
+			return candidatos[i].VolumeTotal > candidatos[j].VolumeTotal
+		}
+		return candidatos[i].Score > candidatos[j].Score
+	})
 
-		itemCal.PossuiNaCarteira = naCarteira
+	totalCandidatos := len(candidatos)
 
-		// 5. Filtro: Probabilidade Mínima
-		// Se o filtro exigir prob mínima (ex: >= 50%), o ativo precisa ter pelo menos um mês com prob >= filtro
+	// 3. Paginação do slice de candidatos (ex: top 20 volume)
+	start := offset
+	if start > totalCandidatos {
+		start = totalCandidatos
+	}
+	end := start + limite
+	if end > totalCandidatos {
+		end = totalCandidatos
+	}
+	pagina := candidatos[start:end]
+	temMais := end < totalCandidatos
+
+	// 4. Execução Concorrente com Limitação de Concorrência (8 workers paralelos)
+	type itemResult struct {
+		index int
+		item  AtivoCalendario
+	}
+	resCh := make(chan itemResult, len(pagina))
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 8)
+
+	for i, ativo := range pagina {
+		wg.Add(1)
+		go func(idx int, a *domain.Ativo) {
+			defer wg.Done()
+			tkUpper := strings.ToUpper(strings.TrimSpace(a.Ticker))
+			chaveCache := tkUpper + "_" + tipoData
+
+			s.cacheMu.RLock()
+			itemCal, emCache := s.cacheDados[chaveCache]
+			s.cacheMu.RUnlock()
+
+			if !emCache {
+				sem <- struct{}{}
+				itemCal = s.calcularSazonalidadeAtivo(a, tipoData, anosReferencia)
+				<-sem
+
+				s.cacheMu.Lock()
+				s.cacheDados[chaveCache] = itemCal
+				s.cacheMu.Unlock()
+			}
+
+			itemCal.PossuiNaCarteira = mapaTickersCarteira[tkUpper]
+			resCh <- itemResult{index: idx, item: itemCal}
+		}(i, ativo)
+	}
+
+	wg.Wait()
+	close(resCh)
+
+	itensCalculados := make([]AtivoCalendario, len(pagina))
+	for r := range resCh {
+		itensCalculados[r.index] = r.item
+	}
+
+	// 5. Aplicar filtro de probabilidade mínima e agregar estatísticas
+	var resultado []AtivoCalendario
+	mesesFrequentes := make(map[string]int)
+
+	for _, itemCal := range itensCalculados {
 		if filtro.ProbabilidadeMinima > 0 && itemCal.MaiorProbabilidade < filtro.ProbabilidadeMinima {
 			continue
 		}
-
 		resultado = append(resultado, itemCal)
 
-		// Contabiliza frequência geral para estatística agregada
 		for _, m := range itemCal.Meses {
 			if m.Probabilidade >= 50.0 {
 				mesesFrequentes[m.NomeMes]++
@@ -131,21 +203,11 @@ func (s *Service) ObterCalendario(ctx context.Context, filtro FiltroCalendario) 
 		}
 	}
 
-	// Ordenação Institucional:
-	// 1. Posições que o usuário possui na carteira aparecem primeiro
-	// 2. Ativos ordenados pelo Score Fundamentalista e Maior Probabilidade
-	sort.Slice(resultado, func(i, j int) bool {
-		if resultado[i].PossuiNaCarteira != resultado[j].PossuiNaCarteira {
-			return resultado[i].PossuiNaCarteira // Carteira no topo
-		}
-		if resultado[i].Score != resultado[j].Score {
-			return resultado[i].Score > resultado[j].Score
-		}
-		return resultado[i].MaiorProbabilidade > resultado[j].MaiorProbabilidade
-	})
-
 	return &ResumoCalendario{
-		TotalAtivos:         len(resultado),
+		TotalAtivos:         totalCandidatos,
+		Limite:              limite,
+		Offset:              offset,
+		TemMais:             temMais,
 		TipoData:            tipoData,
 		PeriodoAnos:         len(anosReferencia),
 		ProbabilidadeMinima: filtro.ProbabilidadeMinima,

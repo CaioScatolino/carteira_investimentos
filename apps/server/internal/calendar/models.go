@@ -40,6 +40,9 @@ type AtivoCalendario struct {
 // ResumoCalendario encapsula a resposta consolidada do endpoint de calendário
 type ResumoCalendario struct {
 	TotalAtivos         int               `json:"total_ativos"`
+	Limite              int               `json:"limite"`
+	Offset              int               `json:"offset"`
+	TemMais             bool              `json:"tem_mais"`
 	TipoData            string            `json:"tipo_data"`            // "DATA_COM" ou "DATA_PAGAMENTO"
 	PeriodoAnos         int               `json:"periodo_anos"`         // Ex: 5
 	ProbabilidadeMinima float64           `json:"probabilidade_minima"` // Filtro aplicado
@@ -56,4 +59,6 @@ type FiltroCalendario struct {
 	Classe              string   // "ACAO", "FII" ou ""
 	Setor               string   // Filtrar por setor específico
 	Busca               string   // Termo de busca por ticker ou nome
+	Limite              int      // Quantidade máxima a retornar por página (ex: 20)
+	Offset              int      // Deslocamento inicial da lista
 }

@@ -30,6 +30,9 @@ export interface AtivoCalendario {
 
 export interface ResumoCalendario {
   total_ativos: number;
+  limite?: number;
+  offset?: number;
+  tem_mais?: boolean;
   tipo_data: "DATA_COM" | "DATA_PAGAMENTO";
   periodo_anos: number;
   probabilidade_minima: number;

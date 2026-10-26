@@ -234,6 +234,20 @@ func (h *Handler) ObterCalendarioProventos(w http.ResponseWriter, r *http.Reques
 
 	apenasCarteira := strings.EqualFold(q.Get("apenas_carteira"), "true") || q.Get("apenas_carteira") == "1"
 
+	limite := 20
+	if lStr := q.Get("limite"); lStr != "" {
+		if lVal, err := strconv.Atoi(lStr); err == nil && lVal > 0 {
+			limite = lVal
+		}
+	}
+
+	offset := 0
+	if oStr := q.Get("offset"); oStr != "" {
+		if oVal, err := strconv.Atoi(oStr); err == nil && oVal >= 0 {
+			offset = oVal
+		}
+	}
+
 	filtro := calendar.FiltroCalendario{
 		TipoData:            tipoData,
 		ProbabilidadeMinima: probMin,
@@ -241,6 +255,8 @@ func (h *Handler) ObterCalendarioProventos(w http.ResponseWriter, r *http.Reques
 		Setor:               strings.TrimSpace(q.Get("setor")),
 		ApenasCarteira:      apenasCarteira,
 		Busca:               strings.TrimSpace(q.Get("busca")),
+		Limite:              limite,
+		Offset:              offset,
 	}
 
 	// Se o usuário solicitou apenas carteira ou enviou token, tentamos identificar o usuário para filtrar seus tickers
