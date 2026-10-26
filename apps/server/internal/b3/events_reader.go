@@ -111,7 +111,7 @@ var (
 		"CSAN3": "COSAN",
 		"VIVT3": "TELEF BRASIL",
 		"TIMS3": "TIM",
-		"KLBN11": "KLABIN S/A", "KLBN4": "KLABIN S/A", "KLBN3": "KLABIN S/A",
+		"KLBN11": "KLABIN S.A.", "KLBN4": "KLABIN S.A.", "KLBN3": "KLABIN S.A.",
 		"SUZB3": "SUZANO S.A.",
 		"RANI3": "IRANI",
 		"GGBR4": "GERDAU", "GGBR3": "GERDAU",
@@ -138,7 +138,7 @@ var (
 		"EZTC3": "EZTEC",
 		"MRVE3": "MRV",
 		"DIRR3": "DIRECIONAL",
-		"CURY3": "CURY S/A",
+		"CURY3": "CURY S.A.",
 		"PLPL3": "PLANOEPLANO",
 		"LAVV3": "LAVVI",
 		"JHSF3": "JHSF PART",
@@ -343,32 +343,59 @@ func (c *B3Client) ObterAnaliseProventos5A(tradingName, ticker string, precoAtua
 
 	var candidatos []string
 
+	adicionarCandidato := func(cand string) {
+		cand = strings.TrimSpace(cand)
+		if cand == "" {
+			return
+		}
+		vars := []string{cand}
+		// Variações de sufixo corporativo (B3 às vezes usa S.A., às vezes SA, às vezes sem sufixo)
+		if strings.Contains(cand, " S/A") {
+			vars = append(vars, strings.ReplaceAll(cand, " S/A", " S.A."))
+			vars = append(vars, strings.ReplaceAll(cand, " S/A", " SA"))
+			vars = append(vars, strings.TrimSpace(strings.ReplaceAll(cand, " S/A", "")))
+		} else if strings.Contains(cand, " S.A.") {
+			vars = append(vars, strings.ReplaceAll(cand, " S.A.", " SA"))
+			vars = append(vars, strings.ReplaceAll(cand, " S.A.", " S/A"))
+			vars = append(vars, strings.TrimSpace(strings.ReplaceAll(cand, " S.A.", "")))
+		} else if strings.Contains(cand, " SA") {
+			vars = append(vars, strings.ReplaceAll(cand, " SA", " S.A."))
+			vars = append(vars, strings.ReplaceAll(cand, " SA", " S/A"))
+			vars = append(vars, strings.TrimSpace(strings.ReplaceAll(cand, " SA", "")))
+		}
+
+		for _, v := range vars {
+			v = strings.TrimSpace(v)
+			if v == "" {
+				continue
+			}
+			jaExiste := false
+			for _, c := range candidatos {
+				if c == v {
+					jaExiste = true
+					break
+				}
+			}
+			if !jaExiste {
+				candidatos = append(candidatos, v)
+			}
+		}
+	}
+
 	// 1. Tenta obter nome oficial da B3 (Dicionário canônico ou COTAHIST com 851 tickers)
 	nomeOficial := c.ObterTradingName(tickerUpper)
 	if nomeOficial != "" {
-		candidatos = append(candidatos, nomeOficial)
+		adicionarCandidato(nomeOficial)
 	}
 
 	// 2. Normaliza e gera candidatos a partir da razão social do StatusInvest
 	for _, cand := range SanitizarNomeEmpresa(tradingName) {
-		if cand != "" && cand != nomeOficial {
-			candidatos = append(candidatos, cand)
-		}
+		adicionarCandidato(cand)
 	}
 
 	// 3. Fallback adicional para os 4 primeiros caracteres do ticker (ex: ITUB, VALE)
 	if len(tickerUpper) >= 4 {
-		rad := tickerUpper[:4]
-		encontrado := false
-		for _, c := range candidatos {
-			if c == rad {
-				encontrado = true
-				break
-			}
-		}
-		if !encontrado {
-			candidatos = append(candidatos, rad)
-		}
+		adicionarCandidato(tickerUpper[:4])
 	}
 
 	var b3Resp B3ProventosResponse
@@ -564,7 +591,7 @@ func (c *B3Client) ObterAnaliseProventos5A(tradingName, ticker string, precoAtua
 	eventosProcessados := 0
 
 	for _, it := range b3Resp.Results {
-		if it.TypeStock != "" && tipoAlvo != "UNT" && !strings.Contains(it.TypeStock, tipoAlvo) {
+		if it.TypeStock != "" && !strings.Contains(it.TypeStock, tipoAlvo) {
 			continue
 		}
 

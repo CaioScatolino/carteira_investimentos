@@ -23,6 +23,7 @@ func TestObterAnaliseProventos5A(t *testing.T) {
 		{"KNIP11", "KINEA INDICE DE PRECOS FII", 98.20, 10.18},
 		{"MXRF11", "MAXI RENDA FII", 10.15, 1.17},
 		{"HGLG11", "CSHG LOGISTICA FII", 162.50, 13.20},
+		{"KLBN4", "KLABIN S.A.", 4.50, 0.28},
 	}
 
 	for _, tt := range testes {
