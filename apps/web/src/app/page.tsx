@@ -526,6 +526,7 @@ export default function Dashboard() {
         isOpen={modalAddAberto}
         onClose={() => setModalAddAberto(false)}
         onSalvar={handleSalvarPosicao}
+        ativosDisponiveis={[...data.acoes, ...data.fiis, ...data.etfs]}
       />
 
       <RebalanceSimulatorModal
