@@ -239,5 +239,10 @@ Este documento é a bússola viva do projeto. Ele mapeia as decisões arquitetur
 - [x] **Passo 13.5: Segmentação e Badges Visuais no Frontend**:
   - [x] Filtros de visualização na barra superior: `👑 Líderes (Blue & Mid)`, `👑 Blue Chips`, `🚀 Small & Micro` e `Todos`.
   - [x] Badges visuais de porte na tabela: `👑 Blue Chip`, `💎 Mid Cap`, `🚀 Small Cap`, `⚠️ Micro Cap`.
+- [x] **Passo 13.6: Resiliência e Auditoria da API de Proventos B3 (KLABIN, CURY & Variações)**:
+  - [x] Correção de nomes oficiais corporativos (`KLABIN S.A.` e `CURY S.A.`) para compatibilidade com o endpoint `GetListedCashDividends` da B3.
+  - [x] Gerador automático de variações corporativas (`S.A.`, `S/A`, `SA` e raiz), blindando qualquer ticker contra discrepâncias de pontuação.
+  - [x] Filtro estrito por tipo de ação (`ON`, `PN` e `UNT`), garantindo que units e preferenciais (ex: `KLBN4`, `KLBN11`) capturem com 100% de precisão seu histórico oficial auditado.
+
 
 
