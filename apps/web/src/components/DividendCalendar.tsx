@@ -12,6 +12,11 @@ import {
   Loader2,
   X,
   Layers,
+  LayoutGrid,
+  Table as TableIcon,
+  TrendingUp,
+  Building2,
+  ExternalLink,
 } from "lucide-react";
 import { API_V1_URL } from "@/config/api";
 import { useAuth } from "@/context/AuthContext";
@@ -49,11 +54,14 @@ export function DividendCalendar({
   const [busca, setBusca] = useState<string>("");
   const [setorSelecionado, setSetorSelecionado] = useState<string>("");
 
+  // Modo de visualização: Tabela Matriz vs Visão Calendário (Cards de 12 Meses)
+  const [modoVisualizacao, setModoVisualizacao] = useState<"tabela" | "calendario">("tabela");
+  const [modalCalendarioAberto, setModalCalendarioAberto] = useState<boolean>(false);
+
   // Estado dos dados e Paginação (Top 20 com Infinite Scroll)
   const [listaAtivos, setListaAtivos] = useState<AtivoCalendario[]>([]);
   const [totalAtivosGeral, setTotalAtivosGeral] = useState<number>(0);
   const [temMais, setTemMais] = useState<boolean>(false);
-  const [mesesFrequentes, setMesesFrequentes] = useState<Record<string, number>>({});
   const [periodoAnos, setPeriodoAnos] = useState<number>(5);
 
   const [loadingInicial, setLoadingInicial] = useState<boolean>(true);
@@ -129,13 +137,9 @@ export function DividendCalendar({
         setTotalAtivosGeral(json.total_ativos || 0);
         setTemMais(Boolean(json.tem_mais));
         setPeriodoAnos(json.periodo_anos || 5);
-        if (json.meses_mais_frequentes && Object.keys(json.meses_mais_frequentes).length > 0) {
-          setMesesFrequentes(json.meses_mais_frequentes);
-        }
 
         if (append) {
           setListaAtivos((prev) => {
-            // Evita duplicações acidentais por ticker
             const existentes = new Set(prev.map((a) => a.ticker));
             const filtrados = novosAtivos.filter((a) => !existentes.has(a.ticker));
             return [...prev, ...filtrados];
@@ -196,6 +200,63 @@ export function DividendCalendar({
     return Array.from(set).sort();
   }, [todosAtivosMercado]);
 
+  // Concentração dinâmica calculada a partir dos ativos exibidos e do corte ativo
+  const concentracaoPorMes = useMemo(() => {
+    return NOMES_MESES_COMPLETOS.map((nomeMes, idx) => {
+      const mesNum = idx + 1;
+      const sigla = NOMES_MESES[idx];
+      const pagadores: {
+        ticker: string;
+        nome: string;
+        probabilidade: number;
+        classe: string;
+        valorMedio: number;
+        tipos: string[];
+      }[] = [];
+
+      for (const a of listaAtivos) {
+        const m = a.meses?.find((item) => item.mes === mesNum);
+        if (m) {
+          const atende = probMin === 0 || m.probabilidade >= probMin;
+          if (atende && m.probabilidade > 0) {
+            pagadores.push({
+              ticker: a.ticker,
+              nome: a.nome,
+              probabilidade: m.probabilidade,
+              classe: a.classe,
+              valorMedio: m.valor_medio,
+              tipos: m.tipos,
+            });
+          }
+        }
+      }
+
+      pagadores.sort((a, b) => b.probabilidade - a.probabilidade);
+
+      return {
+        mes: mesNum,
+        nomeMes,
+        sigla,
+        totalAtivos: pagadores.length,
+        pagadores,
+      };
+    });
+  }, [listaAtivos, probMin]);
+
+  // Meses ordenados por volume de proventos e depois cronologicamente
+  const mesesComPagadores = useMemo(() => {
+    return concentracaoPorMes
+      .filter((m) => m.totalAtivos > 0)
+      .sort((a, b) => {
+        if (b.totalAtivos !== a.totalAtivos) return b.totalAtivos - a.totalAtivos;
+        return a.mes - b.mes;
+      });
+  }, [concentracaoPorMes]);
+
+  const maxPagadoresNoMes = useMemo(() => {
+    return Math.max(...concentracaoPorMes.map((m) => m.totalAtivos), 1);
+  }, [concentracaoPorMes]);
+
   // Estilo visual da probabilidade
   const obterEstiloProbabilidade = (prob: number, atendeFiltro: boolean) => {
     if (prob <= 0 || !atendeFiltro) {
@@ -223,7 +284,6 @@ export function DividendCalendar({
     mes: MesProvento
   ) => {
     const rect = e.currentTarget.getBoundingClientRect();
-    // Se a célula estiver nos primeiros 240px da janela, renderiza ABAIXO para não cortar
     const placeBelow = rect.top < 240;
     setTooltip({
       ativo,
@@ -269,7 +329,7 @@ export function DividendCalendar({
             <p className="text-xs md:text-sm text-neutral-400 max-w-3xl leading-relaxed">
               Matriz preditiva de sazonalidade e probabilidade histórica calculada sobre os proventos oficiais da{" "}
               <strong className="text-neutral-200">B3 Oficial dos últimos 5 anos (2021 a 2026)</strong>.
-              Ordenado por maior liquidez (Top Volume) com carregamento progressivo para máxima velocidade.
+              Identifique com exatidão os meses de maior concentração para antecipar compras antes do fechamento do pregão.
             </p>
           </div>
 
@@ -333,31 +393,45 @@ export function DividendCalendar({
             </span>
           </div>
 
-          {/* Meses Mais Frequentes */}
+          {/* Meses com Maior Concentração de Proventos (Sem cortes indevidos + Botão para Calendário) */}
           <div className="p-3.5 rounded-xl bg-neutral-950/60 border border-neutral-800 col-span-2 sm:col-span-2">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400 font-mono block mb-1">
-              Meses com Maior Concentração de Proventos
-            </span>
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400 font-mono">
+                Meses com Proventos ({mesesComPagadores.length} meses ativos)
+              </span>
+              <button
+                onClick={() => setModalCalendarioAberto(true)}
+                className="text-[10px] text-[#d4af37] hover:text-[#f5df88] font-bold flex items-center gap-1 hover:underline transition-all"
+              >
+                <CalendarIcon className="w-3 h-3" />
+                <span>Ver Calendário Geral (12M)</span>
+              </button>
+            </div>
             <div className="flex flex-wrap items-center gap-1.5">
-              {Object.entries(mesesFrequentes)
-                .sort((a, b) => b[1] - a[1])
-                .slice(0, 4)
-                .map(([mes, qtd]) => (
-                  <span
-                    key={mes}
-                    className="px-2 py-0.5 rounded-md bg-emerald-950/60 border border-emerald-500/30 text-[11px] font-mono font-semibold text-emerald-300"
+              {mesesComPagadores.length > 0 ? (
+                mesesComPagadores.map((m) => (
+                  <button
+                    key={m.mes}
+                    onClick={() => setModalCalendarioAberto(true)}
+                    className="px-2 py-0.5 rounded-md bg-emerald-950/60 hover:bg-emerald-900/60 border border-emerald-500/30 text-[11px] font-mono font-semibold text-emerald-300 transition-colors cursor-pointer"
+                    title={`Clique para ver as ${m.totalAtivos} ações de ${m.nomeMes}`}
                   >
-                    {mes}: <strong className="text-white">{qtd}</strong>
-                  </span>
-                ))}
+                    {m.sigla}: <strong className="text-white">{m.totalAtivos}</strong>
+                  </button>
+                ))
+              ) : (
+                <span className="text-xs text-neutral-500">
+                  Nenhum mês atende ao filtro de probabilidade (≥ {probMin}%).
+                </span>
+              )}
             </div>
           </div>
         </div>
       </div>
 
-      {/* 2. Barra de Filtros e Busca */}
+      {/* 2. Barra de Filtros, Busca e Alternador de Visão */}
       <div className="p-4 rounded-xl bg-[#0b0b0f] border border-neutral-800 flex flex-wrap items-center justify-between gap-4">
-        {/* Lado Esquerdo */}
+        {/* Lado Esquerdo: Filtros */}
         <div className="flex flex-wrap items-center gap-2">
           {/* Botão Minha Carteira */}
           <button
@@ -436,16 +510,47 @@ export function DividendCalendar({
           )}
         </div>
 
-        {/* Lado Direito: Campo de Busca */}
-        <div className="relative min-w-[220px]">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
-          <input
-            type="text"
-            placeholder="Buscar ticker ou empresa..."
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 rounded-lg bg-neutral-900 border border-neutral-800 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-[#d4af37] font-mono"
-          />
+        {/* Lado Direito: Alternador de Visualização & Campo de Busca */}
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+          {/* Alternador Matriz vs Calendário */}
+          <div className="flex items-center p-0.5 rounded-lg bg-neutral-900 border border-neutral-800 text-xs">
+            <button
+              onClick={() => setModoVisualizacao("tabela")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-bold transition-all ${
+                modoVisualizacao === "tabela"
+                  ? "bg-[#d4af37] text-neutral-950 shadow-sm"
+                  : "text-neutral-400 hover:text-white"
+              }`}
+              title="Exibir como Matriz Tabela (12 Colunas)"
+            >
+              <TableIcon className="w-3.5 h-3.5" />
+              <span>Matriz</span>
+            </button>
+            <button
+              onClick={() => setModoVisualizacao("calendario")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-bold transition-all ${
+                modoVisualizacao === "calendario"
+                  ? "bg-[#d4af37] text-neutral-950 shadow-sm"
+                  : "text-neutral-400 hover:text-white"
+              }`}
+              title="Exibir como Cards de Calendário Anual (12 Meses)"
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              <span>Calendário Anual</span>
+            </button>
+          </div>
+
+          {/* Campo de Busca */}
+          <div className="relative min-w-[200px]">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
+            <input
+              type="text"
+              placeholder="Buscar ticker ou empresa..."
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              className="w-full pl-9 pr-3 py-1.5 rounded-lg bg-neutral-900 border border-neutral-800 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-[#d4af37] font-mono"
+            />
+          </div>
         </div>
       </div>
 
@@ -543,196 +648,450 @@ export function DividendCalendar({
         </div>
       )}
 
-      {/* 3. Tabela Matriz de 12 Meses */}
-      <div className="rounded-2xl bg-[#09090d] border border-neutral-800/90 shadow-2xl overflow-hidden relative">
-        {loadingInicial && (
-          <div className="absolute inset-0 bg-[#09090d]/80 backdrop-blur-xs flex items-center justify-center z-30">
-            <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-neutral-900 border border-[#d4af37]/40 text-white text-xs font-semibold shadow-xl">
-              <Loader2 className="w-4 h-4 text-[#d4af37] animate-spin" />
-              <span>Carregando Top 20 ativos da B3...</span>
-            </div>
-          </div>
-        )}
+      {/* ===================================================================================== */}
+      {/* MODO 1: VISÃO CALENDÁRIO ANUAL (12 CARDS DE MESES)                                    */}
+      {/* ===================================================================================== */}
+      {modoVisualizacao === "calendario" && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 animate-in fade-in duration-200">
+          {concentracaoPorMes.map((mesInfo) => {
+            const hasProventos = mesInfo.totalAtivos > 0;
+            const barWidth = `${Math.min(100, Math.round((mesInfo.totalAtivos / maxPagadoresNoMes) * 100))}%`;
 
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-left text-xs">
-            <thead>
-              <tr className="bg-neutral-950/90 border-b border-neutral-800 text-[11px] font-semibold text-neutral-400 uppercase tracking-wider font-mono">
-                <th className="py-3.5 px-4 sticky left-0 bg-neutral-950 z-20 min-w-[200px] border-r border-neutral-800/80">
-                  Ativo / Empresa
-                </th>
-                <th className="py-3.5 px-3 text-center min-w-[70px]">Classe</th>
-                <th className="py-3.5 px-3 text-right min-w-[80px]">DY 12M</th>
-                <th className="py-3.5 px-3 text-right min-w-[80px]">Score</th>
-                {/* 12 Meses */}
-                {NOMES_MESES.map((nome) => (
-                  <th
-                    key={nome}
-                    className="py-3.5 px-2 text-center min-w-[65px] font-mono text-neutral-300 border-l border-neutral-800/40"
-                  >
-                    {nome}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-800/60 font-mono">
-              {listaAtivos.length > 0 ? (
-                listaAtivos.map((ativo) => (
-                  <tr
-                    key={ativo.ticker}
-                    className="hover:bg-neutral-900/50 transition-colors group"
-                  >
-                    {/* Coluna Fixa: Ticker e Nome */}
-                    <td className="py-3 px-4 sticky left-0 bg-[#09090d] group-hover:bg-neutral-900/90 transition-colors z-10 border-r border-neutral-800/80">
-                      <div className="flex items-center justify-between gap-2">
+            return (
+              <div
+                key={mesInfo.mes}
+                className={`p-4 rounded-2xl border transition-all flex flex-col justify-between ${
+                  hasProventos
+                    ? "bg-[#0b0c12] border-neutral-800 hover:border-[#d4af37]/50 shadow-lg"
+                    : "bg-[#08080a] border-neutral-900/60 opacity-60"
+                }`}
+              >
+                <div>
+                  {/* Cabeçalho do Mês */}
+                  <div className="flex items-center justify-between pb-2 mb-2 border-b border-neutral-800/80">
+                    <span className="text-sm font-black text-white font-mono uppercase tracking-wider">
+                      {mesInfo.nomeMes}
+                    </span>
+                    <span
+                      className={`text-xs font-mono font-bold px-2 py-0.5 rounded-lg ${
+                        hasProventos
+                          ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
+                          : "bg-neutral-900 text-neutral-500"
+                      }`}
+                    >
+                      {mesInfo.totalAtivos} {mesInfo.totalAtivos === 1 ? "ativo" : "ativos"}
+                    </span>
+                  </div>
+
+                  {/* Barra de Concentração */}
+                  {hasProventos && (
+                    <div className="w-full h-1.5 bg-neutral-900 rounded-full mb-3 overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-emerald-500 to-[#d4af37] rounded-full transition-all duration-300"
+                        style={{ width: barWidth }}
+                      />
+                    </div>
+                  )}
+
+                  {/* Lista de Ativos Pagadores */}
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                    {hasProventos ? (
+                      mesInfo.pagadores.map((p) => (
                         <div
-                          onClick={() => handleRowClick(ativo.ticker)}
-                          className="cursor-pointer group-hover:text-[#d4af37] transition-colors"
+                          key={p.ticker}
+                          onClick={() => handleRowClick(p.ticker)}
+                          className="p-2 rounded-xl bg-neutral-950/80 hover:bg-neutral-900 border border-neutral-800/80 hover:border-[#d4af37]/40 cursor-pointer transition-all flex items-center justify-between gap-2 group"
                         >
                           <div className="flex items-center gap-1.5">
-                            <span className="font-black text-white text-sm tracking-wide">
-                              {ativo.ticker}
+                            <span className="font-mono font-black text-white text-xs group-hover:text-[#d4af37] transition-colors">
+                              {p.ticker}
                             </span>
-                            {ativo.possui_na_carteira && (
-                              <span className="text-[9px] px-1.5 py-0.2 rounded bg-[#d4af37]/20 text-[#d4af37] border border-[#d4af37]/40 font-bold uppercase">
-                                Carteira
-                              </span>
-                            )}
+                            <span className="text-[9px] px-1 rounded bg-neutral-800 text-neutral-400 uppercase font-bold">
+                              {p.classe}
+                            </span>
                           </div>
-                          <span
-                            className="text-[11px] text-neutral-400 font-sans truncate max-w-[170px] block"
-                            title={ativo.nome}
-                          >
-                            {ativo.nome}
-                          </span>
-                        </div>
-                      </div>
-                    </td>
-
-                    {/* Classe */}
-                    <td className="py-3 px-3 text-center">
-                      <span
-                        className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${
-                          ativo.classe === "FII"
-                            ? "bg-purple-950/60 text-purple-300 border border-purple-800/40"
-                            : "bg-blue-950/60 text-blue-300 border border-blue-800/40"
-                        }`}
-                      >
-                        {ativo.classe}
-                      </span>
-                    </td>
-
-                    {/* DY 12M */}
-                    <td className="py-3 px-3 text-right font-bold text-neutral-200">
-                      {ativo.dy > 0 ? `${ativo.dy.toFixed(1)}%` : "-"}
-                    </td>
-
-                    {/* Score */}
-                    <td className="py-3 px-3 text-right">
-                      <span
-                        className={`text-xs font-black ${
-                          ativo.score >= 80
-                            ? "text-emerald-400"
-                            : ativo.score >= 60
-                            ? "text-[#d4af37]"
-                            : "text-amber-400"
-                        }`}
-                      >
-                        {ativo.score.toFixed(0)}
-                      </span>
-                    </td>
-
-                    {/* 12 Células de Meses */}
-                    {ativo.meses &&
-                      ativo.meses.map((m) => {
-                        const atendeFiltro = probMin === 0 || m.probabilidade >= probMin;
-                        const estilo = obterEstiloProbabilidade(m.probabilidade, atendeFiltro);
-                        const isAtiva =
-                          detalheFixado?.ativo.ticker === ativo.ticker &&
-                          detalheFixado?.mes.mes === m.mes;
-
-                        return (
-                          <td
-                            key={m.mes}
-                            className="py-2.5 px-1.5 text-center border-l border-neutral-800/40"
-                            onMouseEnter={(e) => handleCellMouseEnter(e, ativo, m)}
-                            onMouseLeave={handleCellMouseLeave}
-                            onClick={() => handleCellClick(ativo, m)}
-                          >
-                            <div
-                              className={`w-full py-1.5 rounded-md text-[11px] transition-all cursor-pointer select-none ${estilo} ${
-                                isAtiva ? "ring-2 ring-white scale-105 z-20" : ""
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className={`text-[10px] font-mono font-black px-1.5 py-0.2 rounded ${
+                                p.probabilidade >= 100
+                                  ? "bg-emerald-400 text-black"
+                                  : p.probabilidade >= 80
+                                  ? "bg-emerald-500/80 text-black font-bold"
+                                  : "bg-emerald-950 text-emerald-300 border border-emerald-800/40"
                               }`}
                             >
-                              {atendeFiltro && m.probabilidade > 0 ? `${Math.round(m.probabilidade)}%` : "-"}
-                            </div>
-                          </td>
-                        );
-                      })}
-                  </tr>
-                ))
-              ) : (
-                !loadingInicial && (
-                  <tr>
-                    <td colSpan={16} className="py-12 text-center text-neutral-500">
-                      <CalendarIcon className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                      <p className="text-sm font-medium">Nenhum ativo encontrado para os filtros selecionados.</p>
-                      <p className="text-xs text-neutral-600 mt-1">
-                        {apenasCarteira && !usuario
-                          ? "Faça login para visualizar apenas os ativos da sua carteira."
-                          : "Tente reduzir a probabilidade mínima ou remover o termo de busca."}
-                      </p>
-                    </td>
-                  </tr>
-                )
-              )}
-            </tbody>
-          </table>
-        </div>
+                              {p.probabilidade.toFixed(0)}%
+                            </span>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="py-6 text-center text-xs text-neutral-600 font-sans italic">
+                        Sem proventos neste mês
+                      </div>
+                    )}
+                  </div>
+                </div>
 
-        {/* Barra de Rodapé / Infinite Scroll */}
-        <div className="p-4 bg-neutral-950/90 border-t border-neutral-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-neutral-400">
-          <div className="flex items-center gap-2">
-            <span>
-              Exibindo <strong className="text-white font-mono">{listaAtivos.length}</strong> de{" "}
-              <strong className="text-white font-mono">{totalAtivosGeral}</strong> ativos
-            </span>
-            <span className="text-neutral-600">•</span>
-            <span className="text-neutral-500">Ordenados por Maior Volume & Relevância</span>
+                {hasProventos && (
+                  <div className="pt-2 mt-2 border-t border-neutral-900 text-[10px] text-neutral-500 text-right font-mono">
+                    Critério: {tipoData === "DATA_COM" ? "Data COM" : "Pagamento"}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ===================================================================================== */}
+      {/* MODO 2: VISÃO TABELA MATRIZ (12 MESES)                                                */}
+      {/* ===================================================================================== */}
+      {modoVisualizacao === "tabela" && (
+        <div className="rounded-2xl bg-[#09090d] border border-neutral-800/90 shadow-2xl overflow-hidden relative">
+          {loadingInicial && (
+            <div className="absolute inset-0 bg-[#09090d]/80 backdrop-blur-xs flex items-center justify-center z-30">
+              <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-neutral-900 border border-[#d4af37]/40 text-white text-xs font-semibold shadow-xl">
+                <Loader2 className="w-4 h-4 text-[#d4af37] animate-spin" />
+                <span>Carregando Top 20 ativos da B3...</span>
+              </div>
+            </div>
+          )}
+
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-left text-xs">
+              <thead>
+                <tr className="bg-neutral-950/90 border-b border-neutral-800 text-[11px] font-semibold text-neutral-400 uppercase tracking-wider font-mono">
+                  <th className="py-3.5 px-4 sticky left-0 bg-neutral-950 z-20 min-w-[200px] border-r border-neutral-800/80">
+                    Ativo / Empresa
+                  </th>
+                  <th className="py-3.5 px-3 text-center min-w-[70px]">Classe</th>
+                  <th className="py-3.5 px-3 text-right min-w-[80px]">DY 12M</th>
+                  <th className="py-3.5 px-3 text-right min-w-[80px]">Score</th>
+                  {/* 12 Meses */}
+                  {NOMES_MESES.map((nome) => (
+                    <th
+                      key={nome}
+                      className="py-3.5 px-2 text-center min-w-[65px] font-mono text-neutral-300 border-l border-neutral-800/40"
+                    >
+                      {nome}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-800/60 font-mono">
+                {listaAtivos.length > 0 ? (
+                  listaAtivos.map((ativo) => (
+                    <tr
+                      key={ativo.ticker}
+                      className="hover:bg-neutral-900/50 transition-colors group"
+                    >
+                      {/* Coluna Fixa: Ticker e Nome */}
+                      <td className="py-3 px-4 sticky left-0 bg-[#09090d] group-hover:bg-neutral-900/90 transition-colors z-10 border-r border-neutral-800/80">
+                        <div className="flex items-center justify-between gap-2">
+                          <div
+                            onClick={() => handleRowClick(ativo.ticker)}
+                            className="cursor-pointer group-hover:text-[#d4af37] transition-colors"
+                          >
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-black text-white text-sm tracking-wide">
+                                {ativo.ticker}
+                              </span>
+                              {ativo.possui_na_carteira && (
+                                <span className="text-[9px] px-1.5 py-0.2 rounded bg-[#d4af37]/20 text-[#d4af37] border border-[#d4af37]/40 font-bold uppercase">
+                                  Carteira
+                                </span>
+                              )}
+                            </div>
+                            <span
+                              className="text-[11px] text-neutral-400 font-sans truncate max-w-[170px] block"
+                              title={ativo.nome}
+                            >
+                              {ativo.nome}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Classe */}
+                      <td className="py-3 px-3 text-center">
+                        <span
+                          className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${
+                            ativo.classe === "FII"
+                              ? "bg-purple-950/60 text-purple-300 border border-purple-800/40"
+                              : "bg-blue-950/60 text-blue-300 border border-blue-800/40"
+                          }`}
+                        >
+                          {ativo.classe}
+                        </span>
+                      </td>
+
+                      {/* DY 12M */}
+                      <td className="py-3 px-3 text-right font-bold text-neutral-200">
+                        {ativo.dy > 0 ? `${ativo.dy.toFixed(1)}%` : "-"}
+                      </td>
+
+                      {/* Score */}
+                      <td className="py-3 px-3 text-right">
+                        <span
+                          className={`text-xs font-black ${
+                            ativo.score >= 80
+                              ? "text-emerald-400"
+                              : ativo.score >= 60
+                              ? "text-[#d4af37]"
+                              : "text-amber-400"
+                          }`}
+                        >
+                          {ativo.score.toFixed(0)}
+                        </span>
+                      </td>
+
+                      {/* 12 Células de Meses */}
+                      {ativo.meses &&
+                        ativo.meses.map((m) => {
+                          const atendeFiltro = probMin === 0 || m.probabilidade >= probMin;
+                          const estilo = obterEstiloProbabilidade(m.probabilidade, atendeFiltro);
+                          const isAtiva =
+                            detalheFixado?.ativo.ticker === ativo.ticker &&
+                            detalheFixado?.mes.mes === m.mes;
+
+                          return (
+                            <td
+                              key={m.mes}
+                              className="py-2.5 px-1.5 text-center border-l border-neutral-800/40"
+                              onMouseEnter={(e) => handleCellMouseEnter(e, ativo, m)}
+                              onMouseLeave={handleCellMouseLeave}
+                              onClick={() => handleCellClick(ativo, m)}
+                            >
+                              <div
+                                className={`w-full py-1.5 rounded-md text-[11px] transition-all cursor-pointer select-none ${estilo} ${
+                                  isAtiva ? "ring-2 ring-white scale-105 z-20" : ""
+                                }`}
+                              >
+                                {atendeFiltro && m.probabilidade > 0 ? `${Math.round(m.probabilidade)}%` : "-"}
+                              </div>
+                            </td>
+                          );
+                        })}
+                    </tr>
+                  ))
+                ) : (
+                  !loadingInicial && (
+                    <tr>
+                      <td colSpan={16} className="py-12 text-center text-neutral-500">
+                        <CalendarIcon className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                        <p className="text-sm font-medium">Nenhum ativo encontrado para os filtros selecionados.</p>
+                        <p className="text-xs text-neutral-600 mt-1">
+                          {apenasCarteira && !usuario
+                            ? "Faça login para visualizar apenas os ativos da sua carteira."
+                            : "Tente reduzir a probabilidade mínima ou remover o termo de busca."}
+                        </p>
+                      </td>
+                    </tr>
+                  )
+                )}
+              </tbody>
+            </table>
           </div>
 
-          {/* Botão Carregar Mais (+20) */}
-          {temMais ? (
-            <button
-              onClick={carregarMais}
-              disabled={loadingMais}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#d4af37]/15 hover:bg-[#d4af37]/25 text-[#d4af37] border border-[#d4af37]/40 font-bold transition-all disabled:opacity-50"
-            >
-              {loadingMais ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Carregando +20 ativos...</span>
-                </>
-              ) : (
-                <>
-                  <span>Carregar mais 20 ativos</span>
-                  <ChevronDown className="w-3.5 h-3.5" />
-                </>
-              )}
-            </button>
-          ) : (
-            listaAtivos.length > 0 && (
-              <span className="text-emerald-400/80 font-mono text-[11px] flex items-center gap-1">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                Todos os ativos carregados
+          {/* Barra de Rodapé / Infinite Scroll */}
+          <div className="p-4 bg-neutral-950/90 border-t border-neutral-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-neutral-400">
+            <div className="flex items-center gap-2">
+              <span>
+                Exibindo <strong className="text-white font-mono">{listaAtivos.length}</strong> de{" "}
+                <strong className="text-white font-mono">{totalAtivosGeral}</strong> ativos
               </span>
-            )
-          )}
-        </div>
+              <span className="text-neutral-600">•</span>
+              <span className="text-neutral-500">Ordenados por Maior Volume & Relevância</span>
+            </div>
 
-        {/* Sentinel invisível para acionar carregamento automático ao rolar a página */}
-        <div ref={sentinelRef} className="h-4 w-full pointer-events-none" />
-      </div>
+            {/* Botão Carregar Mais (+20) */}
+            {temMais ? (
+              <button
+                onClick={carregarMais}
+                disabled={loadingMais}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#d4af37]/15 hover:bg-[#d4af37]/25 text-[#d4af37] border border-[#d4af37]/40 font-bold transition-all disabled:opacity-50"
+              >
+                {loadingMais ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Carregando +20 ativos...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Carregar mais 20 ativos</span>
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  </>
+                )}
+              </button>
+            ) : (
+              listaAtivos.length > 0 && (
+                <span className="text-emerald-400/80 font-mono text-[11px] flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  Todos os ativos carregados
+                </span>
+              )
+            )}
+          </div>
+
+          {/* Sentinel invisível para acionar carregamento automático ao rolar a página */}
+          <div ref={sentinelRef} className="h-4 w-full pointer-events-none" />
+        </div>
+      )}
+
+      {/* ===================================================================================== */}
+      {/* MODAL DE CALENDÁRIO GERAL (12 MESES CONSOLIDADOS COM LISTA DE AÇÕES)                  */}
+      {/* ===================================================================================== */}
+      {modalCalendarioAberto && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
+          <div
+            className="w-full max-w-5xl rounded-2xl bg-[#0e0f14] border border-neutral-800 shadow-2xl overflow-hidden flex flex-col max-h-[92vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header do Modal */}
+            <div className="p-5 border-b border-neutral-800 flex items-center justify-between bg-neutral-950/60">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-[#d4af37]/10 text-[#d4af37] border border-[#d4af37]/30">
+                  <CalendarIcon className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    Calendário Geral de Proventos (12 Meses)
+                    <span className="text-xs font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
+                      {apenasCarteira ? "Minha Carteira" : "Mercado B3"}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-neutral-400">
+                    Concentração de ativos pagadores em {tipoData === "DATA_COM" ? "Data COM (Direito)" : "Data de Pagamento"} com probabilidade ≥ {probMin}%
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                {/* Seletor rápido de probabilidade no modal */}
+                <select
+                  value={probMin}
+                  onChange={(e) => setProbMin(Number(e.target.value))}
+                  className="px-3 py-1.5 rounded-lg bg-neutral-900 border border-neutral-800 text-xs text-neutral-200 font-medium focus:outline-none focus:border-[#d4af37]"
+                >
+                  <option value={0}>Todas (≥ 0%)</option>
+                  <option value={20}>≥ 20% (1 de 5A)</option>
+                  <option value={40}>≥ 40% (2 de 5A)</option>
+                  <option value={60}>≥ 60% (3 de 5A)</option>
+                  <option value={80}>≥ 80% (4 de 5A)</option>
+                  <option value={100}>100% (5 de 5A)</option>
+                </select>
+
+                <button
+                  onClick={() => setModalCalendarioAberto(false)}
+                  className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Conteúdo: 12 Cards do Ano */}
+            <div className="p-6 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 flex-1">
+              {concentracaoPorMes.map((mesInfo) => {
+                const hasProventos = mesInfo.totalAtivos > 0;
+                const barWidth = `${Math.min(100, Math.round((mesInfo.totalAtivos / maxPagadoresNoMes) * 100))}%`;
+
+                return (
+                  <div
+                    key={mesInfo.mes}
+                    className={`p-4 rounded-xl border flex flex-col justify-between ${
+                      hasProventos
+                        ? "bg-[#12131a] border-neutral-800 hover:border-[#d4af37]/40 shadow-md"
+                        : "bg-[#090a0d] border-neutral-900/60 opacity-50"
+                    }`}
+                  >
+                    <div>
+                      {/* Cabeçalho */}
+                      <div className="flex items-center justify-between pb-2 mb-2 border-b border-neutral-800">
+                        <span className="text-xs font-black text-white font-mono uppercase tracking-wider">
+                          {mesInfo.nomeMes}
+                        </span>
+                        <span
+                          className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded ${
+                            hasProventos
+                              ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
+                              : "bg-neutral-900 text-neutral-500"
+                          }`}
+                        >
+                          {mesInfo.totalAtivos} {mesInfo.totalAtivos === 1 ? "ativo" : "ativos"}
+                        </span>
+                      </div>
+
+                      {/* Barra de Progresso */}
+                      {hasProventos && (
+                        <div className="w-full h-1.5 bg-neutral-900 rounded-full mb-2.5 overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-emerald-500 to-[#d4af37] rounded-full"
+                            style={{ width: barWidth }}
+                          />
+                        </div>
+                      )}
+
+                      {/* Lista de Ações */}
+                      <div className="space-y-1 max-h-44 overflow-y-auto pr-1">
+                        {hasProventos ? (
+                          mesInfo.pagadores.map((p) => (
+                            <div
+                              key={p.ticker}
+                              onClick={() => {
+                                setModalCalendarioAberto(false);
+                                handleRowClick(p.ticker);
+                              }}
+                              className="p-1.5 rounded-lg bg-neutral-950 hover:bg-neutral-900 border border-neutral-800/80 hover:border-[#d4af37]/40 cursor-pointer transition-all flex items-center justify-between gap-1 group"
+                              title={`${p.nome} • Clique para ver Valuation`}
+                            >
+                              <div className="flex items-center gap-1">
+                                <span className="font-mono font-bold text-white text-xs group-hover:text-[#d4af37]">
+                                  {p.ticker}
+                                </span>
+                                <span className="text-[9px] px-1 rounded bg-neutral-900 text-neutral-400 font-bold uppercase">
+                                  {p.classe}
+                                </span>
+                              </div>
+                              <span
+                                className={`text-[10px] font-mono font-black px-1.5 py-0.2 rounded ${
+                                  p.probabilidade >= 100
+                                    ? "bg-emerald-400 text-black"
+                                    : p.probabilidade >= 80
+                                    ? "bg-emerald-500/80 text-black"
+                                    : "bg-emerald-950 text-emerald-300 border border-emerald-800/40"
+                                }`}
+                              >
+                                {p.probabilidade.toFixed(0)}%
+                              </span>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="py-4 text-center text-[11px] text-neutral-600 italic">
+                            Sem proventos
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Rodapé do Modal */}
+            <div className="p-4 border-t border-neutral-800 flex items-center justify-between bg-neutral-950/80 text-xs text-neutral-400">
+              <span>*Clique em qualquer ativo para abrir a análise fundamentalista completa.</span>
+              <button
+                onClick={() => setModalCalendarioAberto(false)}
+                className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white font-bold transition-colors"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* TOOLTIP FLUTUANTE GLOBAL (RENDERIZADO VIA FIXED FORA DO OVERFLOW SCROLL) */}
       {tooltip && (
