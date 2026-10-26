@@ -197,9 +197,12 @@ export function DividendCalendar({
   }, [todosAtivosMercado]);
 
   // Estilo visual da probabilidade
-  const obterEstiloProbabilidade = (prob: number) => {
-    if (prob <= 0) {
+  const obterEstiloProbabilidade = (prob: number, atendeFiltro: boolean) => {
+    if (prob <= 0 || !atendeFiltro) {
       return "bg-neutral-900/30 text-neutral-600 border border-transparent";
+    }
+    if (prob >= 100) {
+      return "bg-emerald-400 text-neutral-950 font-black border border-emerald-300 shadow-md shadow-emerald-400/30";
     }
     if (prob >= 80) {
       return "bg-emerald-500/90 hover:bg-emerald-400 text-neutral-950 font-black border border-emerald-400/80 shadow-md shadow-emerald-500/20";
@@ -402,17 +405,18 @@ export function DividendCalendar({
             </button>
           </div>
 
-          {/* Filtro de Probabilidade Mínima */}
+          {/* Filtro de Probabilidade Mínima (Múltiplos de 20% baseados na janela de 5 anos) */}
           <select
             value={probMin}
             onChange={(e) => setProbMin(Number(e.target.value))}
             className="px-3 py-1.5 rounded-lg bg-neutral-900 border border-neutral-800 text-xs text-neutral-200 font-medium focus:outline-none focus:border-[#d4af37]"
           >
             <option value={0}>Probabilidade: Todas (≥ 0%)</option>
-            <option value={40}>Probabilidade ≥ 40% (Provável)</option>
-            <option value={50}>Probabilidade ≥ 50% (Consistente)</option>
-            <option value={70}>Probabilidade ≥ 70% (Frequente)</option>
-            <option value={80}>Probabilidade ≥ 80% (Altamente Recorrente)</option>
+            <option value={20}>Probabilidade ≥ 20% (1 de 5 anos)</option>
+            <option value={40}>Probabilidade ≥ 40% (2 de 5 anos)</option>
+            <option value={60}>Probabilidade ≥ 60% (3 de 5 anos)</option>
+            <option value={80}>Probabilidade ≥ 80% (4 de 5 anos)</option>
+            <option value={100}>Probabilidade = 100% (5 de 5 anos)</option>
           </select>
 
           {/* Filtro por Setor */}
@@ -499,22 +503,30 @@ export function DividendCalendar({
       {/* Legenda Visual */}
       <div className="flex flex-wrap items-center justify-between text-[11px] text-neutral-400 px-2 gap-2">
         <div className="flex items-center gap-3">
-          <span className="font-semibold text-neutral-300">Intensidade Histórica:</span>
+          <span className="font-semibold text-neutral-300">Intensidade Histórica (5 Anos):</span>
+          <div className="flex items-center gap-1.5">
+            <span className="w-3.5 h-3.5 rounded bg-emerald-400 border border-emerald-300"></span>
+            <span>100% (5 de 5)</span>
+          </div>
           <div className="flex items-center gap-1.5">
             <span className="w-3.5 h-3.5 rounded bg-emerald-500/90 border border-emerald-400"></span>
-            <span>≥ 80% (Altamente Recorrente)</span>
+            <span>80% (4 de 5)</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-3.5 h-3.5 rounded bg-emerald-600/70 border border-emerald-500/50"></span>
-            <span>60% - 79%</span>
+            <span>60% (3 de 5)</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-3.5 h-3.5 rounded bg-emerald-800/50 border border-emerald-600/30"></span>
-            <span>40% - 59%</span>
+            <span>40% (2 de 5)</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-3.5 h-3.5 rounded bg-emerald-950/40 border border-emerald-800/20"></span>
+            <span>20% (1 de 5)</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-3.5 h-3.5 rounded bg-neutral-900/40 border border-neutral-800"></span>
-            <span>0% (Sem histórico)</span>
+            <span>0% / Abaixo</span>
           </div>
         </div>
 
@@ -633,7 +645,8 @@ export function DividendCalendar({
                     {/* 12 Células de Meses */}
                     {ativo.meses &&
                       ativo.meses.map((m) => {
-                        const estilo = obterEstiloProbabilidade(m.probabilidade);
+                        const atendeFiltro = probMin === 0 || m.probabilidade >= probMin;
+                        const estilo = obterEstiloProbabilidade(m.probabilidade, atendeFiltro);
                         const isAtiva =
                           detalheFixado?.ativo.ticker === ativo.ticker &&
                           detalheFixado?.mes.mes === m.mes;
@@ -651,7 +664,7 @@ export function DividendCalendar({
                                 isAtiva ? "ring-2 ring-white scale-105 z-20" : ""
                               }`}
                             >
-                              {m.probabilidade > 0 ? `${Math.round(m.probabilidade)}%` : "-"}
+                              {atendeFiltro && m.probabilidade > 0 ? `${Math.round(m.probabilidade)}%` : "-"}
                             </div>
                           </td>
                         );
@@ -748,6 +761,12 @@ export function DividendCalendar({
               {tooltip.mes.probabilidade.toFixed(0)}% Prob.
             </span>
           </div>
+
+          {probMin > 0 && tooltip.mes.probabilidade < probMin && (
+            <div className="mb-2 px-2 py-1 rounded bg-amber-950/40 border border-amber-500/30 text-[10px] text-amber-300 font-medium">
+              Abaixo do filtro ativo (≥ {probMin}%)
+            </div>
+          )}
 
           <div className="space-y-1.5 text-[11px] font-sans">
             <div className="flex justify-between text-neutral-400">

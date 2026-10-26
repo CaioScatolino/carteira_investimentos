@@ -196,8 +196,12 @@ func (s *Service) ObterCalendario(ctx context.Context, filtro FiltroCalendario) 
 		}
 		resultado = append(resultado, itemCal)
 
+		probCorte := 50.0
+		if filtro.ProbabilidadeMinima > 0 {
+			probCorte = filtro.ProbabilidadeMinima
+		}
 		for _, m := range itemCal.Meses {
-			if m.Probabilidade >= 50.0 {
+			if m.Probabilidade >= probCorte {
 				mesesFrequentes[m.NomeMes]++
 			}
 		}
