@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback } from "react";
 import { Ativo, RespostaRankings, CenarioMacro } from "@/types/market";
-import { ResumoCarteira, CriarPosicaoRequest, ResultadoRebalanceamento } from "@/types/portfolio";
+import { ResumoCarteira, CriarPosicaoRequest, ResultadoRebalanceamento, PosicaoConsolidada } from "@/types/portfolio";
 import { API_BASE_URL, API_V1_URL } from "@/config/api";
 import { Header } from "@/components/Header";
 import { SummaryCards } from "@/components/SummaryCards";
@@ -13,6 +13,7 @@ import { MacroAllocationView } from "@/components/MacroAllocationView";
 import { PortfolioTable } from "@/components/PortfolioTable";
 import { AddPositionModal } from "@/components/AddPositionModal";
 import { RebalanceSimulatorModal } from "@/components/RebalanceSimulatorModal";
+import { TransactionHistoryModal } from "@/components/TransactionHistoryModal";
 import { AuthModal } from "@/components/AuthModal";
 import { DividendCalendar } from "@/components/DividendCalendar";
 import { useAuth } from "@/context/AuthContext";
@@ -29,6 +30,7 @@ import {
   Lock,
   ArrowRight,
   ShieldCheck,
+  History,
 } from "lucide-react";
 
 export default function Dashboard() {
@@ -59,6 +61,9 @@ export default function Dashboard() {
   const [modalAddAberto, setModalAddAberto] = useState(false);
   const [modalSimuladorAberto, setModalSimuladorAberto] = useState(false);
   const [modalAuthAberto, setModalAuthAberto] = useState(false);
+  const [modalHistoricoAberto, setModalHistoricoAberto] = useState(false);
+  const [tickerHistoricoFiltro, setTickerHistoricoFiltro] = useState<string | null>(null);
+  const [posicaoParaAporte, setPosicaoParaAporte] = useState<PosicaoConsolidada | null>(null);
 
   // 1. Carrega dados do mercado (Rankings B3 & Macro)
   const carregarRankings = async () => {
@@ -447,7 +452,10 @@ export default function Dashboard() {
 
                   <div className="flex items-center gap-3 flex-wrap">
                     <button
-                      onClick={() => setModalAddAberto(true)}
+                      onClick={() => {
+                        setPosicaoParaAporte(null);
+                        setModalAddAberto(true);
+                      }}
                       className="px-4 py-2.5 rounded-xl bg-[#d4af37] hover:bg-[#c49f2f] text-black font-bold text-xs shadow-lg shadow-[#d4af37]/20 flex items-center gap-2 transition-all"
                     >
                       <Plus className="w-4 h-4" />
@@ -460,6 +468,18 @@ export default function Dashboard() {
                     >
                       <Scale className="w-4 h-4 text-[#d4af37]" />
                       <span>Simulador de Aporte</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setTickerHistoricoFiltro(null);
+                        setModalHistoricoAberto(true);
+                      }}
+                      className="px-4 py-2.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white font-bold text-xs border border-neutral-700 flex items-center gap-2 transition-all"
+                      title="Ver extrato e histórico de aportes e transações"
+                    >
+                      <History className="w-4 h-4 text-[#d4af37]" />
+                      <span>Extrato Contábil</span>
                     </button>
 
                     <button
@@ -492,6 +512,14 @@ export default function Dashboard() {
                     <PortfolioTable
                       posicoes={resumoCarteira.posicoes}
                       onExcluirPosicao={handleExcluirPosicao}
+                      onAportar={(pos) => {
+                        setPosicaoParaAporte(pos);
+                        setModalAddAberto(true);
+                      }}
+                      onVerHistorico={(ticker) => {
+                        setTickerHistoricoFiltro(ticker || null);
+                        setModalHistoricoAberto(true);
+                      }}
                     />
                   </>
                 ) : (
@@ -524,15 +552,29 @@ export default function Dashboard() {
 
       <AddPositionModal
         isOpen={modalAddAberto}
-        onClose={() => setModalAddAberto(false)}
+        onClose={() => {
+          setModalAddAberto(false);
+          setPosicaoParaAporte(null);
+        }}
         onSalvar={handleSalvarPosicao}
         ativosDisponiveis={[...data.acoes, ...data.fiis, ...data.etfs]}
+        posicaoParaAporte={posicaoParaAporte}
+        posicoesAtuais={resumoCarteira?.posicoes || []}
       />
 
       <RebalanceSimulatorModal
         isOpen={modalSimuladorAberto}
         onClose={() => setModalSimuladorAberto(false)}
         onSimular={handleSimularRebalanceamento}
+      />
+
+      <TransactionHistoryModal
+        isOpen={modalHistoricoAberto}
+        onClose={() => {
+          setModalHistoricoAberto(false);
+          setTickerHistoricoFiltro(null);
+        }}
+        tickerFiltroInicial={tickerHistoricoFiltro}
       />
 
       <AuthModal

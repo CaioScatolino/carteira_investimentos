@@ -69,6 +69,120 @@ func (s *Service) AdicionarOuAtualizarPosicao(ctx context.Context, usuarioID int
 		}
 	}
 
+	// 1. Verifica se já existe uma posição prévia para este usuário, ticker e corretora
+	posExistente, err := s.repo.ObterPosicaoPorTicker(ctx, usuarioID, ticker, corretora)
+	if err == nil && posExistente != nil {
+		tipoOperacao := strings.ToUpper(strings.TrimSpace(req.TipoOperacao))
+
+		// Modo Substituição Manual Explícita (correção de lançamento)
+		if tipoOperacao == "SUBSTITUIR" || tipoOperacao == "EDICAO" {
+			posExistente.Quantidade = req.Quantidade
+			posExistente.PrecoMedio = req.PrecoMedio
+			posExistente.ValorAplicado = req.Quantidade * req.PrecoMedio
+			if req.Classe != "" {
+				posExistente.Classe = req.Classe
+			}
+			if categoriaMacro != "GERAL" {
+				posExistente.CategoriaMacro = categoriaMacro
+			}
+			posExistente.TaxaContratada = req.TaxaContratada
+			posExistente.Indexador = req.Indexador
+			posExistente.Vencimento = dataVencimento
+			if req.Observacoes != nil {
+				posExistente.Observacoes = req.Observacoes
+			}
+
+			if err := s.repo.SalvarPosicao(ctx, posExistente); err != nil {
+				return nil, err
+			}
+
+			nota := fmt.Sprintf("Ajuste manual de custódia: Qtd: %.4f, PM: R$ %.2f", req.Quantidade, req.PrecoMedio)
+			transacao := &Transacao{
+				UsuarioID:     usuarioID,
+				PosicaoID:     &posExistente.ID,
+				Ticker:        ticker,
+				Tipo:          TransacaoAporte,
+				Quantidade:    req.Quantidade,
+				PrecoUnitario: req.PrecoMedio,
+				CustosTaxas:   0.0,
+				ValorTotal:    posExistente.ValorAplicado,
+				DataOperacao:  time.Now(),
+				Corretora:     corretora,
+				Notas:         &nota,
+			}
+			_ = s.repo.RegistrarTransacao(ctx, transacao)
+
+			return posExistente, nil
+		}
+
+		// Modo Padrão: Novo Aporte com Média Ponderada Contábil
+		// Fórmula: PM_novo = ((Q_antiga * PM_antigo) + (Q_nova * P_compra)) / (Q_antiga + Q_nova)
+		qtdAntiga := posExistente.Quantidade
+		pmAntigo := posExistente.PrecoMedio
+		valAntigo := posExistente.ValorAplicado
+		if valAntigo <= 0 {
+			valAntigo = qtdAntiga * pmAntigo
+		}
+
+		qtdNova := req.Quantidade
+		precoCompra := req.PrecoMedio
+		valNovo := qtdNova * precoCompra
+
+		qtdTotal := qtdAntiga + qtdNova
+		if qtdTotal <= 0 {
+			return nil, fmt.Errorf("%w: a quantidade total consolidada deve ser maior que zero", ErrDadosInvalidos)
+		}
+
+		novoPrecoMedio := (valAntigo + valNovo) / qtdTotal
+		novoValorAplicado := valAntigo + valNovo
+
+		posExistente.Quantidade = qtdTotal
+		posExistente.PrecoMedio = novoPrecoMedio
+		posExistente.ValorAplicado = novoValorAplicado
+		if req.Classe != "" {
+			posExistente.Classe = req.Classe
+		}
+		if categoriaMacro != "GERAL" {
+			posExistente.CategoriaMacro = categoriaMacro
+		}
+		if req.TaxaContratada != nil {
+			posExistente.TaxaContratada = req.TaxaContratada
+		}
+		if req.Indexador != nil {
+			posExistente.Indexador = req.Indexador
+		}
+		if dataVencimento != nil {
+			posExistente.Vencimento = dataVencimento
+		}
+		if req.Observacoes != nil {
+			posExistente.Observacoes = req.Observacoes
+		}
+
+		if err := s.repo.SalvarPosicao(ctx, posExistente); err != nil {
+			return nil, err
+		}
+
+		// Registra o aporte no livro-razão mantendo rastreabilidade contábil e fiscal
+		nota := fmt.Sprintf("Aporte: +%.4f cotas a R$ %.2f (PM: R$ %.2f -> R$ %.2f)", qtdNova, precoCompra, pmAntigo, novoPrecoMedio)
+		transacao := &Transacao{
+			UsuarioID:     usuarioID,
+			PosicaoID:     &posExistente.ID,
+			Ticker:        ticker,
+			Tipo:          TransacaoAporte,
+			Quantidade:    qtdNova,
+			PrecoUnitario: precoCompra,
+			CustosTaxas:   0.0,
+			ValorTotal:    valNovo,
+			DataOperacao:  time.Now(),
+			Corretora:     corretora,
+			Notas:         &nota,
+		}
+		_ = s.repo.RegistrarTransacao(ctx, transacao)
+
+		return posExistente, nil
+	}
+
+	// 2. Não possui posição prévia: Cadastro Inicial
 	pos := &Posicao{
 		UsuarioID:      usuarioID,
 		Ticker:         ticker,
@@ -84,12 +198,13 @@ func (s *Service) AdicionarOuAtualizarPosicao(ctx context.Context, usuarioID int
 		Observacoes:    req.Observacoes,
 	}
 
-	// Salva ou atualiza via Upsert no banco
+	// Salva no banco de dados
 	if err := s.repo.SalvarPosicao(ctx, pos); err != nil {
 		return nil, err
 	}
 
 	// Registra a transação inicial de compra no livro-razão contábil
+	nota := fmt.Sprintf("Posição inicial: %.4f cotas a R$ %.2f", req.Quantidade, req.PrecoMedio)
 	transacao := &Transacao{
 		UsuarioID:     usuarioID,
 		PosicaoID:     &pos.ID,
@@ -101,6 +216,7 @@ func (s *Service) AdicionarOuAtualizarPosicao(ctx context.Context, usuarioID int
 		ValorTotal:    valorAplicado,
 		DataOperacao:  time.Now(),
 		Corretora:     corretora,
+		Notas:         &nota,
 	}
 	_ = s.repo.RegistrarTransacao(ctx, transacao)
 
@@ -222,6 +338,12 @@ func (s *Service) ObterResumoCarteira(ctx context.Context, usuarioID int64) (*Re
 // ListarTransacoes retorna o extrato de compras e vendas do usuário.
 func (s *Service) ListarTransacoes(ctx context.Context, usuarioID int64) ([]Transacao, error) {
 	return s.repo.ListarTransacoes(ctx, usuarioID)
+}
+
+// ListarTransacoesPorTicker retorna o extrato filtrado por um ticker específico.
+func (s *Service) ListarTransacoesPorTicker(ctx context.Context, usuarioID int64, ticker string) ([]Transacao, error) {
+	ticker = strings.ToUpper(strings.TrimSpace(ticker))
+	return s.repo.ListarTransacoesPorTicker(ctx, usuarioID, ticker)
 }
 
 // RebalancearCarteira consolida a carteira atual e simula a distribuição ótima do aporte.

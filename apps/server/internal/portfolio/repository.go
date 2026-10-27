@@ -15,10 +15,12 @@ var (
 type Repository interface {
 	ListarPosicoes(ctx context.Context, usuarioID int64) ([]Posicao, error)
 	ObterPosicaoPorID(ctx context.Context, usuarioID, posicaoID int64) (*Posicao, error)
+	ObterPosicaoPorTicker(ctx context.Context, usuarioID int64, ticker, corretora string) (*Posicao, error)
 	SalvarPosicao(ctx context.Context, pos *Posicao) error
 	ExcluirPosicao(ctx context.Context, usuarioID, posicaoID int64) error
 	RegistrarTransacao(ctx context.Context, t *Transacao) error
 	ListarTransacoes(ctx context.Context, usuarioID int64) ([]Transacao, error)
+	ListarTransacoesPorTicker(ctx context.Context, usuarioID int64, ticker string) ([]Transacao, error)
 }
 
 type MySQLRepository struct {
@@ -97,6 +99,39 @@ func (r *MySQLRepository) ObterPosicaoPorID(ctx context.Context, usuarioID, posi
 	}
 	if err != nil {
 		return nil, fmt.Errorf("falha ao buscar posição por ID: %w", err)
+	}
+
+	if vencimento.Valid {
+		p.Vencimento = &vencimento.Time
+	}
+
+	return &p, nil
+}
+
+// ObterPosicaoPorTicker busca a posição de um ativo específico da carteira por ticker e corretora.
+func (r *MySQLRepository) ObterPosicaoPorTicker(ctx context.Context, usuarioID int64, ticker, corretora string) (*Posicao, error) {
+	query := `
+		SELECT id, usuario_id, ticker, classe, categoria_macro, quantidade, preco_medio,
+		       valor_aplicado, taxa_contratada, indexador, vencimento, corretora, observacoes,
+		       created_at, updated_at
+		FROM carteira_posicoes
+		WHERE usuario_id = ? AND ticker = ? AND corretora = ?
+		LIMIT 1`
+
+	var p Posicao
+	var vencimento sql.NullTime
+
+	err := r.db.QueryRowContext(ctx, query, usuarioID, ticker, corretora).Scan(
+		&p.ID, &p.UsuarioID, &p.Ticker, &p.Classe, &p.CategoriaMacro,
+		&p.Quantidade, &p.PrecoMedio, &p.ValorAplicado,
+		&p.TaxaContratada, &p.Indexador, &vencimento,
+		&p.Corretora, &p.Observacoes, &p.CreatedAt, &p.UpdatedAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrPosicaoNaoEncontrada
+	}
+	if err != nil {
+		return nil, fmt.Errorf("falha ao buscar posição por ticker: %w", err)
 	}
 
 	if vencimento.Valid {
@@ -234,3 +269,43 @@ func (r *MySQLRepository) ListarTransacoes(ctx context.Context, usuarioID int64)
 
 	return transacoes, rows.Err()
 }
+
+// ListarTransacoesPorTicker retorna o extrato de um ticker específico para o usuário logado.
+func (r *MySQLRepository) ListarTransacoesPorTicker(ctx context.Context, usuarioID int64, ticker string) ([]Transacao, error) {
+	query := `
+		SELECT id, usuario_id, posicao_id, ticker, tipo, quantidade, preco_unitario,
+		       custos_taxas, valor_total, data_operacao, corretora, notas, created_at
+		FROM carteira_transacoes
+		WHERE usuario_id = ? AND ticker = ?
+		ORDER BY data_operacao DESC, id DESC`
+
+	rows, err := r.db.QueryContext(ctx, query, usuarioID, ticker)
+	if err != nil {
+		return nil, fmt.Errorf("falha ao consultar transações do ticker: %w", err)
+	}
+	defer rows.Close()
+
+	var transacoes []Transacao
+	for rows.Next() {
+		var t Transacao
+		var posicaoID sql.NullInt64
+
+		err := rows.Scan(
+			&t.ID, &t.UsuarioID, &posicaoID, &t.Ticker, &t.Tipo,
+			&t.Quantidade, &t.PrecoUnitario, &t.CustosTaxas, &t.ValorTotal,
+			&t.DataOperacao, &t.Corretora, &t.Notas, &t.CreatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("falha ao ler linha de transação: %w", err)
+		}
+
+		if posicaoID.Valid {
+			t.PosicaoID = &posicaoID.Int64
+		}
+
+		transacoes = append(transacoes, t)
+	}
+
+	return transacoes, rows.Err()
+}
+

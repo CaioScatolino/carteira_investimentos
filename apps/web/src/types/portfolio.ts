@@ -50,6 +50,7 @@ export interface CriarPosicaoRequest {
   vencimento?: string;
   corretora: string;
   observacoes?: string;
+  tipo_operacao?: "APORTE" | "SUBSTITUIR" | "COMPRA";
 }
 
 export interface DiagnosticoMacroClasse {

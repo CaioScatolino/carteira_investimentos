@@ -71,6 +71,7 @@ type CriarPosicaoRequest struct {
 	Vencimento     *string     `json:"vencimento,omitempty"` // Formato YYYY-MM-DD
 	Corretora      string      `json:"corretora"`
 	Observacoes    *string     `json:"observacoes,omitempty"`
+	TipoOperacao   string      `json:"tipo_operacao,omitempty"` // "APORTE", "SUBSTITUIR", "COMPRA"
 }
 
 // PosicaoConsolidada enriquece a posição física com a cotação e valuation atuais de mercado.

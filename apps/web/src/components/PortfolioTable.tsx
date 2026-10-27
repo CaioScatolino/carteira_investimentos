@@ -2,14 +2,21 @@
 
 import React, { useState } from "react";
 import { ClasseAtivo, PosicaoConsolidada } from "@/types/portfolio";
-import { Trash2, TrendingUp, TrendingDown, ShieldAlert, CheckCircle2, Clock } from "lucide-react";
+import { Trash2, TrendingUp, TrendingDown, ShieldAlert, CheckCircle2, Clock, PlusCircle, History } from "lucide-react";
 
 interface PortfolioTableProps {
   posicoes: PosicaoConsolidada[];
   onExcluirPosicao: (id: number, ticker: string) => void;
+  onAportar?: (posicao: PosicaoConsolidada) => void;
+  onVerHistorico?: (ticker?: string) => void;
 }
 
-export function PortfolioTable({ posicoes, onExcluirPosicao }: PortfolioTableProps) {
+export function PortfolioTable({
+  posicoes,
+  onExcluirPosicao,
+  onAportar,
+  onVerHistorico,
+}: PortfolioTableProps) {
   const [filtroClasse, setFiltroClasse] = useState<ClasseAtivo | "TODAS">("TODAS");
   const [busca, setBusca] = useState("");
 
@@ -247,13 +254,30 @@ export function PortfolioTable({ posicoes, onExcluirPosicao }: PortfolioTablePro
 
                     {/* Ações */}
                     <td className="py-3.5 px-4 text-center">
-                      <button
-                        onClick={() => onExcluirPosicao(p.id, p.ticker)}
-                        className="p-1.5 rounded-lg text-neutral-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                        title="Remover ativo da carteira"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button
+                          onClick={() => onAportar?.(p)}
+                          className="px-2 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 text-xs font-semibold flex items-center gap-1 transition-colors"
+                          title="Fazer novo aporte neste ativo (recalcular preço médio)"
+                        >
+                          <PlusCircle className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">Aporte</span>
+                        </button>
+                        <button
+                          onClick={() => onVerHistorico?.(p.ticker)}
+                          className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
+                          title="Ver histórico de transações deste ativo"
+                        >
+                          <History className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => onExcluirPosicao(p.id, p.ticker)}
+                          className="p-1.5 rounded-lg text-neutral-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                          title="Remover ativo da carteira"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );

@@ -269,17 +269,19 @@ Este documento é a bússola viva do projeto. Ele mapeia as decisões arquitetur
 - [x] **Passo 14.3: Integração com a Carteira do Usuário (Planejador de Renda Passiva)**:
   - [x] Cruzamento dinâmico com as posições cadastradas na carteira do usuário autenticado para destacar quais meses do ano o investidor receberá proventos e identificar eventuais meses vazios.
 
-### 📈 FASE 15: Gestão Contábil Avançada de Carteira, Novos Aportes & Preço Médio Ponderado (Próximo Passo)
-- [ ] **Passo 15.1: Recálculo Automático de Preço Médio (Média Ponderada Contábil)**:
-  - Ao realizar um novo aporte ou compra de um ativo já existente na custódia do investidor:
+### ✅ FASE 15: Gestão Contábil Avançada de Carteira, Novos Aportes & Preço Médio Ponderado (Concluída)
+- [x] **Passo 15.1: Recálculo Automático de Preço Médio (Média Ponderada Contábil)**:
+  - [x] Ao realizar um novo aporte ou compra de um ativo já existente na custódia do investidor:
     $$Q_{\text{total}} = Q_{\text{antiga}} + Q_{\text{nova}}$$
     $$\text{Preço Médio Novo} = \frac{(Q_{\text{antiga}} \times \text{PM}_{\text{antigo}}) + (Q_{\text{nova}} \times \text{Preço}_{\text{compra}})}{Q_{\text{total}}}$$
-  - Atualização automática do Livro-Razão Contábil (`carteira_transacoes`) preservando rastreabilidade fiscal para apuração de IR.
-- [ ] **Passo 15.2: Ação Rápida de Aporte ("Comprar Mais") no Frontend**:
-  - Botão de atalho direto na tabela de custódia da carteira (`PortfolioTable`) ao lado de cada ativo cadastrado.
-  - Modal dedicado de Aporte com ticker travado, exibindo posição atual e calculando em tempo real o novo Preço Médio resultante antes da confirmação.
-- [ ] **Passo 15.3: Histórico de Transações e Extrato de Aportes/Vendas**:
-  - Aba ou gaveta de visualização do histórico de operações (`carteira_transacoes`) por ativo, exibindo datas, preços unitários e evolução do preço médio ao longo do tempo.
+  - [x] Atualização automática do Livro-Razão Contábil (`carteira_transacoes`) com tipo `APORTE`, preservando rastreabilidade contábil e fiscal para apuração de IR.
+  - [x] Suporte a sobrescrita manual opcional (`tipo_operacao = "SUBSTITUIR"`) caso o usuário deseje corrigir a custódia.
+- [x] **Passo 15.2: Ação Rápida de Aporte ("Comprar Mais") no Frontend**:
+  - [x] Botão de atalho direto na tabela de custódia da carteira (`PortfolioTable`) ao lado de cada ativo cadastrado (`+ Aporte`).
+  - [x] Modal dedicado de Aporte (`AddPositionModal`) com ticker travado, exibindo posição atual em custódia e calculando em tempo real com simulação ao vivo o novo Preço Médio e quantidade total antes da confirmação.
+- [x] **Passo 15.3: Histórico de Transações e Extrato de Aportes/Vendas**:
+  - [x] Modal dedicado de extrato e histórico de operações (`TransactionHistoryModal`) consumindo `GET /api/v1/carteira/transacoes` com filtro opcional por ticker (`?ticker=...`), abas de filtro por tipo (`TODOS`, `APORTE`, `COMPRA`, `VENDA`) e métricas de volume financeiro total aportado.
+  - [x] Acesso unificado via botão superior "Extrato Contábil" e botão individual "Histórico" em cada linha da tabela de custódia.
 
 ### 🔮 FASE 16: Análise Gráfica, Indicadores Técnicos & IA Preditiva de Tendência (Ideação & Arquitetura Futura)
 - [ ] **Passo 16.1: Motor de Séries Temporais & Indicadores Técnicos Clássicos (`internal/technical`)**:

@@ -138,7 +138,16 @@ func (h *Handler) ListarTransacoesCarteira(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	transacoes, err := h.portfolioService.ListarTransacoes(r.Context(), claims.UsuarioID)
+	ticker := r.URL.Query().Get("ticker")
+	var transacoes []portfolio.Transacao
+	var err error
+
+	if ticker != "" {
+		transacoes, err = h.portfolioService.ListarTransacoesPorTicker(r.Context(), claims.UsuarioID, ticker)
+	} else {
+		transacoes, err = h.portfolioService.ListarTransacoes(r.Context(), claims.UsuarioID)
+	}
+
 	if err != nil {
 		responderJSON(w, http.StatusInternalServerError, map[string]string{
 			"erro": "falha ao consultar transações: " + err.Error(),
