@@ -97,7 +97,7 @@ export function AssetDetailModal({ ativo, macro, onClose }: AssetModalProps) {
         </button>
 
         {/* Cabeçalho do Ativo */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-neutral-800/80 pb-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-neutral-800/80 pb-6 pr-10">
           <div>
             <div className="flex items-center gap-2.5 flex-wrap">
               <span className="text-3xl font-extrabold tracking-tight text-white font-mono">{ativo.ticker}</span>
