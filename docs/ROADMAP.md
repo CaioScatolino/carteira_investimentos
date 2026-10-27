@@ -281,6 +281,21 @@ Este documento é a bússola viva do projeto. Ele mapeia as decisões arquitetur
 - [ ] **Passo 15.3: Histórico de Transações e Extrato de Aportes/Vendas**:
   - Aba ou gaveta de visualização do histórico de operações (`carteira_transacoes`) por ativo, exibindo datas, preços unitários e evolução do preço médio ao longo do tempo.
 
+### 🔮 FASE 16: Análise Gráfica, Indicadores Técnicos & IA Preditiva de Tendência (Ideação & Arquitetura Futura)
+- [ ] **Passo 16.1: Motor de Séries Temporais & Indicadores Técnicos Clássicos (`internal/technical`)**:
+  - **Médias Móveis de Tendência:** Média Aritmética Semanal (ex: MMA de 8 semanas e 21 períodos) para rastreamento de momentum institucional e MMA 200 para tendência primária de longo prazo.
+  - **Osciladores de Momento:** IFR / RSI (Índice de Força Relativa) e Bandas de Bollinger para identificar zonas de exaustão e sobre-venda técnica.
+  - **Volume & Zonas de Preço:** Detecção de suportes, resistências e confluências de volume diário.
+- [ ] **Passo 16.2: Camada de Inteligência Artificial (IA) para Síntese Gráfica + Fundamentalista**:
+  - Cruzamento analítico por IA entre **Valuation Fundamentalista** (Bazin/Graham) e **Price Action**:
+    - Confluência estratégica: evitar comprar "facas caindo" e identificar o timing ótimo em que uma boa pagadora de dividendos encerra uma correção e retoma a tendência.
+    - Parecer automatizado conciso da IA no modal do ativo (ex: *"Ativo com margem de segurança Bazin de +32%, atualmente testando suporte na média móvel de 8 semanas com IFR em sobrevenda — ponto estatístico de entrada atrativo"*).
+- [ ] **Passo 16.3: Gráficos Interativos Profissionais no Frontend (`AssetDetailModal`)**:
+  - Integração de gráficos interativos (ex: Lightweight Charts institucional ou Canvas) com alternador de tempos gráficos (Diário / Semanal / Mensal) e médias móveis ativáveis.
+- [ ] **Passo 16.4: Expansão Futura Multiativos (Criptomoedas & Ativos Globais)**:
+  - Estudo de viabilidade arquitetural para conectar pares de Criptoativos (Bitcoin, Ethereum, etc.) via feeds de mercado, reaproveitando a infraestrutura de análise técnica, IA preditiva e gestão de portfólio.
+
+
 
 
 
