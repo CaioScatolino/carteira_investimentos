@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from "react";
 import { Ativo } from "@/types/market";
 import { StatusBadge } from "./StatusBadge";
-import { Search, ChevronLeft, ChevronRight, ArrowUpDown, ChevronDown, Target, TrendingUp, ShieldCheck } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, ArrowUpDown, ChevronDown, Target, TrendingUp, ShieldCheck, BarChart2 } from "lucide-react";
 
 interface MarketTableProps {
   titulo: string;
@@ -12,6 +12,7 @@ interface MarketTableProps {
   ativos: Ativo[];
   classe: "ACAO" | "FII" | "ETF";
   onSelectAtivo: (ativo: Ativo) => void;
+  onAbrirGrafico?: (ativo: Ativo) => void;
 }
 
 type SortKey = "SCORE" | "PREMIO" | "SPREAD_NTNB" | "ROIC" | "DY" | "MARGEM" | "COTACAO";
@@ -23,6 +24,7 @@ export function MarketTable({
   ativos,
   classe,
   onSelectAtivo,
+  onAbrirGrafico,
 }: MarketTableProps) {
   const [busca, setBusca] = useState("");
   const [pagina, setPagina] = useState(1);
@@ -527,6 +529,16 @@ export function MarketTable({
                         <span className="font-bold text-white font-mono group-hover:text-[#d4af37] transition-colors">
                           {ativo.ticker}
                         </span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onAbrirGrafico?.(ativo);
+                          }}
+                          className="p-1 rounded bg-neutral-900 hover:bg-[#d4af37]/20 text-neutral-400 hover:text-[#d4af37] border border-neutral-800 transition-colors"
+                          title={`Abrir gráfico técnico e médias móveis de ${ativo.ticker}`}
+                        >
+                          <BarChart2 className="w-3.5 h-3.5" />
+                        </button>
                         {ativo.porte === "BLUE_CHIP" && (
                           <span
                             title="Blue Chip: Gigante de mercado (> R$ 15B) com altíssima liquidez institucional"

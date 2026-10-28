@@ -11,9 +11,10 @@ interface AssetModalProps {
   ativo: Ativo | null;
   macro?: CenarioMacro | null;
   onClose: () => void;
+  onAbrirGrafico?: (ticker: string) => void;
 }
 
-export function AssetDetailModal({ ativo, macro, onClose }: AssetModalProps) {
+export function AssetDetailModal({ ativo, macro, onClose, onAbrirGrafico }: AssetModalProps) {
   if (!ativo) return null;
 
   const [analiseB3, setAnaliseB3] = useState<AnaliseProventos5A | null>(null);
@@ -143,6 +144,16 @@ export function AssetDetailModal({ ativo, macro, onClose }: AssetModalProps) {
             <span className="text-xs text-neutral-400 mt-0.5">
               {ativo.valor_mercado ? `MktCap: ${formatVolume(ativo.valor_mercado)}` : `Cotistas: ${ativo.numero_cotistas?.toLocaleString("pt-BR")}`} • Vol: {formatVolume(ativo.volume_total)}
             </span>
+            {onAbrirGrafico && (
+              <button
+                onClick={() => onAbrirGrafico(ativo.ticker)}
+                className="mt-2.5 px-3 py-1.5 rounded-xl bg-[#d4af37]/15 hover:bg-[#d4af37]/25 text-[#d4af37] border border-[#d4af37]/40 text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
+                title="Abrir Gráfico Interativo com Velas, Médias e Preço Teto"
+              >
+                <BarChart3 className="w-3.5 h-3.5" />
+                <span>Gráfico Técnico (Candles & Teto)</span>
+              </button>
+            )}
           </div>
         </div>
 

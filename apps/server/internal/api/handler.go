@@ -9,6 +9,7 @@ import (
 	"carteira_investimentos/server/internal/portfolio"
 	"carteira_investimentos/server/internal/score"
 	"carteira_investimentos/server/internal/storage"
+	"carteira_investimentos/server/internal/technical"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -25,6 +26,7 @@ type Handler struct {
 	tokenManager     *auth.GerenciadorToken
 	portfolioService *portfolio.Service
 	calendarService  *calendar.Service
+	technicalService *technical.Service
 }
 
 func NovoHandler(
@@ -41,6 +43,13 @@ func NovoHandler(
 	if calendarService == nil {
 		calendarService = calendar.NovoService(store, b3Client)
 	}
+
+	var cacheStore storage.CacheStore
+	if cs, ok := store.(storage.CacheStore); ok {
+		cacheStore = cs
+	}
+	technicalService := technical.NovoService(cacheStore, store)
+
 	return &Handler{
 		store:            store,
 		b3Client:         b3Client,
@@ -48,6 +57,7 @@ func NovoHandler(
 		tokenManager:     tokenManager,
 		portfolioService: portfolioService,
 		calendarService:  calendarService,
+		technicalService: technicalService,
 	}
 }
 
@@ -290,5 +300,35 @@ func (h *Handler) ObterCalendarioProventos(w http.ResponseWriter, r *http.Reques
 	}
 
 	responderJSON(w, http.StatusOK, resumo)
+}
+
+// ObterGraficoAtivo entrega a série de candles com MMA 8/21/200, RSI 14 e Preço Teto
+func (h *Handler) ObterGraficoAtivo(w http.ResponseWriter, r *http.Request) {
+	ticker := strings.ToUpper(strings.TrimSpace(r.PathValue("ticker")))
+	if ticker == "" {
+		responderJSON(w, http.StatusBadRequest, map[string]string{"erro": "Ticker não informado"})
+		return
+	}
+
+	q := r.URL.Query()
+	intervalo := strings.ToLower(strings.TrimSpace(q.Get("intervalo")))
+	periodo := strings.ToLower(strings.TrimSpace(q.Get("periodo")))
+
+	if h.technicalService == nil {
+		responderJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"erro": "serviço de análise técnica não inicializado",
+		})
+		return
+	}
+
+	resp, err := h.technicalService.ObterDadosGrafico(r.Context(), ticker, intervalo, periodo)
+	if err != nil {
+		responderJSON(w, http.StatusInternalServerError, map[string]string{
+			"erro": fmt.Sprintf("falha ao carregar gráfico para %s: %v", ticker, err),
+		})
+		return
+	}
+
+	responderJSON(w, http.StatusOK, resp)
 }
 

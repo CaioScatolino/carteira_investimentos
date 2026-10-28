@@ -283,19 +283,27 @@ Este documento é a bússola viva do projeto. Ele mapeia as decisões arquitetur
   - [x] Modal dedicado de extrato e histórico de operações (`TransactionHistoryModal`) consumindo `GET /api/v1/carteira/transacoes` com filtro opcional por ticker (`?ticker=...`), abas de filtro por tipo (`TODOS`, `APORTE`, `COMPRA`, `VENDA`) e métricas de volume financeiro total aportado.
   - [x] Acesso unificado via botão superior "Extrato Contábil" e botão individual "Histórico" em cada linha da tabela de custódia.
 
-### 🔮 FASE 16: Análise Gráfica, Indicadores Técnicos & IA Preditiva de Tendência (Ideação & Arquitetura Futura)
-- [ ] **Passo 16.1: Motor de Séries Temporais & Indicadores Técnicos Clássicos (`internal/technical`)**:
-  - **Médias Móveis de Tendência:** Média Aritmética Semanal (ex: MMA de 8 semanas e 21 períodos) para rastreamento de momentum institucional e MMA 200 para tendência primária de longo prazo.
-  - **Osciladores de Momento:** IFR / RSI (Índice de Força Relativa) e Bandas de Bollinger para identificar zonas de exaustão e sobre-venda técnica.
-  - **Volume & Zonas de Preço:** Detecção de suportes, resistências e confluências de volume diário.
-- [ ] **Passo 16.2: Camada de Inteligência Artificial (IA) para Síntese Gráfica + Fundamentalista**:
-  - Cruzamento analítico por IA entre **Valuation Fundamentalista** (Bazin/Graham) e **Price Action**:
-    - Confluência estratégica: evitar comprar "facas caindo" e identificar o timing ótimo em que uma boa pagadora de dividendos encerra uma correção e retoma a tendência.
-    - Parecer automatizado conciso da IA no modal do ativo (ex: *"Ativo com margem de segurança Bazin de +32%, atualmente testando suporte na média móvel de 8 semanas com IFR em sobrevenda — ponto estatístico de entrada atrativo"*).
-- [ ] **Passo 16.3: Gráficos Interativos Profissionais no Frontend (`AssetDetailModal`)**:
-  - Integração de gráficos interativos (ex: Lightweight Charts institucional ou Canvas) com alternador de tempos gráficos (Diário / Semanal / Mensal) e médias móveis ativáveis.
+### ✅ FASE 16: Análise Gráfica, Indicadores Técnicos & Confluência Fundamentalista (Concluída)
+- [x] **Passo 16.1: Motor de Séries Temporais & Indicadores Técnicos Clássicos (`internal/technical`)**:
+  - [x] Ingestão de séries históricas de candles (OHLCV) via Yahoo Finance v8 com User-Agent anti-blocking e fallback.
+  - [x] **Médias Móveis de Tendência:** MMA 8 (momentum de curto prazo), MMA 21 (linha d'água de tendência de médio prazo) e MMA 200 (tendência primária institucional).
+  - [x] **Oscilador de Exaustão:** IFR / RSI (14 períodos de Wilder) com detecção matemática de sobrecompra ($\ge 70$) e sobrevenda ($\le 30$).
+  - [x] **Cache Distribuído no Redis:** Chaves `b3:chart:{ticker}:{intervalo}:{periodo}` com TTL de 4 horas, leitura em < 1ms e zero sobrecarga no MySQL.
+- [x] **Passo 16.2: Confluência Técnica & Fundamentalista (O Sinal de Ouro)**:
+  - [x] Cruzamento analítico entre **Valuation Fundamentalista** (Bazin/Graham) e **Price Action**:
+    - Detecção de oportunidades assimétricas (`ZONA_COMPRA_SOBREVENDIDO`): Ativo cotando abaixo do Teto Bazin com IFR $\le 35$ em pânico vendedor.
+    - Detecção de tendência primária (`COMPRA_TENDENCIA_ALTA`): Ativo abaixo do Teto Bazin e cotando acima da MMA 21 e MMA 200.
+    - Alerta de sobrecompra e ágio (`SOBRECOMPRA_ALERTA` e `AGIO_SEM_MARGEM`).
+- [x] **Passo 16.3: Gráficos Interativos Profissionais no Frontend (`AssetChartModal`)**:
+  - [x] Integração da biblioteca de alta performance `lightweight-charts` (TradingView) no Next.js.
+  - [x] Velas em verde esmeralda e vermelho carmim sobre fundo preto ônix `#070709`.
+  - [x] **Linha Horizontal Dourada do Preço Teto Bazin** e Ciano de Graham plotadas diretamente em cima dos candles.
+  - [x] Sub-painel inferior de IFR 14 sincronizado com linhas de corte 30 e 70.
+  - [x] Alternador de tempos gráficos (1D Diário / 1S Semanal) e período (6M, 1A, 2A).
+  - [x] Checkboxes para ligar/desligar MMA 8, 21, 200, Preço Teto e RSI.
+  - [x] **Acesso em 3 Pontos:** Botão de gráfico na Tabela de Mercado B3, na Tabela da Minha Carteira e no Modal de Detalhes.
 - [ ] **Passo 16.4: Expansão Futura Multiativos (Criptomoedas & Ativos Globais)**:
-  - Estudo de viabilidade arquitetural para conectar pares de Criptoativos (Bitcoin, Ethereum, etc.) via feeds de mercado, reaproveitando a infraestrutura de análise técnica, IA preditiva e gestão de portfólio.
+  - [ ] Estudo de viabilidade arquitetural para conectar pares de Criptoativos (Bitcoin, Ethereum, etc.) via feeds de mercado, reaproveitando a infraestrutura de análise técnica, IA preditiva e gestão de portfólio.
 
 
 

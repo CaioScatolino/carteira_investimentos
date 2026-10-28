@@ -14,6 +14,7 @@ import { PortfolioTable } from "@/components/PortfolioTable";
 import { AddPositionModal } from "@/components/AddPositionModal";
 import { RebalanceSimulatorModal } from "@/components/RebalanceSimulatorModal";
 import { TransactionHistoryModal } from "@/components/TransactionHistoryModal";
+import { AssetChartModal } from "@/components/AssetChartModal";
 import { AuthModal } from "@/components/AuthModal";
 import { DividendCalendar } from "@/components/DividendCalendar";
 import { useAuth } from "@/context/AuthContext";
@@ -64,6 +65,17 @@ export default function Dashboard() {
   const [modalHistoricoAberto, setModalHistoricoAberto] = useState(false);
   const [tickerHistoricoFiltro, setTickerHistoricoFiltro] = useState<string | null>(null);
   const [posicaoParaAporte, setPosicaoParaAporte] = useState<PosicaoConsolidada | null>(null);
+
+  // Modal de Gráfico Técnico & Médias Móveis
+  const [modalGraficoAberto, setModalGraficoAberto] = useState(false);
+  const [tickerGrafico, setTickerGrafico] = useState<string | null>(null);
+  const [nomeGrafico, setNomeGrafico] = useState<string>("");
+
+  const handleAbrirGrafico = (ticker: string, nome?: string) => {
+    setTickerGrafico(ticker);
+    setNomeGrafico(nome || "");
+    setModalGraficoAberto(true);
+  };
 
   // 1. Carrega dados do mercado (Rankings B3 & Macro)
   const carregarRankings = async () => {
@@ -360,6 +372,7 @@ export default function Dashboard() {
                 ativos={data.acoes}
                 classe="ACAO"
                 onSelectAtivo={(ativo) => setAtivoSelecionado(ativo)}
+                onAbrirGrafico={(ativo) => handleAbrirGrafico(ativo.ticker, ativo.nome)}
               />
             </section>
 
@@ -372,6 +385,7 @@ export default function Dashboard() {
                 ativos={data.fiis}
                 classe="FII"
                 onSelectAtivo={(ativo) => setAtivoSelecionado(ativo)}
+                onAbrirGrafico={(ativo) => handleAbrirGrafico(ativo.ticker, ativo.nome)}
               />
             </section>
 
@@ -384,6 +398,7 @@ export default function Dashboard() {
                 ativos={data.etfs}
                 classe="ETF"
                 onSelectAtivo={(ativo) => setAtivoSelecionado(ativo)}
+                onAbrirGrafico={(ativo) => handleAbrirGrafico(ativo.ticker, ativo.nome)}
               />
             </section>
           </>
@@ -520,6 +535,7 @@ export default function Dashboard() {
                         setTickerHistoricoFiltro(ticker || null);
                         setModalHistoricoAberto(true);
                       }}
+                      onAbrirGrafico={(ticker) => handleAbrirGrafico(ticker)}
                     />
                   </>
                 ) : (
@@ -548,6 +564,7 @@ export default function Dashboard() {
         ativo={ativoSelecionado}
         macro={macro}
         onClose={() => setAtivoSelecionado(null)}
+        onAbrirGrafico={(ticker) => handleAbrirGrafico(ticker, ativoSelecionado?.nome)}
       />
 
       <AddPositionModal
@@ -580,6 +597,16 @@ export default function Dashboard() {
       <AuthModal
         isOpen={modalAuthAberto}
         onClose={() => setModalAuthAberto(false)}
+      />
+
+      <AssetChartModal
+        isOpen={modalGraficoAberto}
+        onClose={() => {
+          setModalGraficoAberto(false);
+          setTickerGrafico(null);
+        }}
+        ticker={tickerGrafico}
+        nomeInicial={nomeGrafico}
       />
 
       {/* Rodapé Minimalista */}

@@ -21,18 +21,31 @@ type SnapshotStore interface {
 	ListarTodos() []*domain.Ativo
 }
 
+// CacheStore é o contrato genérico para armazenamento temporário chave-valor (Redis/In-Memory)
+type CacheStore interface {
+	ObterCache(ctx context.Context, chave string) ([]byte, error)
+	SalvarCache(ctx context.Context, chave string, dados []byte, ttl time.Duration) error
+}
+
 // ----------------------------------------------------------------------
 // 1. Adaptador In-Memory (Para Desenvolvimento Local no Windows)
 // ----------------------------------------------------------------------
 
+type inMemoryCacheItem struct {
+	dados    []byte
+	expiraEm time.Time
+}
+
 type InMemoryStore struct {
 	mu     sync.RWMutex
 	ativos map[string]*domain.Ativo
+	cache  map[string]inMemoryCacheItem
 }
 
 func NovoInMemoryStore() *InMemoryStore {
 	return &InMemoryStore{
 		ativos: make(map[string]*domain.Ativo),
+		cache:  make(map[string]inMemoryCacheItem),
 	}
 }
 
@@ -70,6 +83,29 @@ func (s *InMemoryStore) ListarTodos() []*domain.Ativo {
 		lista = append(lista, a)
 	}
 	return lista
+}
+
+func (s *InMemoryStore) ObterCache(ctx context.Context, chave string) ([]byte, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	item, existe := s.cache[chave]
+	if !existe {
+		return nil, errors.New("chave não encontrada no cache")
+	}
+	if time.Now().After(item.expiraEm) {
+		return nil, errors.New("chave expirada no cache")
+	}
+	return item.dados, nil
+}
+
+func (s *InMemoryStore) SalvarCache(ctx context.Context, chave string, dados []byte, ttl time.Duration) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.cache[chave] = inMemoryCacheItem{
+		dados:    dados,
+		expiraEm: time.Now().Add(ttl),
+	}
+	return nil
 }
 
 // ----------------------------------------------------------------------
@@ -197,4 +233,18 @@ func (r *RedisStore) ListarTodos() []*domain.Ativo {
 		}
 	}
 	return lista
+}
+
+// ObterCache recupera bytes brutos do Redis com timeout rápido
+func (r *RedisStore) ObterCache(ctx context.Context, chave string) ([]byte, error) {
+	ctxT, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	return r.client.Get(ctxT, chave).Bytes()
+}
+
+// SalvarCache armazena bytes brutos no Redis com TTL específico
+func (r *RedisStore) SalvarCache(ctx context.Context, chave string, dados []byte, ttl time.Duration) error {
+	ctxT, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	return r.client.Set(ctxT, chave, dados, ttl).Err()
 }

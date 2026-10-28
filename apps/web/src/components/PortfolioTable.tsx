@@ -2,13 +2,14 @@
 
 import React, { useState } from "react";
 import { ClasseAtivo, PosicaoConsolidada } from "@/types/portfolio";
-import { Trash2, TrendingUp, TrendingDown, ShieldAlert, CheckCircle2, Clock, PlusCircle, History } from "lucide-react";
+import { Trash2, TrendingUp, TrendingDown, ShieldAlert, CheckCircle2, Clock, PlusCircle, History, BarChart2 } from "lucide-react";
 
 interface PortfolioTableProps {
   posicoes: PosicaoConsolidada[];
   onExcluirPosicao: (id: number, ticker: string) => void;
   onAportar?: (posicao: PosicaoConsolidada) => void;
   onVerHistorico?: (ticker?: string) => void;
+  onAbrirGrafico?: (ticker: string) => void;
 }
 
 export function PortfolioTable({
@@ -16,6 +17,7 @@ export function PortfolioTable({
   onExcluirPosicao,
   onAportar,
   onVerHistorico,
+  onAbrirGrafico,
 }: PortfolioTableProps) {
   const [filtroClasse, setFiltroClasse] = useState<ClasseAtivo | "TODAS">("TODAS");
   const [busca, setBusca] = useState("");
@@ -255,6 +257,15 @@ export function PortfolioTable({
                     {/* Ações */}
                     <td className="py-3.5 px-4 text-center">
                       <div className="flex items-center justify-center gap-1.5">
+                        {p.classe !== "RENDA_FIXA" && (
+                          <button
+                            onClick={() => onAbrirGrafico?.(p.ticker)}
+                            className="p-1.5 rounded-lg text-neutral-400 hover:text-[#d4af37] hover:bg-[#d4af37]/10 transition-colors"
+                            title="Abrir gráfico técnico e médias móveis"
+                          >
+                            <BarChart2 className="w-4 h-4" />
+                          </button>
+                        )}
                         <button
                           onClick={() => onAportar?.(p)}
                           className="px-2 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 text-xs font-semibold flex items-center gap-1 transition-colors"
