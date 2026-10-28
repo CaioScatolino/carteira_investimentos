@@ -18,6 +18,8 @@ export interface RespostaGrafico {
   intervalo: string;
   periodo: string;
   preco_atual: number;
+  preco_teto_consolidado?: number;
+  modelos_teto?: string[];
   preco_teto_bazin: number;
   valor_graham: number;
   margem_seguranca: number;

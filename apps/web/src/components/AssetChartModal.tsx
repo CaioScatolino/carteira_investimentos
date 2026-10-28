@@ -159,19 +159,33 @@ export function AssetChartModal({
     }));
     candleSeries.setData(formattedCandles);
 
-    // Linha de Preço Teto Bazin / Consensual (Dourada)
-    if (mostrarTeto && dados.preco_teto_bazin > 0) {
-      candleSeries.createPriceLine({
-        price: dados.preco_teto_bazin,
+    // Linha Reta Contínua de Preço Teto Consolidado (Dourada Institucional)
+    // Renderizada como LineSeries com valor constante para atravessar o gráfico inteiro
+    // como uma linha reta e garantir que o autoScale do eixo Y a mantenha 100% visível na tela
+    const tetoValor =
+      (dados.preco_teto_consolidado && dados.preco_teto_consolidado > 0)
+        ? dados.preco_teto_consolidado
+        : dados.preco_teto_bazin;
+
+    if (mostrarTeto && tetoValor > 0 && dados.candles.length > 0) {
+      const tetoSeries = chart.addSeries(LineSeries, {
         color: "#d4af37",
         lineWidth: 2,
-        lineStyle: LineStyle.Dashed,
-        axisLabelVisible: true,
-        title: "TETO BAZIN",
+        lineStyle: LineStyle.Solid,
+        priceLineVisible: true,
+        lastValueVisible: true,
+        title: "TETO CONSOLIDADO",
       });
+
+      tetoSeries.setData(
+        dados.candles.map((c) => ({
+          time: c.time as Time,
+          value: tetoValor,
+        }))
+      );
     }
 
-    // Linha de Valor de Graham (Ciano Dotted)
+    // Linha de Valor de Graham (Ciano Pontilhada)
     if (mostrarTeto && dados.valor_graham > 0) {
       candleSeries.createPriceLine({
         price: dados.valor_graham,
@@ -366,14 +380,22 @@ export function AssetChartModal({
               </span>
             </div>
 
-            {dados && dados.preco_teto_bazin > 0 && (
+            {dados && ((dados.preco_teto_consolidado && dados.preco_teto_consolidado > 0) || (dados.preco_teto_bazin && dados.preco_teto_bazin > 0)) ? (
               <div className="px-3 py-1.5 rounded-lg bg-[#d4af37]/10 border border-[#d4af37]/30 flex flex-col">
-                <span className="text-[9px] text-[#f5df88] uppercase">Teto Bazin</span>
-                <span className="font-extrabold text-[#d4af37]">
-                  R$ {dados.preco_teto_bazin.toFixed(2)}
+                <span className="text-[9px] text-[#f5df88] uppercase font-bold flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#d4af37]"></span>
+                  Teto Consolidado
                 </span>
+                <span className="font-extrabold text-[#d4af37]">
+                  R$ {(dados.preco_teto_consolidado || dados.preco_teto_bazin).toFixed(2)}
+                </span>
+                {dados.modelos_teto && dados.modelos_teto.length > 0 && (
+                  <span className="text-[8px] text-neutral-400 font-sans tracking-tight">
+                    {dados.modelos_teto.join(" + ")}
+                  </span>
+                )}
               </div>
-            )}
+            ) : null}
 
             {dados && (
               <div className="px-3 py-1.5 rounded-lg bg-neutral-900 border border-neutral-800 flex flex-col">
@@ -486,14 +508,15 @@ export function AssetChartModal({
           <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={() => setMostrarTeto(!mostrarTeto)}
-              className={`px-2 py-1 rounded border text-[11px] flex items-center gap-1.5 transition-all ${
+              className={`px-2.5 py-1 rounded border text-[11px] font-medium flex items-center gap-1.5 transition-all ${
                 mostrarTeto
-                  ? "bg-[#d4af37]/15 border-[#d4af37]/40 text-[#f5df88]"
+                  ? "bg-[#d4af37]/15 border-[#d4af37]/50 text-[#f5df88]"
                   : "bg-neutral-900 border-neutral-800 text-neutral-500"
               }`}
+              title="Exibir ou ocultar linha reta de Teto Consolidado"
             >
-              <span className="w-2 h-2 rounded-full bg-[#d4af37]"></span>
-              <span>Teto Bazin</span>
+              <span className="w-3 h-0.5 bg-[#d4af37] rounded-full inline-block"></span>
+              <span>Teto Consolidado</span>
             </button>
 
             <button

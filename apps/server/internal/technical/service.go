@@ -75,7 +75,7 @@ func (s *Service) ObterDadosGrafico(ctx context.Context, ticker, intervalo, peri
 		periodo = "1y"
 	}
 
-	chaveCache := fmt.Sprintf("b3:chart:%s:%s:%s", tickerLimpo, intervalo, periodo)
+	chaveCache := fmt.Sprintf("b3:chart:v3:%s:%s:%s", tickerLimpo, intervalo, periodo)
 
 	// 1. Tenta recuperar do Cache Redis / In-Memory
 	if s.cache != nil {
@@ -182,7 +182,8 @@ func (s *Service) ObterDadosGrafico(ctx context.Context, ticker, intervalo, peri
 
 	// 4. Cruzamento Fundamentalista com Snapshot B3 do Ativo
 	precoAtual := candles[len(candles)-1].Close
-	var precoTetoBazin, valorGraham, margemSeguranca float64
+	var precoTetoConsolidado, precoTetoBazin, valorGraham, margemSeguranca float64
+	var modelosTeto []string
 	nomeAtivo := tickerLimpo
 
 	if s.store != nil {
@@ -193,20 +194,27 @@ func (s *Service) ObterDadosGrafico(ctx context.Context, ticker, intervalo, peri
 			if ativo.PrecoAtual > 0 {
 				precoAtual = ativo.PrecoAtual
 			}
-			if ativo.PrecoTetoConsolidado > 0 {
-				precoTetoBazin = ativo.PrecoTetoConsolidado
-			} else if ativo.PrecoTetoBazin5A > 0 {
+			precoTetoConsolidado = ativo.PrecoTetoConsolidado
+			modelosTeto = ativo.ModelosTetoConsolidado
+			precoTetoBazin = ativo.PrecoTetoBazin
+			if ativo.PrecoTetoBazin5A > 0 {
 				precoTetoBazin = ativo.PrecoTetoBazin5A
-			} else if ativo.PrecoTetoBazin > 0 {
-				precoTetoBazin = ativo.PrecoTetoBazin
+			}
+			// Fallback caso PrecoTetoConsolidado ainda não tenha sido computado
+			if precoTetoConsolidado == 0 {
+				if precoTetoBazin > 0 {
+					precoTetoConsolidado = precoTetoBazin
+				} else if ativo.ValorGraham > 0 {
+					precoTetoConsolidado = ativo.ValorGraham
+				}
 			}
 			valorGraham = ativo.ValorGraham
 			margemSeguranca = ativo.PremioDescontoPercentual
 			if margemSeguranca == 0 && ativo.MargemSegurancaConsolidada != 0 {
 				margemSeguranca = ativo.MargemSegurancaConsolidada
 			}
-			if margemSeguranca == 0 && precoTetoBazin > 0 && precoAtual > 0 {
-				margemSeguranca = ((precoTetoBazin - precoAtual) / precoAtual) * 100
+			if margemSeguranca == 0 && precoTetoConsolidado > 0 && precoAtual > 0 {
+				margemSeguranca = ((precoTetoConsolidado - precoAtual) / precoAtual) * 100
 			}
 		}
 	}
@@ -223,24 +231,31 @@ func (s *Service) ObterDadosGrafico(ctx context.Context, ticker, intervalo, peri
 		ultimaMMA200 = mma200[len(mma200)-1].Value
 	}
 
-	sinal, desc := AvaliarSinalTecnico(precoAtual, precoTetoBazin, ultimoRSI, ultimaMMA21, ultimaMMA200)
+	tetoReferencia := precoTetoConsolidado
+	if tetoReferencia == 0 {
+		tetoReferencia = precoTetoBazin
+	}
+
+	sinal, desc := AvaliarSinalTecnico(precoAtual, tetoReferencia, ultimoRSI, ultimaMMA21, ultimaMMA200)
 
 	resp := RespostaGrafico{
-		Ticker:          tickerLimpo,
-		Nome:            nomeAtivo,
-		Intervalo:       intervalo,
-		Periodo:         periodo,
-		PrecoAtual:      precoAtual,
-		PrecoTetoBazin:  precoTetoBazin,
-		ValorGraham:     valorGraham,
-		MargemSeguranca: margemSeguranca,
-		SinalTecnico:    sinal,
-		DescricaoSinal:  desc,
-		Candles:         candles,
-		MMA8:            mma8,
-		MMA21:           mma21,
-		MMA200:          mma200,
-		RSI14:           rsi14,
+		Ticker:               tickerLimpo,
+		Nome:                 nomeAtivo,
+		Intervalo:            intervalo,
+		Periodo:              periodo,
+		PrecoAtual:           precoAtual,
+		PrecoTetoConsolidado: precoTetoConsolidado,
+		ModelosTeto:          modelosTeto,
+		PrecoTetoBazin:       precoTetoBazin,
+		ValorGraham:          valorGraham,
+		MargemSeguranca:      margemSeguranca,
+		SinalTecnico:         sinal,
+		DescricaoSinal:       desc,
+		Candles:              candles,
+		MMA8:                 mma8,
+		MMA21:                mma21,
+		MMA200:               mma200,
+		RSI14:                rsi14,
 	}
 
 	// 6. Grava no Cache Redis / In-Memory por 4 horas

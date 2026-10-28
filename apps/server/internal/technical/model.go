@@ -22,15 +22,17 @@ type RespostaGrafico struct {
 	Nome            string           `json:"nome"`
 	Intervalo       string           `json:"intervalo"`
 	Periodo         string           `json:"periodo"`
-	PrecoAtual      float64          `json:"preco_atual"`
-	PrecoTetoBazin  float64          `json:"preco_teto_bazin"`
-	ValorGraham     float64          `json:"valor_graham"`
-	MargemSeguranca float64          `json:"margem_seguranca"`
-	SinalTecnico    string           `json:"sinal_tecnico"`
-	DescricaoSinal  string           `json:"descricao_sinal"`
-	Candles         []Candle         `json:"candles"`
-	MMA8            []IndicatorPoint `json:"mma8"`
-	MMA21           []IndicatorPoint `json:"mma21"`
-	MMA200          []IndicatorPoint `json:"mma200"`
-	RSI14           []IndicatorPoint `json:"rsi14"`
+	PrecoAtual           float64          `json:"preco_atual"`
+	PrecoTetoConsolidado float64          `json:"preco_teto_consolidado"`
+	ModelosTeto          []string         `json:"modelos_teto,omitempty"`
+	PrecoTetoBazin       float64          `json:"preco_teto_bazin"`
+	ValorGraham          float64          `json:"valor_graham"`
+	MargemSeguranca      float64          `json:"margem_seguranca"`
+	SinalTecnico         string           `json:"sinal_tecnico"`
+	DescricaoSinal       string           `json:"descricao_sinal"`
+	Candles              []Candle         `json:"candles"`
+	MMA8                 []IndicatorPoint `json:"mma8"`
+	MMA21                []IndicatorPoint `json:"mma21"`
+	MMA200               []IndicatorPoint `json:"mma200"`
+	RSI14                []IndicatorPoint `json:"rsi14"`
 }
