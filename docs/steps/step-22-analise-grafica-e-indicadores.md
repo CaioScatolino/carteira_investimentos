@@ -77,8 +77,13 @@ Cruza em tempo real a margem de segurança do valuation com o Price Action:
     * `candles`: Array com `{time, open, high, low, close, volume}`.
     * `mma8`, `mma21`, `mma200`: Arrays com `{time, value}`.
     * `rsi14`: Array com `{time, value}`.
+    * `preco_teto_consolidado`: Preço teto consensual multi-modelo (Bazin 5A, Graham, Gordon).
+    * `modelos_teto`: Lista descritiva dos modelos e ponderações que compõem o consenso.
     * `preco_teto_bazin`, `valor_graham`, `margem_seguranca`.
     * `sinal_tecnico`, `descricao_sinal`.
+  * **Renderização Gráfica do Teto Consolidado:**
+    * Renderizado diretamente no gráfico via `LineSeries` contínua em tom dourado champanhe (`#d4af37`), traçando uma linha reta horizontal perfeita do início ao fim da série.
+    * Mantém o auto-scale do eixo Y perfeitamente calibrado, garantindo visibilidade imediata mesmo quando o teto de valuation estiver acima dos topos históricos do ativo.
 
 ---
 
