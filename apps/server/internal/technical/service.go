@@ -79,7 +79,7 @@ func (s *Service) ObterDadosGrafico(ctx context.Context, ticker, intervalo, peri
 		}
 	}
 
-	chaveCache := fmt.Sprintf("b3:chart:v5:%s:%s:%s", tickerLimpo, intervalo, periodo)
+	chaveCache := fmt.Sprintf("b3:chart:v6:%s:%s:%s", tickerLimpo, intervalo, periodo)
 
 	// 1. Tenta recuperar do Cache Redis / In-Memory
 	if s.cache != nil {
@@ -147,13 +147,27 @@ func (s *Service) ObterDadosGrafico(ctx context.Context, ticker, intervalo, peri
 		}
 
 		cClose := *quotes.Close[i]
-		if cClose <= 0 {
-			continue
-		}
-
 		cOpen := *quotes.Open[i]
 		cHigh := *quotes.High[i]
 		cLow := *quotes.Low[i]
+
+		// Descarta candles malformados ou incompletos do Yahoo Finance
+		// (O Yahoo envia pseudo-barras de fechamento intraday com Open=0, High=0, Low=0)
+		if cOpen <= 0 || cHigh <= 0 || cLow <= 0 || cClose <= 0 {
+			// Se tiver close válido e já tiver candles válidos acumulados, atualiza o fechamento da última barra válida
+			if cClose > 0 && len(candles) > 0 {
+				lastIdx := len(candles) - 1
+				candles[lastIdx].Close = cClose
+				if cClose > candles[lastIdx].High {
+					candles[lastIdx].High = cClose
+				}
+				if cClose < candles[lastIdx].Low {
+					candles[lastIdx].Low = cClose
+				}
+			}
+			continue
+		}
+
 		cVolume := 0.0
 		if i < len(quotes.Volume) && quotes.Volume[i] != nil {
 			cVolume = *quotes.Volume[i]

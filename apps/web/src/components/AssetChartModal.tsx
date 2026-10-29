@@ -155,13 +155,15 @@ export function AssetChartModal({
       wickDownColor: "#ef4444",
     });
 
-    const formattedCandles = dados.candles.map((c) => ({
-      time: c.time as Time,
-      open: c.open,
-      high: c.high,
-      low: c.low,
-      close: c.close,
-    }));
+    const formattedCandles = dados.candles
+      .filter((c) => c.open > 0 && c.high > 0 && c.low > 0 && c.close > 0)
+      .map((c) => ({
+        time: c.time as Time,
+        open: c.open,
+        high: c.high,
+        low: c.low,
+        close: c.close,
+      }));
     candleSeries.setData(formattedCandles);
 
     // Linha Reta Contínua de Preço Teto Consolidado (Dourada Institucional)
@@ -171,19 +173,20 @@ export function AssetChartModal({
         ? dados.preco_teto_consolidado
         : dados.preco_teto_bazin;
 
-    if (mostrarTeto && tetoValor > 0 && dados.candles.length > 0) {
+    if (mostrarTeto && tetoValor > 0 && formattedCandles.length > 0) {
       // 1. Shaded Zone sutil esverdeada do TETO CONSOLIDADO para baixo
       const tetoArea = chart.addSeries(AreaSeries, {
-        topColor: "rgba(16, 185, 129, 0.10)", // Verde esmeralda suave
-        bottomColor: "rgba(16, 185, 129, 0.01)", // Gradiente até transparente
+        topColor: "rgba(16, 185, 129, 0.08)", // Verde esmeralda suave
+        bottomColor: "rgba(16, 185, 129, 0.00)", // Gradiente até transparente
         lineColor: "transparent",
         lineWidth: 1,
         priceLineVisible: false,
         lastValueVisible: false,
         crosshairMarkerVisible: false,
+        autoscaleInfoProvider: () => null, // Não distorce nem puxa a escala do eixo Y até 0
       });
       tetoArea.setData(
-        dados.candles.map((c) => ({
+        formattedCandles.map((c) => ({
           time: c.time as Time,
           value: tetoValor,
         }))
@@ -378,12 +381,12 @@ export function AssetChartModal({
       // as primeiras barras vazias com o timestamp exato dos candles, garantindo que o índice
       // de cada barra no gráfico principal corresponda perfeitamente ao mesmo índice no gráfico de IFR.
       const rsiMap = new Map<number, number>(dados.rsi14.map((pt) => [pt.time, pt.value]));
-      const fullRsiData = dados.candles.map((c) => {
-        const val = rsiMap.get(c.time);
+      const fullRsiData = formattedCandles.map((c) => {
+        const val = rsiMap.get(c.time as number);
         if (val !== undefined) {
-          return { time: c.time as Time, value: val };
+          return { time: c.time, value: val };
         }
-        return { time: c.time as Time };
+        return { time: c.time };
       });
 
       rsiSeries.setData(fullRsiData as any);
