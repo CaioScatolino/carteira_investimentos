@@ -2,13 +2,14 @@
 
 import React, { useEffect, useState, useCallback } from "react";
 import { Ativo, RespostaRankings, CenarioMacro } from "@/types/market";
-import { ResumoCarteira, CriarPosicaoRequest, ResultadoRebalanceamento, PosicaoConsolidada } from "@/types/portfolio";
+import { ResumoCarteira, CriarPosicaoRequest, ResultadoRebalanceamento, PosicaoConsolidada, ClasseAtivo } from "@/types/portfolio";
 import { API_BASE_URL, API_V1_URL } from "@/config/api";
 import { Header } from "@/components/Header";
 import { SummaryCards } from "@/components/SummaryCards";
 import { MarketTable } from "@/components/MarketTable";
 import { AssetDetailModal } from "@/components/AssetDetailModal";
 import { PortfolioSummaryCards } from "@/components/PortfolioSummaryCards";
+import { PortfolioDonutChart } from "@/components/PortfolioDonutChart";
 import { MacroAllocationView } from "@/components/MacroAllocationView";
 import { PortfolioTable } from "@/components/PortfolioTable";
 import { AddPositionModal } from "@/components/AddPositionModal";
@@ -57,6 +58,7 @@ export default function Dashboard() {
   const [resumoCarteira, setResumoCarteira] = useState<ResumoCarteira | null>(null);
   const [loadingCarteira, setLoadingCarteira] = useState(false);
   const [erroCarteira, setErroCarteira] = useState<string | null>(null);
+  const [classeFiltroDonut, setClasseFiltroDonut] = useState<ClasseAtivo | null>(null);
 
   // Modais
   const [modalAddAberto, setModalAddAberto] = useState(false);
@@ -520,12 +522,21 @@ export default function Dashboard() {
                     {/* 1. Cards de Resumo */}
                     <PortfolioSummaryCards resumo={resumoCarteira} />
 
-                    {/* 2. Macro Alocação das 5 Caixinhas */}
-                    <MacroAllocationView resumo={resumoCarteira} />
+                    {/* 2. Gráfico Donut de Composição & Foco Interativo */}
+                    <PortfolioDonutChart
+                      resumo={resumoCarteira}
+                      classeSelecionada={classeFiltroDonut}
+                      onSelecionarClasse={(cl) => {
+                        setClasseFiltroDonut((prev) => (prev === cl ? null : cl));
+                      }}
+                    />
 
-                    {/* 3. Tabela de Ativos em Custódia */}
+                    {/* 3. Tabela de Ativos em Custódia com Decomposição em Níveis */}
                     <PortfolioTable
                       posicoes={resumoCarteira.posicoes}
+                      classes={resumoCarteira.classes}
+                      patrimonioTotal={resumoCarteira.patrimonio_total}
+                      classeFiltroDonut={classeFiltroDonut}
                       onExcluirPosicao={handleExcluirPosicao}
                       onAportar={(pos) => {
                         setPosicaoParaAporte(pos);
@@ -537,6 +548,9 @@ export default function Dashboard() {
                       }}
                       onAbrirGrafico={(ticker) => handleAbrirGrafico(ticker)}
                     />
+
+                    {/* 4. Macro Alocação das 5 Caixinhas */}
+                    <MacroAllocationView resumo={resumoCarteira} />
                   </>
                 ) : (
                   <div className="p-12 text-center text-neutral-400 font-mono text-xs">

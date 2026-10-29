@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -299,6 +300,17 @@ func (s *Service) ObterResumoCarteira(ctx context.Context, usuarioID int64) (*Re
 		})
 	}
 
+	// 2. Calcula os percentuais relativos e absolutos de cada posição
+	for i := range posicoesConsolidadas {
+		if patrimonioTotal > 0 {
+			posicoesConsolidadas[i].PercentualNaCarteira = (posicoesConsolidadas[i].ValorAtualMercado / patrimonioTotal) * 100
+		}
+		totalClasse := alocacaoValorPorClasse[posicoesConsolidadas[i].Classe]
+		if totalClasse > 0 {
+			posicoesConsolidadas[i].PercentualNaClasse = (posicoesConsolidadas[i].ValorAtualMercado / totalClasse) * 100
+		}
+	}
+
 	lucroTotal := patrimonioTotal - totalInvestido
 	var rentabilidadeTotalPct float64
 	if totalInvestido > 0 {
@@ -324,12 +336,70 @@ func (s *Service) ObterResumoCarteira(ctx context.Context, usuarioID int64) (*Re
 		ClasseCaixa:         0.5,
 	}
 
+	// 3. Agrupa as classes de forma hierárquica e ordenada para visualização em níveis
+	ordemClasses := []struct {
+		Classe ClasseAtivo
+		Nome   string
+		Alvo   float64
+	}{
+		{Classe: ClasseAcaoBR, Nome: "Ações Brasil", Alvo: 21.0},
+		{Classe: ClasseFII, Nome: "Fundos Imobiliários", Alvo: 22.5},
+		{Classe: ClasseRendaFixa, Nome: "Renda Fixa", Alvo: 40.0},
+		{Classe: ClasseInternacional, Nome: "Internacional / ETFs", Alvo: 16.0},
+		{Classe: ClasseCaixa, Nome: "Caixa / Oportunidade", Alvo: 0.5},
+	}
+
+	classesConsolidadas := make([]ClasseConsolidada, 0, len(ordemClasses))
+	for _, info := range ordemClasses {
+		var posClasse []PosicaoConsolidada
+		var totalInvestidoClasse float64
+		var valorMercadoClasse float64
+
+		for _, p := range posicoesConsolidadas {
+			if p.Classe == info.Classe {
+				posClasse = append(posClasse, p)
+				totalInvestidoClasse += p.ValorAplicado
+				valorMercadoClasse += p.ValorAtualMercado
+			}
+		}
+
+		// Ordena os ativos dentro da classe pelas maiores posições financeiras
+		sort.Slice(posClasse, func(i, j int) bool {
+			return posClasse[i].ValorAtualMercado > posClasse[j].ValorAtualMercado
+		})
+
+		lucroClasse := valorMercadoClasse - totalInvestidoClasse
+		var rentabilidadeClassePct float64
+		if totalInvestidoClasse > 0 {
+			rentabilidadeClassePct = (lucroClasse / totalInvestidoClasse) * 100
+		}
+
+		var pctCarteira float64
+		if patrimonioTotal > 0 {
+			pctCarteira = (valorMercadoClasse / patrimonioTotal) * 100
+		}
+
+		classesConsolidadas = append(classesConsolidadas, ClasseConsolidada{
+			Classe:               info.Classe,
+			Nome:                 info.Nome,
+			ValorAtualMercado:    valorMercadoClasse,
+			TotalInvestido:       totalInvestidoClasse,
+			LucroPrejuizoValor:   lucroClasse,
+			RentabilidadePct:     rentabilidadeClassePct,
+			PercentualNaCarteira: pctCarteira,
+			PercentualAlvo:       info.Alvo,
+			QuantidadeAtivos:     len(posClasse),
+			Posicoes:             posClasse,
+		})
+	}
+
 	return &ResumoCarteira{
 		PatrimonioTotal:  patrimonioTotal,
 		TotalInvestido:   totalInvestido,
 		LucroTotalValor:  lucroTotal,
 		RentabilidadePct: rentabilidadeTotalPct,
 		Posicoes:         posicoesConsolidadas,
+		Classes:          classesConsolidadas,
 		AlocacaoAtual:    alocacaoAtualPct,
 		AlocacaoAlvo:     alocacaoAlvoPct,
 	}, nil

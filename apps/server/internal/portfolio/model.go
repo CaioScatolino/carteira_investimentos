@@ -84,7 +84,23 @@ type PosicaoConsolidada struct {
 	PrecoTetoEstimado    float64 `json:"preco_teto_estimado"`
 	MargemSegurancaPct   float64 `json:"margem_seguranca_pct"`
 	ScoreFundamentalista int     `json:"score_fundamentalista"`
-	SinalRebalanceamento string  `json:"sinal_rebalanceamento"` // 'COMPRAR_APORTE',s 'AGUARDAR', 'REAVALIAR'
+	SinalRebalanceamento string  `json:"sinal_rebalanceamento"` // 'COMPRAR_APORTE', 'AGUARDAR', 'REAVALIAR'
+	PercentualNaClasse   float64 `json:"percentual_na_classe"`   // Peso relativo do ativo dentro da sua classe (ex: 50.0% das Ações)
+	PercentualNaCarteira float64 `json:"percentual_na_carteira"` // Peso absoluto do ativo na carteira inteira (ex: 10.0% do Total)
+}
+
+// ClasseConsolidada agrupa os dados de uma macro-classe para a visão hierárquica por níveis e gráficos de composição.
+type ClasseConsolidada struct {
+	Classe               ClasseAtivo          `json:"classe"`
+	Nome                 string               `json:"nome"`
+	ValorAtualMercado    float64              `json:"valor_atual_mercado"`
+	TotalInvestido       float64              `json:"total_investido"`
+	LucroPrejuizoValor   float64              `json:"lucro_prejuizo_valor"`
+	RentabilidadePct     float64              `json:"rentabilidade_pct"`
+	PercentualNaCarteira float64              `json:"percentual_na_carteira"` // % do patrimônio total
+	PercentualAlvo       float64              `json:"percentual_alvo"`       // Meta institucional
+	QuantidadeAtivos     int                  `json:"quantidade_ativos"`
+	Posicoes             []PosicaoConsolidada `json:"posicoes"`
 }
 
 // ResumoCarteira consolida o patrimônio total e as divisões por macro-classe.
@@ -94,6 +110,7 @@ type ResumoCarteira struct {
 	LucroTotalValor  float64                 `json:"lucro_total_valor"`
 	RentabilidadePct float64                 `json:"rentabilidade_pct"`
 	Posicoes         []PosicaoConsolidada    `json:"posicoes"`
+	Classes          []ClasseConsolidada     `json:"classes"`
 	AlocacaoAtual    map[ClasseAtivo]float64 `json:"alocacao_atual_pct"` // Ex: RENDA_FIXA: 42.5%
 	AlocacaoAlvo     map[ClasseAtivo]float64 `json:"alocacao_alvo_pct"`  // Ex: RENDA_FIXA: 40.0%
 }

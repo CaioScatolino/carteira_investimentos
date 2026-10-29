@@ -27,6 +27,21 @@ export interface PosicaoConsolidada extends Posicao {
   margem_seguranca_pct: number;
   score_fundamentalista: number;
   sinal_rebalanceamento: "COMPRAR_APORTE" | "AGUARDAR" | "REAVALIAR" | string;
+  percentual_na_classe?: number;
+  percentual_na_carteira?: number;
+}
+
+export interface ClasseConsolidada {
+  classe: ClasseAtivo;
+  nome: string;
+  valor_atual_mercado: number;
+  total_investido: number;
+  lucro_prejuizo_valor: number;
+  rentabilidade_pct: number;
+  percentual_na_carteira: number;
+  percentual_alvo: number;
+  quantidade_ativos: number;
+  posicoes: PosicaoConsolidada[];
 }
 
 export interface ResumoCarteira {
@@ -35,6 +50,7 @@ export interface ResumoCarteira {
   lucro_total_valor: number;
   rentabilidade_pct: number;
   posicoes: PosicaoConsolidada[];
+  classes?: ClasseConsolidada[];
   alocacao_atual_pct: Record<ClasseAtivo, number>;
   alocacao_alvo_pct: Record<ClasseAtivo, number>;
 }

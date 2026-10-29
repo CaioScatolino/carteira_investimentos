@@ -241,3 +241,116 @@ func TestRecalculoPrecoMedioPonderado(t *testing.T) {
 		t.Errorf("esperava PM 15.0 após substituição, obteve %.2f", posSub.PrecoMedio)
 	}
 }
+
+func TestDecomposicaoHierarquicaCarteira(t *testing.T) {
+	repo := novoMockRepo()
+	snapStore := storage.NovoInMemoryStore()
+	svc := portfolio.NovoService(repo, snapStore)
+	ctx := context.Background()
+	usuarioID := int64(2002)
+
+	// Simula exatamente o exemplo do usuário:
+	// Total: R$ 100.000
+	// Renda Fixa: R$ 50.000 (50%)
+	// FIIs: R$ 30.000 (30%)
+	// Ações: R$ 20.000 (20%)
+	//   - PETR4: R$ 10.000 (50% das Ações, 10% do Total)
+	//   - VALE3: R$ 7.000 (35% das Ações, 7% do Total)
+	//   - AGRO3: R$ 3.000 (15% das Ações, 3% do Total)
+
+	posicoes := []portfolio.CriarPosicaoRequest{
+		{Ticker: "TESOURO_IPCA", Classe: portfolio.ClasseRendaFixa, Quantidade: 50, PrecoMedio: 1000.0, Corretora: "XP"},
+		{Ticker: "HGLG11", Classe: portfolio.ClasseFII, Quantidade: 200, PrecoMedio: 150.0, Corretora: "Clear"},
+		{Ticker: "PETR4", Classe: portfolio.ClasseAcaoBR, Quantidade: 200, PrecoMedio: 50.0, Corretora: "Genial"},
+		{Ticker: "VALE3", Classe: portfolio.ClasseAcaoBR, Quantidade: 100, PrecoMedio: 70.0, Corretora: "Genial"},
+		{Ticker: "AGRO3", Classe: portfolio.ClasseAcaoBR, Quantidade: 300, PrecoMedio: 10.0, Corretora: "Genial"},
+	}
+
+	for _, req := range posicoes {
+		if _, err := svc.AdicionarOuAtualizarPosicao(ctx, usuarioID, req); err != nil {
+			t.Fatalf("falha ao adicionar %s: %v", req.Ticker, err)
+		}
+	}
+
+	resumo, err := svc.ObterResumoCarteira(ctx, usuarioID)
+	if err != nil {
+		t.Fatalf("falha ao obter resumo: %v", err)
+	}
+
+	if math.Abs(resumo.PatrimonioTotal-100000.0) > 0.01 {
+		t.Errorf("esperava patrimonio total de 100.000, obteve %.2f", resumo.PatrimonioTotal)
+	}
+
+	// Localiza as posições de ações
+	var petr4, vale3, agro3 *portfolio.PosicaoConsolidada
+	for i := range resumo.Posicoes {
+		p := &resumo.Posicoes[i]
+		if p.Ticker == "PETR4" {
+			petr4 = p
+		} else if p.Ticker == "VALE3" {
+			vale3 = p
+		} else if p.Ticker == "AGRO3" {
+			agro3 = p
+		}
+	}
+
+	if petr4 == nil || vale3 == nil || agro3 == nil {
+		t.Fatalf("posicoes de acoes nao encontradas")
+	}
+
+	// Valida PETR4: R$ 10.000 => 50% das Ações, 10% do Total
+	if math.Abs(petr4.PercentualNaClasse-50.0) > 0.01 {
+		t.Errorf("PETR4 esperava 50%% na classe, obteve %.2f%%", petr4.PercentualNaClasse)
+	}
+	if math.Abs(petr4.PercentualNaCarteira-10.0) > 0.01 {
+		t.Errorf("PETR4 esperava 10%% na carteira, obteve %.2f%%", petr4.PercentualNaCarteira)
+	}
+
+	// Valida VALE3: R$ 7.000 => 35% das Ações, 7% do Total
+	if math.Abs(vale3.PercentualNaClasse-35.0) > 0.01 {
+		t.Errorf("VALE3 esperava 35%% na classe, obteve %.2f%%", vale3.PercentualNaClasse)
+	}
+	if math.Abs(vale3.PercentualNaCarteira-7.0) > 0.01 {
+		t.Errorf("VALE3 esperava 7%% na carteira, obteve %.2f%%", vale3.PercentualNaCarteira)
+	}
+
+	// Valida AGRO3: R$ 3.000 => 15% das Ações, 3% do Total
+	if math.Abs(agro3.PercentualNaClasse-15.0) > 0.01 {
+		t.Errorf("AGRO3 esperava 15%% na classe, obteve %.2f%%", agro3.PercentualNaClasse)
+	}
+	if math.Abs(agro3.PercentualNaCarteira-3.0) > 0.01 {
+		t.Errorf("AGRO3 esperava 3%% na carteira, obteve %.2f%%", agro3.PercentualNaCarteira)
+	}
+
+	// Valida o agrupamento hierárquico em Classes
+	if len(resumo.Classes) != 5 {
+		t.Errorf("esperava 5 classes consolidadas, obteve %d", len(resumo.Classes))
+	}
+
+	// Ações Brasil deve conter 3 ativos e R$ 20.000
+	var classeAcoes *portfolio.ClasseConsolidada
+	for i := range resumo.Classes {
+		if resumo.Classes[i].Classe == portfolio.ClasseAcaoBR {
+			classeAcoes = &resumo.Classes[i]
+			break
+		}
+	}
+
+	if classeAcoes == nil {
+		t.Fatalf("classe Ações Brasil não encontrada")
+	}
+	if classeAcoes.QuantidadeAtivos != 3 {
+		t.Errorf("esperava 3 ativos em ações, obteve %d", classeAcoes.QuantidadeAtivos)
+	}
+	if math.Abs(classeAcoes.ValorAtualMercado-20000.0) > 0.01 {
+		t.Errorf("esperava R$ 20.000 em ações, obteve %.2f", classeAcoes.ValorAtualMercado)
+	}
+	if math.Abs(classeAcoes.PercentualNaCarteira-20.0) > 0.01 {
+		t.Errorf("esperava 20%% na carteira, obteve %.2f%%", classeAcoes.PercentualNaCarteira)
+	}
+	// O primeiro ativo da classe ordenada deve ser PETR4 (maior valor)
+	if classeAcoes.Posicoes[0].Ticker != "PETR4" {
+		t.Errorf("esperava primeiro ativo ser PETR4, obteve %s", classeAcoes.Posicoes[0].Ticker)
+	}
+}
+
