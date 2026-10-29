@@ -136,6 +136,7 @@ export function AssetChartModal({
       rightPriceScale: {
         borderColor: "rgba(255, 255, 255, 0.1)",
         autoScale: true,
+        minimumWidth: 105,
       },
     });
 
@@ -250,10 +251,13 @@ export function AssetChartModal({
         timeScale: {
           borderColor: "rgba(255, 255, 255, 0.1)",
           visible: true,
+          timeVisible: true,
+          secondsVisible: false,
         },
         rightPriceScale: {
           borderColor: "rgba(255, 255, 255, 0.1)",
           scaleMargins: { top: 0.1, bottom: 0.1 },
+          minimumWidth: 105,
         },
       });
 
@@ -267,7 +271,20 @@ export function AssetChartModal({
         title: "IFR (14)",
       });
 
-      rsiSeries.setData(dados.rsi14.map((pt) => ({ time: pt.time as Time, value: pt.value })));
+      // Alinhamento temporal 1-para-1 com os candles:
+      // O IFR (14) exige 14 períodos para o primeiro ponto. Usamos WhitespaceData para preencher
+      // as primeiras barras vazias com o timestamp exato dos candles, garantindo que o índice
+      // de cada barra no gráfico principal corresponda perfeitamente ao mesmo índice no gráfico de IFR.
+      const rsiMap = new Map<number, number>(dados.rsi14.map((pt) => [pt.time, pt.value]));
+      const fullRsiData = dados.candles.map((c) => {
+        const val = rsiMap.get(c.time);
+        if (val !== undefined) {
+          return { time: c.time as Time, value: val };
+        }
+        return { time: c.time as Time };
+      });
+
+      rsiSeries.setData(fullRsiData as any);
 
       // Linhas de Nível 30 (Sobrevenda) e 70 (Sobrecompra)
       rsiSeries.createPriceLine({
@@ -288,22 +305,54 @@ export function AssetChartModal({
         title: "30 SOBREVENDA",
       });
 
-      // Sincroniza o zoom e rolagem entre o gráfico principal e o RSI
-      chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
-        if (range && rsiChartRef.current) {
-          rsiChartRef.current.timeScale().setVisibleLogicalRange(range);
+      // Sincronização bidirecional do zoom e rolagem temporal protegida contra loops
+      let isSyncingRange = false;
+      const syncFromMain = (range: any) => {
+        if (isSyncingRange || !range || !rsiChartRef.current) return;
+        isSyncingRange = true;
+        rsiChartRef.current.timeScale().setVisibleLogicalRange(range);
+        isSyncingRange = false;
+      };
+
+      const syncFromRsi = (range: any) => {
+        if (isSyncingRange || !range || !mainChartRef.current) return;
+        isSyncingRange = true;
+        mainChartRef.current.timeScale().setVisibleLogicalRange(range);
+        isSyncingRange = false;
+      };
+
+      chart.timeScale().subscribeVisibleLogicalRangeChange(syncFromMain);
+      rsiChart.timeScale().subscribeVisibleLogicalRangeChange(syncFromRsi);
+
+      // Sincronização do Crosshair (linha vertical guia em ambos os gráficos)
+      chart.subscribeCrosshairMove((param) => {
+        if (!rsiChartRef.current || !rsiSeries) return;
+        if (!param.point || !param.time) {
+          rsiChartRef.current.clearCrosshairPosition();
+        } else {
+          const val = rsiMap.get(param.time as number) ?? 50;
+          rsiChartRef.current.setCrosshairPosition(val, param.time, rsiSeries);
         }
       });
 
-      rsiChart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
-        if (range && mainChartRef.current) {
-          mainChartRef.current.timeScale().setVisibleLogicalRange(range);
+      rsiChart.subscribeCrosshairMove((param) => {
+        if (!mainChartRef.current || !candleSeries) return;
+        if (!param.point || !param.time) {
+          mainChartRef.current.clearCrosshairPosition();
+        } else {
+          const candle = dados.candles.find((c) => c.time === param.time);
+          if (candle) {
+            mainChartRef.current.setCrosshairPosition(candle.close, param.time, candleSeries);
+          }
         }
       });
     }
 
-    // Ajusta o gráfico para caber na tela
+    // Ajusta ambos os gráficos para caber na tela com o mesmo enquadramento inicial
     chart.timeScale().fitContent();
+    if (rsiChartRef.current) {
+      rsiChartRef.current.timeScale().fitContent();
+    }
 
     // Redimensionamento responsivo automático
     const handleResize = () => {
