@@ -33,6 +33,10 @@ type RespostaGrafico struct {
 	Candles              []Candle         `json:"candles"`
 	MMA8                 []IndicatorPoint `json:"mma8"`
 	MMA21                []IndicatorPoint `json:"mma21"`
+	MMA20                []IndicatorPoint `json:"mma20,omitempty"`
+	MMA52                []IndicatorPoint `json:"mma52,omitempty"`
 	MMA200               []IndicatorPoint `json:"mma200"`
+	BollingerSuperior    []IndicatorPoint `json:"bollinger_superior,omitempty"`
+	BollingerInferior    []IndicatorPoint `json:"bollinger_inferior,omitempty"`
 	RSI14                []IndicatorPoint `json:"rsi14"`
 }

@@ -94,3 +94,25 @@ func TestAvaliarSinalTecnico(t *testing.T) {
 		t.Errorf("esperava AGIO_SEM_MARGEM, obteve %s", sinal)
 	}
 }
+
+func TestCalcularBollinger(t *testing.T) {
+	var candles []Candle
+	for i := 0; i < 25; i++ {
+		candles = append(candles, Candle{
+			Time:  int64(i * 1000),
+			Close: 10.0 + float64(i%5), // 10, 11, 12, 13, 14, 10...
+		})
+	}
+
+	sup, inf := CalcularBollinger(candles, 20, 2.0)
+	if len(sup) != 6 || len(inf) != 6 {
+		t.Fatalf("esperava 6 pontos de Bollinger para 25 candles (período 20), obteve sup=%d inf=%d", len(sup), len(inf))
+	}
+
+	for i := 0; i < len(sup); i++ {
+		if sup[i].Value <= inf[i].Value {
+			t.Errorf("banda superior (%.2f) deve ser maior que inferior (%.2f)", sup[i].Value, inf[i].Value)
+		}
+	}
+}
+

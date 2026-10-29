@@ -37,6 +37,44 @@ func CalcularMMA(candles []Candle, periodo int) []IndicatorPoint {
 	return pontos
 }
 
+// CalcularBollinger calcula as Bandas de Bollinger (Superior e Inferior) com base na MMA e desvio padrão
+func CalcularBollinger(candles []Candle, periodo int, multiplicador float64) ([]IndicatorPoint, []IndicatorPoint) {
+	if len(candles) < periodo || periodo <= 0 {
+		return nil, nil
+	}
+
+	var superior, inferior []IndicatorPoint
+
+	for i := periodo - 1; i < len(candles); i++ {
+		soma := 0.0
+		for j := i - periodo + 1; j <= i; j++ {
+			soma += candles[j].Close
+		}
+		media := soma / float64(periodo)
+
+		varianciaSoma := 0.0
+		for j := i - periodo + 1; j <= i; j++ {
+			diff := candles[j].Close - media
+			varianciaSoma += diff * diff
+		}
+		desvioPadrao := math.Sqrt(varianciaSoma / float64(periodo))
+
+		sup := math.Round((media+multiplicador*desvioPadrao)*100) / 100
+		inf := math.Round((media-multiplicador*desvioPadrao)*100) / 100
+
+		superior = append(superior, IndicatorPoint{
+			Time:  candles[i].Time,
+			Value: sup,
+		})
+		inferior = append(inferior, IndicatorPoint{
+			Time:  candles[i].Time,
+			Value: inf,
+		})
+	}
+
+	return superior, inferior
+}
+
 // CalcularRSI calcula o Índice de Força Relativa de Wilder (RSI) para o período padrão (ex: 14)
 func CalcularRSI(candles []Candle, periodo int) []IndicatorPoint {
 	if len(candles) <= periodo || periodo <= 0 {

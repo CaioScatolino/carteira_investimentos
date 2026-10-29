@@ -28,6 +28,10 @@ export interface RespostaGrafico {
   candles: CandleData[];
   mma8: IndicatorPoint[];
   mma21: IndicatorPoint[];
+  mma20?: IndicatorPoint[];
+  mma52?: IndicatorPoint[];
   mma200: IndicatorPoint[];
+  bollinger_superior?: IndicatorPoint[];
+  bollinger_inferior?: IndicatorPoint[];
   rsi14: IndicatorPoint[];
 }

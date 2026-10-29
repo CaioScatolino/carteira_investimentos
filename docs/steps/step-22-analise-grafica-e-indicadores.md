@@ -45,18 +45,28 @@ Nenhuma plataforma aberta no Brasil combina, na mesma interface de velas, a linh
 ## 📊 Indicadores e Fórmulas Matemáticas
 
 ### 1. Média Móvel Aritmética (MMA)
-Calculada sobre os preços de fechamento das janelas de 8, 21 e 200 períodos:
-$$\text{MMA}_i = \frac{1}{P} \sum_{k=i-P+1}^{i} \text{Fechamento}_k$$
-* **MMA 8:** Rastreamento de momentum e primeiro ponto de suporte no curto prazo.
-* **MMA 21:** Linha d'água de tendência de médio prazo (acima = tendência de alta; abaixo = correção).
-* **MMA 200:** Tendência primária institucional (utilizada pelos grandes fundos globais para distinguir *Bull Market* de *Bear Market*).
+* **Tempo Gráfico 1D (Diário):**
+  * **MMA 8:** Rastreamento de momentum e primeiro suporte de curto prazo.
+  * **MMA 21:** Linha d'água de tendência de médio prazo.
+  * **MMA 200:** Tendência primária institucional.
+* **Tempo Gráfico 1S (Semanal - Padrão Institucional):**
+  * **MMA 20 Semanal (Gatilho de Direção — ~5 meses):** Substitui a 8 e 21 no semanal. Preço acima = fluxo comprador dominante; preço abaixo = perda de tração e início de correção.
+  * **MMA 52 Semanal (O Eixo de 1 Ano):** Média exata das 52 semanas do ano. Preço trabalhando em direção a ela sinaliza saída de euforia e entrada na área de desconto anual.
+  * **MMA 200 Semanal (O Chão de Concreto — ~4 anos):** Raramente rompida por empresas sólidas da B3; região de compra pesada de fundo de ciclo secular.
 
-### 2. Índice de Força Relativa (IFR / RSI de 14 períodos de Wilder)
+### 2. Bandas de Bollinger (20, 2) no Semanal
+Calculadas com base na MMA 20 semanas e $\pm 2$ desvios padrão ($\sigma$):
+* **Banda Superior (Área de Venda / Esticada):** $\text{MMA 20} + 2\sigma$. Preço tocando esta banda acima do Teto Consolidado indica ativo estatisticamente sobrecomprado no curto prazo.
+* **Linha Central:** Própria MMA 20 semanal como eixo de suporte/resistência dinâmico.
+* **Banda Inferior (Área de Compra Técnica):** $\text{MMA 20} - 2\sigma$. Preço tocando esta banda abaixo do Preço Teto Bazin/Consolidado gera o alinhamento perfeito entre desconto fundamentalista e exaustão técnica de queda.
+
+### 3. Índice de Força Relativa (IFR / RSI de 14 períodos de Wilder)
 Mede a magnitude dos ganhos em relação às perdas para detectar zonas de esgotamento:
 $$\text{RS} = \frac{\text{Média Suavizada de Ganhos}}{\text{Média Suavizada de Perdas}}$$
 $$\text{IFR} = 100 - \left( \frac{100}{1 + \text{RS}} \right)$$
-* $\text{IFR} \le 30$: Sobrevenda extrema (pânico vendedor / liquidação forçada).
-* $\text{IFR} \ge 70$: Sobrecompra (euforia).
+* **Semanal (1S):** Linha 35 (Sobrevenda institucional) e Linha 70 (Sobrecompra).
+* **Diário (1D):** Linha 30 (Sobrevenda clássica) e Linha 70 (Sobrecompra).
+* **Autoscale Travado:** Garantido no intervalo [20, 80] para que ambas as linhas horizontais estejam sempre visíveis.
 
 ### 3. Confluência Técnica & Fundamentalista (O Sinal de Ouro)
 Cruza em tempo real a margem de segurança do valuation com o Price Action:

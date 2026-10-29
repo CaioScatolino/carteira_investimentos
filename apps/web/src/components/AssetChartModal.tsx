@@ -7,6 +7,7 @@ import {
   ColorType,
   CandlestickSeries,
   LineSeries,
+  AreaSeries,
   LineStyle,
   IChartApi,
   ISeriesApi,
@@ -28,8 +29,8 @@ export function AssetChartModal({
   ticker,
   nomeInicial = "",
 }: AssetChartModalProps) {
-  const [intervalo, setIntervalo] = useState<"1d" | "1wk">("1d");
-  const [periodo, setPeriodo] = useState<"6mo" | "1y" | "2y">("1y");
+  const [intervalo, setIntervalo] = useState<"1d" | "1wk">("1wk");
+  const [periodo, setPeriodo] = useState<"6mo" | "1y" | "2y" | "5y">("5y");
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [dados, setDados] = useState<RespostaGrafico | null>(null);
@@ -37,7 +38,10 @@ export function AssetChartModal({
   // Filtros de visualização dos indicadores
   const [mostrarMMA8, setMostrarMMA8] = useState(true);
   const [mostrarMMA21, setMostrarMMA21] = useState(true);
+  const [mostrarMMA20, setMostrarMMA20] = useState(true);
+  const [mostrarMMA52, setMostrarMMA52] = useState(true);
   const [mostrarMMA200, setMostrarMMA200] = useState(true);
+  const [mostrarBollinger, setMostrarBollinger] = useState(true);
   const [mostrarTeto, setMostrarTeto] = useState(true);
   const [mostrarRSI, setMostrarRSI] = useState(true);
 
@@ -161,14 +165,31 @@ export function AssetChartModal({
     candleSeries.setData(formattedCandles);
 
     // Linha Reta Contínua de Preço Teto Consolidado (Dourada Institucional)
-    // Renderizada como LineSeries com valor constante para atravessar o gráfico inteiro
-    // como uma linha reta e garantir que o autoScale do eixo Y a mantenha 100% visível na tela
+    // + Shaded Zone esverdeada sutil da linha do Teto para baixo (Zona de Compra Fundamentalista)
     const tetoValor =
       (dados.preco_teto_consolidado && dados.preco_teto_consolidado > 0)
         ? dados.preco_teto_consolidado
         : dados.preco_teto_bazin;
 
     if (mostrarTeto && tetoValor > 0 && dados.candles.length > 0) {
+      // 1. Shaded Zone sutil esverdeada do TETO CONSOLIDADO para baixo
+      const tetoArea = chart.addSeries(AreaSeries, {
+        topColor: "rgba(16, 185, 129, 0.10)", // Verde esmeralda suave
+        bottomColor: "rgba(16, 185, 129, 0.01)", // Gradiente até transparente
+        lineColor: "transparent",
+        lineWidth: 1,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+      });
+      tetoArea.setData(
+        dados.candles.map((c) => ({
+          time: c.time as Time,
+          value: tetoValor,
+        }))
+      );
+
+      // 2. Linha Reta Contínua Dourada do TETO CONSOLIDADO
       const tetoSeries = chart.addSeries(LineSeries, {
         color: "#d4af37",
         lineWidth: 2,
@@ -184,6 +205,17 @@ export function AssetChartModal({
           value: tetoValor,
         }))
       );
+
+      // 3. Faixa de Sobrepreço (+15% acima do Teto - Zona de Cautela/Venda)
+      const sobrepreco15 = tetoValor * 1.15;
+      candleSeries.createPriceLine({
+        price: sobrepreco15,
+        color: "rgba(239, 68, 68, 0.65)",
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: "SOBREPREÇO (+15%)",
+      });
     }
 
     // Linha de Valor de Graham (Ciano Pontilhada)
@@ -198,40 +230,110 @@ export function AssetChartModal({
       });
     }
 
-    // Série MMA 8 (Amarelo)
-    if (mostrarMMA8 && dados.mma8 && dados.mma8.length > 0) {
-      const mma8Series = chart.addSeries(LineSeries, {
-        color: "#eab308",
-        lineWidth: 1,
-        priceLineVisible: false,
-        lastValueVisible: true,
-        title: "MMA 8",
-      });
-      mma8Series.setData(dados.mma8.map((pt) => ({ time: pt.time as Time, value: pt.value })));
-    }
+    // --- MÉDIAS MÓVEIS & INDICADORES CONFORME TEMPO GRÁFICO ---
+    if (intervalo === "1wk") {
+      // 1S (Semanal) - Tríade Institucional:
+      // MMA 20 Semanal (Gatilho de Direção ~5 meses)
+      if (mostrarMMA20 && dados.mma20 && dados.mma20.length > 0) {
+        const mma20Series = chart.addSeries(LineSeries, {
+          color: "#eab308", // Amarelo ouro
+          lineWidth: 2,
+          priceLineVisible: false,
+          lastValueVisible: true,
+          title: "MMA 20 (SEM)",
+        });
+        mma20Series.setData(dados.mma20.map((pt) => ({ time: pt.time as Time, value: pt.value })));
+      }
 
-    // Série MMA 21 (Ciano)
-    if (mostrarMMA21 && dados.mma21 && dados.mma21.length > 0) {
-      const mma21Series = chart.addSeries(LineSeries, {
-        color: "#06b6d4",
-        lineWidth: 2,
-        priceLineVisible: false,
-        lastValueVisible: true,
-        title: "MMA 21",
-      });
-      mma21Series.setData(dados.mma21.map((pt) => ({ time: pt.time as Time, value: pt.value })));
-    }
+      // MMA 52 Semanal (O Eixo de 1 Ano)
+      if (mostrarMMA52 && dados.mma52 && dados.mma52.length > 0) {
+        const mma52Series = chart.addSeries(LineSeries, {
+          color: "#06b6d4", // Ciano
+          lineWidth: 2,
+          priceLineVisible: false,
+          lastValueVisible: true,
+          title: "MMA 52 (1 ANO)",
+        });
+        mma52Series.setData(dados.mma52.map((pt) => ({ time: pt.time as Time, value: pt.value })));
+      }
 
-    // Série MMA 200 (Roxo / Institucional)
-    if (mostrarMMA200 && dados.mma200 && dados.mma200.length > 0) {
-      const mma200Series = chart.addSeries(LineSeries, {
-        color: "#a855f7",
-        lineWidth: 2,
-        priceLineVisible: false,
-        lastValueVisible: true,
-        title: "MMA 200",
-      });
-      mma200Series.setData(dados.mma200.map((pt) => ({ time: pt.time as Time, value: pt.value })));
+      // MMA 200 Semanal (O Chão de Concreto ~4 anos)
+      if (mostrarMMA200 && dados.mma200 && dados.mma200.length > 0) {
+        const mma200Series = chart.addSeries(LineSeries, {
+          color: "#a855f7", // Roxo Institucional
+          lineWidth: 2,
+          priceLineVisible: false,
+          lastValueVisible: true,
+          title: "MMA 200 (SEM)",
+        });
+        mma200Series.setData(dados.mma200.map((pt) => ({ time: pt.time as Time, value: pt.value })));
+      }
+
+      // Bandas de Bollinger (20, 2) no Semanal - Áreas de Compra e Venda
+      if (
+        mostrarBollinger &&
+        dados.bollinger_superior &&
+        dados.bollinger_inferior &&
+        dados.bollinger_superior.length > 0
+      ) {
+        const bollSupSeries = chart.addSeries(LineSeries, {
+          color: "rgba(244, 63, 94, 0.75)", // Rosa/Vermelho (Área de Venda / Esticada)
+          lineWidth: 1,
+          lineStyle: LineStyle.Dashed,
+          priceLineVisible: false,
+          lastValueVisible: true,
+          title: "BOLL SUP (VENDA)",
+        });
+        bollSupSeries.setData(
+          dados.bollinger_superior.map((pt) => ({ time: pt.time as Time, value: pt.value }))
+        );
+
+        const bollInfSeries = chart.addSeries(LineSeries, {
+          color: "rgba(16, 185, 129, 0.8)", // Verde (Área de Compra Técnica)
+          lineWidth: 1,
+          lineStyle: LineStyle.Dashed,
+          priceLineVisible: false,
+          lastValueVisible: true,
+          title: "BOLL INF (COMPRA)",
+        });
+        bollInfSeries.setData(
+          dados.bollinger_inferior.map((pt) => ({ time: pt.time as Time, value: pt.value }))
+        );
+      }
+    } else {
+      // 1D (Diário) - Tríade Clássica:
+      if (mostrarMMA8 && dados.mma8 && dados.mma8.length > 0) {
+        const mma8Series = chart.addSeries(LineSeries, {
+          color: "#eab308",
+          lineWidth: 1,
+          priceLineVisible: false,
+          lastValueVisible: true,
+          title: "MMA 8",
+        });
+        mma8Series.setData(dados.mma8.map((pt) => ({ time: pt.time as Time, value: pt.value })));
+      }
+
+      if (mostrarMMA21 && dados.mma21 && dados.mma21.length > 0) {
+        const mma21Series = chart.addSeries(LineSeries, {
+          color: "#06b6d4",
+          lineWidth: 2,
+          priceLineVisible: false,
+          lastValueVisible: true,
+          title: "MMA 21",
+        });
+        mma21Series.setData(dados.mma21.map((pt) => ({ time: pt.time as Time, value: pt.value })));
+      }
+
+      if (mostrarMMA200 && dados.mma200 && dados.mma200.length > 0) {
+        const mma200Series = chart.addSeries(LineSeries, {
+          color: "#a855f7",
+          lineWidth: 2,
+          priceLineVisible: false,
+          lastValueVisible: true,
+          title: "MMA 200",
+        });
+        mma200Series.setData(dados.mma200.map((pt) => ({ time: pt.time as Time, value: pt.value })));
+      }
     }
 
     // --- SUB-GRÁFICO INFERIOR: IFR / RSI (14) ---
@@ -286,7 +388,10 @@ export function AssetChartModal({
 
       rsiSeries.setData(fullRsiData as any);
 
-      // Linhas de Nível 30 (Sobrevenda) e 70 (Sobrecompra)
+      // Linhas de Nível 30/35 (Sobrevenda) e 70 (Sobrecompra)
+      const nivelSobrevenda = intervalo === "1wk" ? 35 : 30;
+      const labelSobrevenda = intervalo === "1wk" ? "35 SOBREVENDA (1S)" : "30 SOBREVENDA";
+
       rsiSeries.createPriceLine({
         price: 70,
         color: "#ef4444",
@@ -297,12 +402,29 @@ export function AssetChartModal({
       });
 
       rsiSeries.createPriceLine({
-        price: 30,
+        price: nivelSobrevenda,
         color: "#10b981",
         lineWidth: 1,
         lineStyle: LineStyle.Dashed,
         axisLabelVisible: true,
-        title: "30 SOBREVENDA",
+        title: labelSobrevenda,
+      });
+
+      // Garante que o eixo de preços do IFR mantenha SEMPRE a escala mínima entre 20 e 80
+      // para que a linha 30/35 verde e a linha 70 vermelha estejam 100% visíveis em tela!
+      rsiSeries.applyOptions({
+        autoscaleInfoProvider: (original: any) => {
+          const res = original ? original() : null;
+          if (!res || !res.priceRange) {
+            return { priceRange: { minValue: 20, maxValue: 80 } };
+          }
+          return {
+            priceRange: {
+              minValue: Math.min(res.priceRange.minValue, 20),
+              maxValue: Math.max(res.priceRange.maxValue, 80),
+            },
+          };
+        },
       });
 
       // Sincronização bidirecional do zoom e rolagem temporal protegida contra loops
@@ -378,7 +500,18 @@ export function AssetChartModal({
         rsiChartRef.current = null;
       }
     };
-  }, [dados, mostrarMMA8, mostrarMMA21, mostrarMMA200, mostrarTeto, mostrarRSI]);
+  }, [
+    dados,
+    intervalo,
+    mostrarMMA8,
+    mostrarMMA21,
+    mostrarMMA20,
+    mostrarMMA52,
+    mostrarMMA200,
+    mostrarBollinger,
+    mostrarTeto,
+    mostrarRSI,
+  ]);
 
   if (!isOpen) return null;
 
@@ -541,6 +674,15 @@ export function AssetChartModal({
               >
                 2A
               </button>
+              <button
+                onClick={() => setPeriodo("5y")}
+                className={`px-2 py-1 rounded text-[11px] font-mono transition-all ${
+                  periodo === "5y" ? "bg-neutral-700 text-white font-bold" : "text-neutral-400 hover:text-white"
+                }`}
+                title="5 Anos (recomendado para MMA 200 Semanal)"
+              >
+                5A
+              </button>
             </div>
 
             <button
@@ -562,47 +704,108 @@ export function AssetChartModal({
                   ? "bg-[#d4af37]/15 border-[#d4af37]/50 text-[#f5df88]"
                   : "bg-neutral-900 border-neutral-800 text-neutral-500"
               }`}
-              title="Exibir ou ocultar linha reta de Teto Consolidado"
+              title="Exibir ou ocultar linha reta de Teto Consolidado e Faixa de Compra"
             >
               <span className="w-3 h-0.5 bg-[#d4af37] rounded-full inline-block"></span>
               <span>Teto Consolidado</span>
             </button>
 
-            <button
-              onClick={() => setMostrarMMA8(!mostrarMMA8)}
-              className={`px-2 py-1 rounded border text-[11px] flex items-center gap-1.5 transition-all ${
-                mostrarMMA8
-                  ? "bg-yellow-500/15 border-yellow-500/40 text-yellow-300"
-                  : "bg-neutral-900 border-neutral-800 text-neutral-500"
-              }`}
-            >
-              <span className="w-2 h-2 rounded-full bg-yellow-400"></span>
-              <span>MMA 8</span>
-            </button>
+            {intervalo === "1wk" ? (
+              <>
+                <button
+                  onClick={() => setMostrarMMA20(!mostrarMMA20)}
+                  className={`px-2 py-1 rounded border text-[11px] flex items-center gap-1.5 transition-all ${
+                    mostrarMMA20
+                      ? "bg-yellow-500/15 border-yellow-500/40 text-yellow-300"
+                      : "bg-neutral-900 border-neutral-800 text-neutral-500"
+                  }`}
+                  title="MMA 20 Semanal (~5 Meses) - Gatilho de Direção"
+                >
+                  <span className="w-2 h-2 rounded-full bg-yellow-400"></span>
+                  <span>MMA 20 (Gatilho)</span>
+                </button>
 
-            <button
-              onClick={() => setMostrarMMA21(!mostrarMMA21)}
-              className={`px-2 py-1 rounded border text-[11px] flex items-center gap-1.5 transition-all ${
-                mostrarMMA21
-                  ? "bg-cyan-500/15 border-cyan-500/40 text-cyan-300"
-                  : "bg-neutral-900 border-neutral-800 text-neutral-500"
-              }`}
-            >
-              <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
-              <span>MMA 21</span>
-            </button>
+                <button
+                  onClick={() => setMostrarMMA52(!mostrarMMA52)}
+                  className={`px-2 py-1 rounded border text-[11px] flex items-center gap-1.5 transition-all ${
+                    mostrarMMA52
+                      ? "bg-cyan-500/15 border-cyan-500/40 text-cyan-300"
+                      : "bg-neutral-900 border-neutral-800 text-neutral-500"
+                  }`}
+                  title="MMA 52 Semanal - O Eixo de 1 Ano"
+                >
+                  <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
+                  <span>MMA 52 (Eixo 1A)</span>
+                </button>
 
-            <button
-              onClick={() => setMostrarMMA200(!mostrarMMA200)}
-              className={`px-2 py-1 rounded border text-[11px] flex items-center gap-1.5 transition-all ${
-                mostrarMMA200
-                  ? "bg-purple-500/15 border-purple-500/40 text-purple-300"
-                  : "bg-neutral-900 border-neutral-800 text-neutral-500"
-              }`}
-            >
-              <span className="w-2 h-2 rounded-full bg-purple-400"></span>
-              <span>MMA 200</span>
-            </button>
+                <button
+                  onClick={() => setMostrarMMA200(!mostrarMMA200)}
+                  className={`px-2 py-1 rounded border text-[11px] flex items-center gap-1.5 transition-all ${
+                    mostrarMMA200
+                      ? "bg-purple-500/15 border-purple-500/40 text-purple-300"
+                      : "bg-neutral-900 border-neutral-800 text-neutral-500"
+                  }`}
+                  title="MMA 200 Semanal (~4 Anos) - Chão de Concreto"
+                >
+                  <span className="w-2 h-2 rounded-full bg-purple-400"></span>
+                  <span>MMA 200 (Chão)</span>
+                </button>
+
+                <button
+                  onClick={() => setMostrarBollinger(!mostrarBollinger)}
+                  className={`px-2 py-1 rounded border text-[11px] flex items-center gap-1.5 transition-all ${
+                    mostrarBollinger
+                      ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300"
+                      : "bg-neutral-900 border-neutral-800 text-neutral-500"
+                  }`}
+                  title="Bandas de Bollinger (20, 2) no Semanal - Áreas de Compra e Venda"
+                >
+                  <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                  <span>Bollinger (20,2)</span>
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => setMostrarMMA8(!mostrarMMA8)}
+                  className={`px-2 py-1 rounded border text-[11px] flex items-center gap-1.5 transition-all ${
+                    mostrarMMA8
+                      ? "bg-yellow-500/15 border-yellow-500/40 text-yellow-300"
+                      : "bg-neutral-900 border-neutral-800 text-neutral-500"
+                  }`}
+                  title="MMA 8 Diária - Momentum Curto Prazo"
+                >
+                  <span className="w-2 h-2 rounded-full bg-yellow-400"></span>
+                  <span>MMA 8</span>
+                </button>
+
+                <button
+                  onClick={() => setMostrarMMA21(!mostrarMMA21)}
+                  className={`px-2 py-1 rounded border text-[11px] flex items-center gap-1.5 transition-all ${
+                    mostrarMMA21
+                      ? "bg-cyan-500/15 border-cyan-500/40 text-cyan-300"
+                      : "bg-neutral-900 border-neutral-800 text-neutral-500"
+                  }`}
+                  title="MMA 21 Diária - Linha d'água de Médio Prazo"
+                >
+                  <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
+                  <span>MMA 21</span>
+                </button>
+
+                <button
+                  onClick={() => setMostrarMMA200(!mostrarMMA200)}
+                  className={`px-2 py-1 rounded border text-[11px] flex items-center gap-1.5 transition-all ${
+                    mostrarMMA200
+                      ? "bg-purple-500/15 border-purple-500/40 text-purple-300"
+                      : "bg-neutral-900 border-neutral-800 text-neutral-500"
+                  }`}
+                  title="MMA 200 Diária - Tendência Primária Institucional"
+                >
+                  <span className="w-2 h-2 rounded-full bg-purple-400"></span>
+                  <span>MMA 200</span>
+                </button>
+              </>
+            )}
 
             <button
               onClick={() => setMostrarRSI(!mostrarRSI)}
@@ -662,7 +865,9 @@ export function AssetChartModal({
                 <div className="w-full">
                   <div className="flex items-center justify-between text-[10px] text-neutral-500 font-mono px-1 pb-1">
                     <span>OSCILADOR IFR (ÍNDICE DE FORÇA RELATIVA - 14)</span>
-                    <span className="text-neutral-400">Linha 30 (Sobrevenda) | Linha 70 (Sobrecompra)</span>
+                    <span className="text-neutral-400">
+                      Linha {intervalo === "1wk" ? "35" : "30"} (Sobrevenda) | Linha 70 (Sobrecompra)
+                    </span>
                   </div>
                   <div
                     ref={rsiContainerRef}

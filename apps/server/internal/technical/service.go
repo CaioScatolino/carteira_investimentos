@@ -67,15 +67,19 @@ func (s *Service) ObterDadosGrafico(ctx context.Context, ticker, intervalo, peri
 
 	// Normaliza intervalo
 	if intervalo != "1d" && intervalo != "1wk" {
-		intervalo = "1d"
+		intervalo = "1wk"
 	}
 
-	// Normaliza período
+	// Normaliza período (para 1wk semanal, default 5y para comportar MMA 200 semanas)
 	if periodo != "3mo" && periodo != "6mo" && periodo != "1y" && periodo != "2y" && periodo != "5y" {
-		periodo = "1y"
+		if intervalo == "1wk" {
+			periodo = "5y"
+		} else {
+			periodo = "1y"
+		}
 	}
 
-	chaveCache := fmt.Sprintf("b3:chart:v3:%s:%s:%s", tickerLimpo, intervalo, periodo)
+	chaveCache := fmt.Sprintf("b3:chart:v5:%s:%s:%s", tickerLimpo, intervalo, periodo)
 
 	// 1. Tenta recuperar do Cache Redis / In-Memory
 	if s.cache != nil {
@@ -177,8 +181,11 @@ func (s *Service) ObterDadosGrafico(ctx context.Context, ticker, intervalo, peri
 	// 3. Calcula os Indicadores Técnicos
 	mma8 := CalcularMMA(candles, 8)
 	mma21 := CalcularMMA(candles, 21)
+	mma20 := CalcularMMA(candles, 20)
+	mma52 := CalcularMMA(candles, 52)
 	mma200 := CalcularMMA(candles, 200)
 	rsi14 := CalcularRSI(candles, 14)
+	bollUpper, bollLower := CalcularBollinger(candles, 20, 2.0)
 
 	// 4. Cruzamento Fundamentalista com Snapshot B3 do Ativo
 	precoAtual := candles[len(candles)-1].Close
@@ -224,7 +231,9 @@ func (s *Service) ObterDadosGrafico(ctx context.Context, ticker, intervalo, peri
 	if len(rsi14) > 0 {
 		ultimoRSI = rsi14[len(rsi14)-1].Value
 	}
-	if len(mma21) > 0 {
+	if intervalo == "1wk" && len(mma20) > 0 {
+		ultimaMMA21 = mma20[len(mma20)-1].Value
+	} else if len(mma21) > 0 {
 		ultimaMMA21 = mma21[len(mma21)-1].Value
 	}
 	if len(mma200) > 0 {
@@ -254,7 +263,11 @@ func (s *Service) ObterDadosGrafico(ctx context.Context, ticker, intervalo, peri
 		Candles:              candles,
 		MMA8:                 mma8,
 		MMA21:                mma21,
+		MMA20:                mma20,
+		MMA52:                mma52,
 		MMA200:               mma200,
+		BollingerSuperior:    bollUpper,
+		BollingerInferior:    bollLower,
 		RSI14:                rsi14,
 	}
 
