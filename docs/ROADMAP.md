@@ -173,10 +173,22 @@ Este documento é a bússola viva do projeto. Ele mapeia as decisões arquitetur
 
 ---
 
-### ⏳ FASE 9: Agente de IA com Gemini Pro & Skills Analíticas (Funil Etapa 2)
-- [ ] **Passo 9.1**: Integração com a API do Gemini Pro via Go SDK nativo.
-- [ ] **Passo 9.2**: Prompts das skills modulares (`skills/bazin-method`, `skills/graham-method`, `skills/consensus-filter`).
-- [ ] **Passo 9.3**: Funil cognitivo: O Go envia os 15 melhores finalistas pré-filtrados e a IA redige o parecer fundamentalista detalhado do Top 10 via streaming SSE.
+### 🧠 FASE 9: Assistente Cognitivo de Aportes com IA ("No que investir hoje?") & Pareceres SSE
+- [ ] **Passo 9.1: Motor Matemático de Pré-Alocação & Detecção de Assimetrias (`internal/advisor`)**:
+  - [ ] **Input Dinâmico de Aporte:** O usuário informa o montante disponível no dia (ex: R$ 500, R$ 2.000).
+  - [ ] **Auditoria Macro:** Identifica a classe mais defasada na regra institucional (Ações, FIIs ou Renda Fixa).
+  - [ ] **Auditoria Micro & Distorções de Mercado:**
+    - Compara Preço Médio do investidor vs Preço Teto Consolidado vs Cotação Atual.
+    - **Radar de Oportunidades Assimétricas:** Se uma classe não estiver defasada mas contiver um ativo com desconto extremo (ex: FII de tijolo com P/VP 0.70 ou Blue Chip com 40% de margem e IFR sobrevendido), essa distorção de preço não é ignorada e entra como sugestão prioritária.
+  - [ ] **Gerador de Payload Cognitivo:** Monta um JSON estruturado com o diagnóstico matemático, desvios e os ativos mais assimétricos para servir de contexto para a IA.
+- [ ] **Passo 9.2: Integração com Gemini Pro (Go SDK / REST) & Streaming SSE**:
+  - [ ] Prompt de engenharia institucional instruindo a IA a agir como um estrategista Buy & Hold senior.
+  - [ ] Streaming de resposta (`GET /api/v1/advisor/stream`) com efeito de digitação em tempo real (Server-Sent Events).
+- [ ] **Passo 9.3: Interface Interativa do Chatbot no Frontend Next.js (`apps/web`)**:
+  - [ ] Botão de destaque no topo da Carteira: `"🎯 No que investir hoje?"`.
+  - [ ] Modal conversacional flutuante em preto ônix e dourado champagne.
+  - [ ] Interação guiada com atalhos de valor (R$ 200, R$ 500, R$ 1.000, R$ 5.000 ou customizado).
+  - [ ] Card de sugestão de compra acionável com botão de "Aportar Agora" integrado à carteira.
 
 ---
 
@@ -304,6 +316,44 @@ Este documento é a bússola viva do projeto. Ele mapeia as decisões arquitetur
   - [x] **Acesso em 3 Pontos:** Botão de gráfico na Tabela de Mercado B3, na Tabela da Minha Carteira e no Modal de Detalhes.
 - [ ] **Passo 16.4: Expansão Futura Multiativos (Criptomoedas & Ativos Globais)**:
   - [ ] Estudo de viabilidade arquitetural para conectar pares de Criptoativos (Bitcoin, Ethereum, etc.) via feeds de mercado, reaproveitando a infraestrutura de análise técnica, IA preditiva e gestão de portfólio.
+
+---
+
+### 📊 FASE 17: Visão Analítica de Exposição, Concentração & Decomposição Hierárquica da Custódia
+- [ ] **Passo 17.1: Motor de Decomposição Patrimonial no Backend (`internal/portfolio/breakdown.go`)**:
+  - [ ] **Exposição Relativa e Absoluta:**
+    - Decomposição em 2 níveis: Peso do ativo na classe ($\% \text{ da Classe}$) e no patrimônio total ($\% \text{ da Carteira}`).
+    - Exemplo prático: Carteira de R$ 100.000 com R$ 20.000 em Ações (20% macro); dentro de ações, R$ 10.000 em PETR4 (50% da classe de ações e 10% do patrimônio total), R$ 7.000 em VALE3 (35% da classe e 7% do total), etc.
+  - [ ] **Agregação por Setores Oficiais B3:** Mapeamento da concentração setorial (Bancos, Energia Elétrica, Petróleo & Gás, Saneamento, Commodities, Shoppings, Logística, Papel & Celulose).
+  - [ ] **Indicador de Concentração de Risco (HHI - Herfindahl-Hirschman Index):** Detecção de risco de sobreconcentração em emissor único ($> 15\%$ a $20\%$ do patrimônio total) ou setor ($> 30\%$).
+- [ ] **Passo 17.2: Componentes Visuais de Exposição no Frontend Next.js (`apps/web`)**:
+  - [ ] **Gráfico Interativo de Composição (Donut / Sunburst):** Visualização em camadas em preto ônix e anéis dourado, esmeralda e ciano permitindo clicar na classe para abrir a fatia de cada ativo.
+  - [ ] **Visão Treemap de Alocação:** Mosaico de retângulos proporcionais ao volume financeiro com mapa de calor baseado na rentabilidade e margem de segurança.
+  - [ ] **Medidor Visual de Concentração:** Checklist de prudência alertando se a carteira está bem diversificada ou hiperconcentrada.
+
+---
+
+### ❄️ FASE 18: Simulador "Magic Number" (Efeito Bola de Neve) & Projeção de Renda Passiva
+- [ ] **Passo 18.1: Cálculo do Número Mágico por Ativo (`internal/portfolio/snowball.go`)**:
+  - [ ] Cálculo da quantidade exata de cotas para que os proventos mensais comprem 1 nova cota do próprio ativo sem tirar dinheiro do bolso:
+    $$\text{Magic Number (Cotas)} = \left\lceil \frac{\text{Preço Atual}}{\text{Provento Médio Mensal por Cota}} \right\rceil$$
+  - [ ] Termômetro percentual de progresso em direção ao Magic Number para cada FII e ação da carteira:
+    $$\text{Progresso Bola de Neve (\%)} = \min\left(100\%, \frac{\text{Cotas em Custódia}}{\text{Magic Number}} \times 100\%\right)$$
+- [ ] **Passo 18.2: Gráficos de Projeção de Renda Futura**:
+  - [ ] Estimativa de fluxo de caixa passivo mensal nos próximos 1, 3, 5 e 10 anos considerando aportes mensais constantes e reinvestimento integral dos dividendos.
+  - [ ] Calculadora reversa de independência financeira: "Para receber R$ 3.000/mês de dividendos, preciso acumular R$ X em FIIs ou Y em Ações".
+
+---
+
+### 🔔 FASE 19: Central de Notificações de Oportunidades & Importador Rápido de Custódia (B3 / CEI)
+- [ ] **Passo 19.1: Importador de Arquivos B3 & Notas de Corretagem**:
+  - [ ] Upload de extrato de negociação oficial da B3 (arquivo XLSX/CSV da Área do Investidor) para povoamento instantâneo da custódia do usuário sem digitação manual de cada posição.
+  - [ ] Leitor e reconciliador automático de histórico de compras e vendas.
+- [ ] **Passo 19.2: Scanner de Gatilhos & Alertas de Valuation Ativos**:
+  - [ ] Notificações no painel para ativos da carteira ou watchlist:
+    - *Gatilho Preço Teto:* "VALE3 rompeu o Preço Teto Consolidado para baixo (agora a R$ 56,10 com 22% de margem)".
+    - *Gatilho Sobrevenda Semanal:* "BBAS3 atingiu IFR 32 no gráfico Semanal (1S) em zona de compra histórica".
+    - *Data-Com Confirmada:* "Alerta: Itaú (ITUB4) terá Data-Com amanhã com provento de R$ 0,35 por ação".
 
 
 
