@@ -12,6 +12,8 @@ func (h *Handler) ConfigurarRotas() http.Handler {
 
 	// 1. Registro dos Endpoints com Verbos HTTP explícitos
 	mux.HandleFunc("GET /health", h.HealthCheck)
+	mux.HandleFunc("POST /api/v1/sync", h.SincronizarMercado)
+	mux.HandleFunc("GET /api/v1/sync/status", h.ObterStatusSync)
 	mux.HandleFunc("GET /api/v1/macro", h.ObterCenarioMacro)
 	mux.HandleFunc("GET /api/v1/rankings", h.ObterRankings)
 	mux.HandleFunc("GET /api/v1/ativos/{ticker}", h.ObterAtivoPorTicker)

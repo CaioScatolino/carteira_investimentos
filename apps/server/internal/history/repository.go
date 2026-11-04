@@ -10,6 +10,7 @@ import (
 type Repository interface {
 	SalvarSnapshotLote(ctx context.Context, registros []*RegistroHistorico) error
 	BuscarHistoricoTicker(ctx context.Context, ticker string, limiteDias int) ([]*RegistroHistorico, error)
+	BuscarUltimoSnapshot(ctx context.Context) ([]*RegistroHistorico, error)
 }
 
 type MySQLRepository struct {
@@ -108,6 +109,43 @@ func (r *MySQLRepository) BuscarHistoricoTicker(ctx context.Context, ticker stri
 	`
 
 	rows, err := r.db.QueryContext(ctx, query, ticker, limiteDias)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var lista []*RegistroHistorico
+	for rows.Next() {
+		var reg RegistroHistorico
+		var isAtipicoInt int
+		if err := rows.Scan(
+			&reg.ID, &reg.DataPregao, &reg.Ticker, &reg.Classe, &reg.PosicaoRanking,
+			&reg.Score, &reg.PrecoAtual, &reg.PrecoTetoConsolidado,
+			&reg.PremioDescontoPercentual, &reg.DY, &reg.PL, &reg.PVP,
+			&reg.Status, &isAtipicoInt, &reg.ModelosJSON, &reg.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		reg.IsProventoAtipico = (isAtipicoInt == 1)
+		lista = append(lista, &reg)
+	}
+
+	return lista, nil
+}
+
+// BuscarUltimoSnapshot recupera todos os ativos do último pregão gravado na tabela historico_rankings_diarios
+func (r *MySQLRepository) BuscarUltimoSnapshot(ctx context.Context) ([]*RegistroHistorico, error) {
+	query := `
+		SELECT id, data_pregao, ticker, classe, posicao_ranking, score, preco_atual,
+		       preco_teto_consolidado, premio_desconto_percentual, dy, 
+		       COALESCE(pl, 0.0), COALESCE(pvp, 0.0), status, is_provento_atipico, 
+		       COALESCE(modelos_json, '{}'), created_at
+		FROM historico_rankings_diarios
+		WHERE data_pregao = (SELECT MAX(data_pregao) FROM historico_rankings_diarios)
+		ORDER BY classe, posicao_ranking ASC;
+	`
+
+	rows, err := r.db.QueryContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}

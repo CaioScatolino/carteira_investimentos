@@ -65,3 +65,51 @@ func ConverterAtivoParaRegistro(dataPregao time.Time, posicao int, a *domain.Ati
 		ModelosJSON:              string(modelosBytes),
 	}
 }
+
+// ConverterRegistroParaAtivo reconstitui um *domain.Ativo a partir do snapshot gravado no MySQL
+func ConverterRegistroParaAtivo(reg *RegistroHistorico) *domain.Ativo {
+	ativo := &domain.Ativo{
+		Ticker:                   reg.Ticker,
+		Classe:                   domain.ClasseAtivo(reg.Classe),
+		PrecoAtual:               reg.PrecoAtual,
+		PrecoTetoConsolidado:     reg.PrecoTetoConsolidado,
+		PremioDescontoPercentual: reg.PremioDescontoPercentual,
+		Score:                    reg.Score,
+		DY:                       reg.DY,
+		PL:                       reg.PL,
+		PVP:                      reg.PVP,
+		PVPReal:                  reg.PVP,
+		Status:                   domain.StatusRecomendacao(reg.Status),
+		IsProventoAtipico:        reg.IsProventoAtipico,
+		Pareceres:                make(map[string]domain.ParecerItem),
+	}
+
+	if reg.ModelosJSON != "" && reg.ModelosJSON != "{}" {
+		var mod map[string]interface{}
+		if json.Unmarshal([]byte(reg.ModelosJSON), &mod) == nil {
+			if v, ok := mod["preco_teto_bazin"].(float64); ok {
+				ativo.PrecoTetoBazin = v
+			}
+			if v, ok := mod["preco_teto_bazin_5a"].(float64); ok {
+				ativo.PrecoTetoBazin5A = v
+			}
+			if v, ok := mod["valor_graham"].(float64); ok {
+				ativo.ValorGraham = v
+			}
+			if v, ok := mod["preco_justo_lynch"].(float64); ok {
+				ativo.PrecoJustoLynch = v
+			}
+			if v, ok := mod["preco_teto_gordon"].(float64); ok {
+				ativo.PrecoTetoGordon = v
+			}
+			if v, ok := mod["preco_teto_dcf"].(float64); ok {
+				ativo.PrecoTetoDCF = v
+			}
+			if v, ok := mod["piotroski_score"].(float64); ok {
+				ativo.PiotroskiScore = int(v)
+			}
+		}
+	}
+
+	return ativo
+}

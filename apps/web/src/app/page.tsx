@@ -220,16 +220,27 @@ export default function Dashboard() {
     return await res.json();
   };
 
+  const handleSincronizar = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      await fetch(`${API_V1_URL}/sync`, { method: "POST" });
+    } catch (e) {
+      console.warn("Falha ao solicitar sincronização no servidor:", e);
+    }
+    await carregarRankings();
+    if (abaAtiva === "carteira" && usuario && token) {
+      await carregarCarteira();
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#070709] text-neutral-100 flex flex-col selection:bg-[#d4af37]/30 selection:text-[#f5df88]">
       {/* Header Fixo com Seletor de Abas */}
       <Header
         totalAtivos={data.total}
         loading={loading || loadingCarteira}
-        onRefresh={() => {
-          if (abaAtiva === "mercado") carregarRankings();
-          else carregarCarteira();
-        }}
+        onRefresh={handleSincronizar}
         ultimaAtualizacao={ultimaAtualizacao}
         abaAtiva={abaAtiva}
         onMudarAba={(aba) => setAbaAtiva(aba)}
@@ -281,10 +292,29 @@ export default function Dashboard() {
                   </div>
                 </div>
                 <button
-                  onClick={carregarRankings}
+                  onClick={handleSincronizar}
                   className="px-3.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-xs font-semibold text-amber-300 transition-colors shrink-0"
                 >
-                  Reconectar Agora
+                  Reconectar e Sincronizar
+                </button>
+              </div>
+            )}
+
+            {/* Aviso de Cache Vazio / Pós-Feriado */}
+            {!loading && data.total === 0 && !error && (
+              <div className="mb-8 p-6 rounded-2xl bg-[#13131a] border border-[#d4af37]/30 text-center flex flex-col items-center justify-center gap-3">
+                <ShieldCheck className="w-10 h-10 text-[#d4af37]" />
+                <h3 className="text-base font-bold text-white">Nenhum ativo sincronizado no momento</h3>
+                <p className="text-xs text-neutral-400 max-w-md">
+                  O pregão da B3 esteve fechado por feriado ou o cache local foi reiniciado. Clique no botão abaixo para puxar as cotações oficiais e laudos dos ativos agora.
+                </p>
+                <button
+                  onClick={handleSincronizar}
+                  disabled={loading}
+                  className="mt-2 flex items-center gap-2 px-4 py-2 rounded-xl bg-[#d4af37] text-black font-bold text-xs hover:bg-[#e5bf43] transition-all"
+                >
+                  <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+                  Sincronizar Mercado Agora
                 </button>
               </div>
             )}

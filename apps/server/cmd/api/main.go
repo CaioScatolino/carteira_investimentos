@@ -80,8 +80,8 @@ func main() {
 	var store storage.SnapshotStore
 	redisAddr := fmt.Sprintf("%s:%s", cfg.RedisHost, cfg.RedisPort)
 	redisDB, _ := strconv.Atoi(cfg.RedisDB)
-	// TTL de 25 minutos (5 minutos de folga para a sincronização de 20 min)
-	ttl := time.Duration(cfg.SyncIntervalMin+5) * time.Minute
+	// TTL de 7 dias para garantir disponibilidade total em feriados, fins de semana e noites
+	ttl := 7 * 24 * time.Hour
 
 	redisStore, errRedis := storage.NovoRedisStore(redisAddr, cfg.RedisPassword, redisDB, ttl)
 	if errRedis == nil {
@@ -103,20 +103,36 @@ func main() {
 	}
 
 	// 5. Ingestão consolidada em 2 requisições ultra-rápidas (<1s para 100% dos ativos da B3)
-	ctxIngest, cancelIngest := context.WithTimeout(context.Background(), 60*time.Second)
+	ctxIngest, cancelIngest := context.WithTimeout(context.Background(), 180*time.Second)
 	defer cancelIngest()
 
 	if _, err := ingestionService.ExecutarSincronizacao(ctxIngest); err != nil {
 		fmt.Printf("⚠️ Erro na sincronização inicial do StatusInvest: %v\n", err)
 	}
+
+	// Auto-recuperação pós-feriado / frio: se o store estiver vazio após a tentativa de ingestão,
+	// restaura imediatamente o último snapshot consolidado do MySQL
+	if len(store.ListarTodos()) == 0 && historyScheduler != nil {
+		fmt.Println("🔄 Store sem ativos. Restaurando último snapshot histórico do MySQL...")
+		ctxRestore, cancelRestore := context.WithTimeout(context.Background(), 15*time.Second)
+		if errRest := historyScheduler.RestaurarUltimoSnapshot(ctxRestore); errRest != nil {
+			fmt.Printf("⚠️ Falha ao restaurar snapshot do MySQL: %v\n", errRest)
+		} else {
+			fmt.Printf("✅ Snapshot do MySQL restaurado com sucesso! Total no store: %d ativos\n", len(store.ListarTodos()))
+		}
+		cancelRestore()
+	}
+
 	// Inicializa e agenda o Cron diário pós-fechamento do pregão (19h)
 	if historyScheduler != nil {
-		// 1. Executa um snapshot inicial de validação
-		ctxSnap, cancelSnap := context.WithTimeout(context.Background(), 10*time.Second)
-		if err := historyScheduler.ExecutarSnapshotAgora(ctxSnap, time.Now()); err != nil {
-			fmt.Printf("⚠️ [CRON 19H] Erro no snapshot inicial: %v\n", err)
+		// 1. Executa um snapshot inicial de validação apenas se houver ativos no store
+		if len(store.ListarTodos()) > 0 {
+			ctxSnap, cancelSnap := context.WithTimeout(context.Background(), 10*time.Second)
+			if err := historyScheduler.ExecutarSnapshotAgora(ctxSnap, time.Now()); err != nil {
+				fmt.Printf("⚠️ [CRON 19H] Erro no snapshot inicial: %v\n", err)
+			}
+			cancelSnap()
 		}
-		cancelSnap()
 
 		// 2. Dispara a rotina perpétua que aguardará até as 19h dos dias úteis
 		historyScheduler.IniciarRotinaDiaria()
@@ -129,8 +145,10 @@ func main() {
 		defer ticker.Stop()
 		fmt.Printf("🔄 [BACKGROUND SYNC] Atualização periódica configurada a cada %v\n", intervaloSync)
 		for range ticker.C {
-			ctxBg, cancelBg := context.WithTimeout(context.Background(), 60*time.Second)
-			_, _ = ingestionService.ExecutarSincronizacao(ctxBg)
+			ctxBg, cancelBg := context.WithTimeout(context.Background(), 180*time.Second)
+			if _, err := ingestionService.ExecutarSincronizacao(ctxBg); err != nil {
+				log.Printf("⚠️ [BACKGROUND SYNC] Falha na sincronização periódica: %v", err)
+			}
 			cancelBg()
 		}
 	}()
@@ -217,7 +235,7 @@ func main() {
 	}
 
 	calendarService := calendar.NovoService(store, b3Client)
-	apiHandler := api.NovoHandler(store, b3Client, authService, tokenManager, portfolioService, calendarService)
+	apiHandler := api.NovoHandler(store, b3Client, authService, tokenManager, portfolioService, calendarService, ingestionService)
 	router := apiHandler.ConfigurarRotas()
 
 	servidor := &http.Server{

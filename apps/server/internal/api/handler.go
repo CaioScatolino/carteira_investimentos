@@ -8,8 +8,10 @@ import (
 	"carteira_investimentos/server/internal/macro"
 	"carteira_investimentos/server/internal/portfolio"
 	"carteira_investimentos/server/internal/score"
+	"carteira_investimentos/server/internal/statusinvest"
 	"carteira_investimentos/server/internal/storage"
 	"carteira_investimentos/server/internal/technical"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -27,6 +29,7 @@ type Handler struct {
 	portfolioService *portfolio.Service
 	calendarService  *calendar.Service
 	technicalService *technical.Service
+	ingestionService *statusinvest.IngestionService
 }
 
 func NovoHandler(
@@ -36,6 +39,7 @@ func NovoHandler(
 	tokenManager *auth.GerenciadorToken,
 	portfolioService *portfolio.Service,
 	calendarService *calendar.Service,
+	ingestionService *statusinvest.IngestionService,
 ) *Handler {
 	if b3Client == nil {
 		b3Client = b3.NovoB3Client()
@@ -58,6 +62,7 @@ func NovoHandler(
 		portfolioService: portfolioService,
 		calendarService:  calendarService,
 		technicalService: technicalService,
+		ingestionService: ingestionService,
 	}
 }
 
@@ -331,4 +336,60 @@ func (h *Handler) ObterGraficoAtivo(w http.ResponseWriter, r *http.Request) {
 
 	responderJSON(w, http.StatusOK, resp)
 }
+
+// SincronizarMercado dispara uma sincronização manual de dados de mercado da B3 / StatusInvest
+func (h *Handler) SincronizarMercado(w http.ResponseWriter, r *http.Request) {
+	if h.ingestionService == nil {
+		responderJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"erro": "serviço de ingestão não inicializado",
+		})
+		return
+	}
+
+	// Se solicitado modo assíncrono via ?async=true, inicia em background e retorna imediatamente
+	if r.URL.Query().Get("async") == "true" {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+			defer cancel()
+			_, _ = h.ingestionService.ExecutarSincronizacao(ctx)
+		}()
+		responderJSON(w, http.StatusAccepted, map[string]any{
+			"mensagem": "Sincronização iniciada em background",
+			"status":   h.ingestionService.ObterStatus(),
+		})
+		return
+	}
+
+	// Execução síncrona com timeout generoso de 3 minutos
+	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+	defer cancel()
+
+	ativos, err := h.ingestionService.ExecutarSincronizacao(ctx)
+	if err != nil {
+		responderJSON(w, http.StatusInternalServerError, map[string]any{
+			"erro":   err.Error(),
+			"status": h.ingestionService.ObterStatus(),
+		})
+		return
+	}
+
+	responderJSON(w, http.StatusOK, map[string]any{
+		"mensagem":     "Sincronização concluída com sucesso",
+		"total_ativos": len(ativos),
+		"status":       h.ingestionService.ObterStatus(),
+	})
+}
+
+// ObterStatusSync retorna o estado operacional da sincronização de mercado
+func (h *Handler) ObterStatusSync(w http.ResponseWriter, r *http.Request) {
+	if h.ingestionService == nil {
+		responderJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"erro": "serviço de ingestão não inicializado",
+		})
+		return
+	}
+
+	responderJSON(w, http.StatusOK, h.ingestionService.ObterStatus())
+}
+
 

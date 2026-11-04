@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sync"
 	"time"
 
 	"carteira_investimentos/server/internal/b3"
@@ -11,12 +12,27 @@ import (
 	"carteira_investimentos/server/internal/storage"
 )
 
+// StatusSyncInfo armazena os metadados de execução do serviço de ingestão
+type StatusSyncInfo struct {
+	EmExecucao          bool      `json:"em_execucao"`
+	UltimaSincronizacao time.Time `json:"ultima_sincronizacao"`
+	DuracaoSegundos     float64   `json:"duracao_segundos"`
+	TotalAtivos         int       `json:"total_ativos"`
+	UltimoErro          string    `json:"ultimo_erro,omitempty"`
+}
+
 // IngestionService coordena a captura integral dos dados do StatusInvest e auditoria dos motores
 type IngestionService struct {
-	client   *Client
-	b3Client *b3.B3Client
-	store    storage.SnapshotStore
-	motores  []domain.Analisador
+	client             *Client
+	b3Client           *b3.B3Client
+	store              storage.SnapshotStore
+	motores            []domain.Analisador
+	mu                 sync.Mutex
+	emExecucao         bool
+	ultimaSync         time.Time
+	duracaoSync        time.Duration
+	totalSincronizados int
+	ultimoErro         error
 }
 
 // NovoIngestionService cria uma nova instância do serviço de ingestão consolidado
@@ -35,8 +51,39 @@ func NovoIngestionService(client *Client, b3Client *b3.B3Client, store storage.S
 	}
 }
 
-// ExecutarSincronizacao dispara as 2 requisições ao StatusInvest, converte os modelos e roda os motores
+// ObterStatus retorna os metadados da última sincronização
+func (s *IngestionService) ObterStatus() StatusSyncInfo {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ultimoErroStr := ""
+	if s.ultimoErro != nil {
+		ultimoErroStr = s.ultimoErro.Error()
+	}
+	return StatusSyncInfo{
+		EmExecucao:          s.emExecucao,
+		UltimaSincronizacao: s.ultimaSync,
+		DuracaoSegundos:     math.Round(s.duracaoSync.Seconds()*10) / 10,
+		TotalAtivos:         s.totalSincronizados,
+		UltimoErro:          ultimoErroStr,
+	}
+}
+
+// ExecutarSincronizacao dispara as requisições ao StatusInvest, converte os modelos e roda os motores
 func (s *IngestionService) ExecutarSincronizacao(ctx context.Context) ([]*domain.Ativo, error) {
+	s.mu.Lock()
+	if s.emExecucao {
+		s.mu.Unlock()
+		return nil, fmt.Errorf("sincronização de mercado já está em execução no momento")
+	}
+	s.emExecucao = true
+	s.mu.Unlock()
+
+	defer func() {
+		s.mu.Lock()
+		s.emExecucao = false
+		s.mu.Unlock()
+	}()
+
 	inicio := time.Now()
 	fmt.Println("\n==================================================================")
 	fmt.Println("🚀 INGESTION SERVICE: SINCRONIZAÇÃO CONSOLIDADA STATUSINVEST")
@@ -45,6 +92,9 @@ func (s *IngestionService) ExecutarSincronizacao(ctx context.Context) ([]*domain
 	// 1. Busca todas as ações
 	acoesRaw, err := s.client.ObterAcoes(ctx)
 	if err != nil {
+		s.mu.Lock()
+		s.ultimoErro = err
+		s.mu.Unlock()
 		return nil, fmt.Errorf("erro ao sincronizar ações: %w", err)
 	}
 	fmt.Printf("📊 [StatusInvest] %d Ações recebidas com todas as 36 colunas!\n", len(acoesRaw))
@@ -52,9 +102,63 @@ func (s *IngestionService) ExecutarSincronizacao(ctx context.Context) ([]*domain
 	// 2. Busca todos os FIIs
 	fiisRaw, err := s.client.ObterFIIs(ctx)
 	if err != nil {
+		s.mu.Lock()
+		s.ultimoErro = err
+		s.mu.Unlock()
 		return nil, fmt.Errorf("erro ao sincronizar FIIs: %w", err)
 	}
 	fmt.Printf("🏢 [StatusInvest] %d FIIs recebidos com todas as 22 colunas!\n", len(fiisRaw))
+
+	// 3. Pré-aquecimento concorrente das análises de proventos da B3/StatusInvest (8 workers)
+	if s.b3Client != nil {
+		type itemParaAnalisar struct {
+			empresa string
+			ticker  string
+			preco   float64
+			div12M  float64
+		}
+		var fila []itemParaAnalisar
+
+		for _, a := range acoesRaw {
+			if a.Price > 0 && b3.IsTickerMapeado(a.Ticker) {
+				divs := 0.0
+				if a.DY > 0 {
+					divs = a.Price * (a.DY / 100.0)
+				}
+				fila = append(fila, itemParaAnalisar{empresa: a.CompanyName, ticker: a.Ticker, preco: a.Price, div12M: divs})
+			}
+		}
+		for _, f := range fiisRaw {
+			if f.Price > 0 && (f.NumeroCotistas >= 50000 || f.LiquidezMediaDiaria >= 3000000) {
+				divs := 0.0
+				if f.DY > 0 {
+					divs = f.Price * (f.DY / 100.0)
+				}
+				fila = append(fila, itemParaAnalisar{empresa: f.CompanyName, ticker: f.Ticker, preco: f.Price, div12M: divs})
+			}
+		}
+
+		if len(fila) > 0 {
+			numWorkers := 8
+			canal := make(chan itemParaAnalisar, len(fila))
+			for _, item := range fila {
+				canal <- item
+			}
+			close(canal)
+
+			var wg sync.WaitGroup
+			for w := 0; w < numWorkers; w++ {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					for it := range canal {
+						_ = s.b3Client.ObterAnaliseProventos5A(it.empresa, it.ticker, it.preco, it.div12M)
+					}
+				}()
+			}
+			wg.Wait()
+		}
+	}
 
 	var todosAtivos []*domain.Ativo
 
@@ -270,11 +374,27 @@ func (s *IngestionService) ExecutarSincronizacao(ctx context.Context) ([]*domain
 
 		todosAtivos = append(todosAtivos, ativo)
 		if s.store != nil {
-			s.store.Salvar(ativo)
+			_ = s.store.Salvar(ativo)
+		}
+	}
+
+	// 5. Salva o lote consolidado no Store (Redis Pipeline grava b3:snapshot:todos e chaves individuais)
+	if s.store != nil && len(todosAtivos) > 0 {
+		if err := s.store.SalvarLote(todosAtivos); err != nil {
+			fmt.Printf("⚠️ Erro ao salvar lote consolidado no store: %v\n", err)
+		} else {
+			fmt.Printf("💾 [Store] %d ativos persistidos em lote consolidado (b3:snapshot:todos)!\n", len(todosAtivos))
 		}
 	}
 
 	duracao := time.Since(inicio)
+	s.mu.Lock()
+	s.ultimaSync = time.Now()
+	s.duracaoSync = duracao
+	s.totalSincronizados = len(todosAtivos)
+	s.ultimoErro = nil
+	s.mu.Unlock()
+
 	fmt.Printf("✅ [Ingestion] Sucesso total: %d ativos auditados e armazenados em %v!\n", len(todosAtivos), duracao)
 	fmt.Println("==================================================================")
 

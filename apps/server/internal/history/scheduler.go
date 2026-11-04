@@ -135,3 +135,31 @@ func (s *Scheduler) IniciarRotinaDiaria() {
 		}
 	}()
 }
+
+// RestaurarUltimoSnapshot lê o snapshot mais recente salvo no MySQL e o injeta no SnapshotStore
+func (s *Scheduler) RestaurarUltimoSnapshot(ctx context.Context) error {
+	if s.repo == nil {
+		return fmt.Errorf("repositório não configurado")
+	}
+
+	registros, err := s.repo.BuscarUltimoSnapshot(ctx)
+	if err != nil {
+		return fmt.Errorf("falha ao buscar último snapshot do MySQL: %w", err)
+	}
+	if len(registros) == 0 {
+		return fmt.Errorf("nenhum snapshot prévio encontrado na tabela historico_rankings_diarios")
+	}
+
+	var ativos []*domain.Ativo
+	for _, reg := range registros {
+		ativos = append(ativos, ConverterRegistroParaAtivo(reg))
+	}
+
+	if err := s.store.SalvarLote(ativos); err != nil {
+		return fmt.Errorf("falha ao gravar ativos restaurados no store: %w", err)
+	}
+
+	fmt.Printf("✅ [RECUPERAÇÃO HISTÓRICO] %d ativos restaurados do snapshot MySQL (%s) com sucesso!\n",
+		len(ativos), registros[0].DataPregao.Format("02/01/2006"))
+	return nil
+}

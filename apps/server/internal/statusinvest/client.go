@@ -63,7 +63,7 @@ func (c *Client) ObterFIIs(ctx context.Context) ([]FIIStatusInvest, error) {
 	return resp.List, nil
 }
 
-// executarBusca dispara o POST codificado em form-urlencoded com paginação ampla (take=1000)
+// executarBusca dispara o POST codificado em form-urlencoded com paginação ampla (take=1000) e retry automático
 func (c *Client) executarBusca(ctx context.Context, categoryType int, referer string, destino any) error {
 	form := url.Values{}
 	form.Set("search", "{}")
@@ -72,35 +72,46 @@ func (c *Client) executarBusca(ctx context.Context, categoryType int, referer st
 	form.Set("take", "1000") // Garante o universo completo em apenas 1 requisição
 
 	reqURL := fmt.Sprintf("%s?CategoryType=%d", baseURL, categoryType)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, strings.NewReader(form.Encode()))
-	if err != nil {
-		return err
+
+	var ultimoErro error
+	for tentativa := 1; tentativa <= 3; tentativa++ {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, strings.NewReader(form.Encode()))
+		if err != nil {
+			return err
+		}
+
+		// Headers idênticos aos de uma requisição legítima do navegador via AJAX
+		req.Header.Set("User-Agent", defaultUserAgent)
+		req.Header.Set("Accept", "application/json, text/plain, */*")
+		req.Header.Set("Accept-Language", "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7")
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
+		req.Header.Set("X-Requested-With", "XMLHttpRequest")
+		req.Header.Set("Referer", referer)
+		req.Header.Set("Origin", "https://statusinvest.com.br")
+
+		httpResp, err := c.httpClient.Do(req)
+		if err != nil {
+			ultimoErro = err
+			time.Sleep(time.Duration(tentativa) * time.Second)
+			continue
+		}
+
+		if httpResp.StatusCode != http.StatusOK {
+			corpo, _ := io.ReadAll(httpResp.Body)
+			httpResp.Body.Close()
+			ultimoErro = fmt.Errorf("StatusInvest retornou HTTP %d: %s", httpResp.StatusCode, string(corpo))
+			time.Sleep(time.Duration(tentativa) * time.Second)
+			continue
+		}
+
+		decoder := json.NewDecoder(httpResp.Body)
+		if err := decoder.Decode(destino); err != nil {
+			httpResp.Body.Close()
+			return fmt.Errorf("erro ao decodificar JSON do StatusInvest: %w", err)
+		}
+		httpResp.Body.Close()
+		return nil
 	}
 
-	// Headers idênticos aos de uma requisição legítima do navegador via AJAX
-	req.Header.Set("User-Agent", defaultUserAgent)
-	req.Header.Set("Accept", "application/json, text/plain, */*")
-	req.Header.Set("Accept-Language", "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7")
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
-	req.Header.Set("X-Requested-With", "XMLHttpRequest")
-	req.Header.Set("Referer", referer)
-	req.Header.Set("Origin", "https://statusinvest.com.br")
-
-	httpResp, err := c.httpClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer httpResp.Body.Close()
-
-	if httpResp.StatusCode != http.StatusOK {
-		corpo, _ := io.ReadAll(httpResp.Body)
-		return fmt.Errorf("StatusInvest retornou HTTP %d: %s", httpResp.StatusCode, string(corpo))
-	}
-
-	decoder := json.NewDecoder(httpResp.Body)
-	if err := decoder.Decode(destino); err != nil {
-		return fmt.Errorf("erro ao decodificar JSON do StatusInvest: %w", err)
-	}
-
-	return nil
+	return fmt.Errorf("falha após 3 tentativas de consulta ao StatusInvest: %w", ultimoErro)
 }

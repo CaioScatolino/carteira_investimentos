@@ -128,7 +128,7 @@ func NovoRedisStore(endereco string, senha string, db int, ttl time.Duration) (*
 		WriteTimeout: 2 * time.Second,
 	})
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	// Valida se o Redis está vivo
@@ -144,7 +144,7 @@ func NovoRedisStore(endereco string, senha string, db int, ttl time.Duration) (*
 
 // Salvar armazena um ativo individualmente com TTL
 func (r *RedisStore) Salvar(ativo *domain.Ativo) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	dados, err := json.Marshal(ativo)
@@ -160,7 +160,7 @@ func (r *RedisStore) SalvarLote(ativos []*domain.Ativo) error {
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	pipe := r.client.Pipeline()
@@ -185,7 +185,7 @@ func (r *RedisStore) SalvarLote(ativos []*domain.Ativo) error {
 
 // Obter busca um ativo individual no Redis pelo Ticker
 func (r *RedisStore) Obter(ticker string) (*domain.Ativo, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	val, err := r.client.Get(ctx, "b3:snapshot:"+ticker).Result()
@@ -202,36 +202,62 @@ func (r *RedisStore) Obter(ticker string) (*domain.Ativo, error) {
 
 // ListarTodos recupera a lista completa em < 1ms usando a chave agregada
 func (r *RedisStore) ListarTodos() []*domain.Ativo {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	// 1. Tenta ler direto do snapshot agregado
 	val, err := r.client.Get(ctx, "b3:snapshot:todos").Result()
 	if err == nil {
 		var lista []*domain.Ativo
-		if json.Unmarshal([]byte(val), &lista) == nil {
+		if json.Unmarshal([]byte(val), &lista) == nil && len(lista) > 0 {
 			return lista
 		}
 	}
 
-	// 2. Fallback caso a chave agregada não exista
+	// 2. Fallback caso a chave agregada não exista: MGet em lote único
 	keys, err := r.client.Keys(ctx, "b3:snapshot:*").Result()
+	if err != nil || len(keys) == 0 {
+		return nil
+	}
+
+	var chavesValidas []string
+	for _, k := range keys {
+		if k != "b3:snapshot:todos" {
+			chavesValidas = append(chavesValidas, k)
+		}
+	}
+	if len(chavesValidas) == 0 {
+		return nil
+	}
+
+	// MGet busca centenas de ativos em apenas 1 comando TCP
+	valores, err := r.client.MGet(ctx, chavesValidas...).Result()
 	if err != nil {
 		return nil
 	}
 
 	var lista []*domain.Ativo
-	for _, k := range keys {
-		if k == "b3:snapshot:todos" {
+	for _, v := range valores {
+		if v == nil {
 			continue
 		}
-		if v, err := r.client.Get(ctx, k).Result(); err == nil {
-			var a domain.Ativo
-			if json.Unmarshal([]byte(v), &a) == nil {
-				lista = append(lista, &a)
-			}
+		strVal, ok := v.(string)
+		if !ok {
+			continue
+		}
+		var a domain.Ativo
+		if json.Unmarshal([]byte(strVal), &a) == nil {
+			lista = append(lista, &a)
 		}
 	}
+
+	// Auto-recuperação: reconstrói b3:snapshot:todos se encontramos ativos
+	if len(lista) > 0 {
+		if todosJSON, err := json.Marshal(lista); err == nil {
+			_ = r.client.Set(ctx, "b3:snapshot:todos", todosJSON, r.ttl).Err()
+		}
+	}
+
 	return lista
 }
 

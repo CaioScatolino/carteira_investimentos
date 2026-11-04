@@ -92,8 +92,8 @@ func (c *B3Client) ObterTradingName(ticker string) string {
 func (c *B3Client) ObterArquivoMaisRecente() ([]byte, string, error) {
 	hoje := time.Now()
 
-	// Tenta até 7 dias úteis anteriores (cobrindo feriados prolongados como Carnaval/Páscoa)
-	for i := 0; i < 7; i++ {
+	// Tenta até 14 dias anteriores (cobrindo feriados prolongados como Carnaval/Páscoa e fins de semana)
+	for i := 0; i < 14; i++ {
 		diaTentativa := hoje.AddDate(0, 0, -i)
 
 		// Pula sábado e domingo antes mesmo de bater na rede
