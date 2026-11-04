@@ -1,6 +1,7 @@
 package api
 
 import (
+	"carteira_investimentos/server/internal/advisor"
 	"carteira_investimentos/server/internal/auth"
 	"carteira_investimentos/server/internal/b3"
 	"carteira_investimentos/server/internal/calendar"
@@ -30,6 +31,7 @@ type Handler struct {
 	calendarService  *calendar.Service
 	technicalService *technical.Service
 	ingestionService *statusinvest.IngestionService
+	advisorService   *advisor.Service
 }
 
 func NovoHandler(
@@ -40,6 +42,7 @@ func NovoHandler(
 	portfolioService *portfolio.Service,
 	calendarService *calendar.Service,
 	ingestionService *statusinvest.IngestionService,
+	advisorService *advisor.Service,
 ) *Handler {
 	if b3Client == nil {
 		b3Client = b3.NovoB3Client()
@@ -63,6 +66,7 @@ func NovoHandler(
 		calendarService:  calendarService,
 		technicalService: technicalService,
 		ingestionService: ingestionService,
+		advisorService:   advisorService,
 	}
 }
 

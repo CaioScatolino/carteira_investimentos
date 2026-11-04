@@ -19,6 +19,7 @@ type Config struct {
 	RedisDB         string
 	SyncIntervalMin int
 	JWTSecret       string
+	GeminiAPIKey    string
 }
 
 // Carregar lê o arquivo .env (se existir) e preenche as variáveis de configuração
@@ -37,6 +38,7 @@ func Carregar() *Config {
 		RedisDB:         obterEnv("REDIS_DB", "0"),
 		SyncIntervalMin: 20, // Sincronização a cada 20 minutos
 		JWTSecret:       obterEnv("JWT_SECRET", "super-secret-jwt-key-carteira-investimentos-2026-b3"),
+		GeminiAPIKey:    obterEnv("GEMINI_API_KEY", ""),
 	}
 
 	return cfg

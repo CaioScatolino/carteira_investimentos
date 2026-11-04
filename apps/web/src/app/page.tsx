@@ -16,6 +16,7 @@ import { AddPositionModal } from "@/components/AddPositionModal";
 import { RebalanceSimulatorModal } from "@/components/RebalanceSimulatorModal";
 import { TransactionHistoryModal } from "@/components/TransactionHistoryModal";
 import { AssetChartModal } from "@/components/AssetChartModal";
+import { AdvisorModal } from "@/components/AdvisorModal";
 import { AuthModal } from "@/components/AuthModal";
 import { DividendCalendar } from "@/components/DividendCalendar";
 import { useAuth } from "@/context/AuthContext";
@@ -33,6 +34,7 @@ import {
   ArrowRight,
   ShieldCheck,
   History,
+  Sparkles,
 } from "lucide-react";
 
 export default function Dashboard() {
@@ -63,6 +65,7 @@ export default function Dashboard() {
   // Modais
   const [modalAddAberto, setModalAddAberto] = useState(false);
   const [modalSimuladorAberto, setModalSimuladorAberto] = useState(false);
+  const [modalAdvisorAberto, setModalAdvisorAberto] = useState(false);
   const [modalAuthAberto, setModalAuthAberto] = useState(false);
   const [modalHistoricoAberto, setModalHistoricoAberto] = useState(false);
   const [tickerHistoricoFiltro, setTickerHistoricoFiltro] = useState<string | null>(null);
@@ -499,6 +502,15 @@ export default function Dashboard() {
 
                   <div className="flex items-center gap-3 flex-wrap">
                     <button
+                      onClick={() => setModalAdvisorAberto(true)}
+                      className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#d4af37] via-[#f7d983] to-[#c49f2f] hover:from-[#f0c84c] hover:to-[#b38f24] text-black font-extrabold text-xs shadow-lg shadow-[#d4af37]/25 flex items-center gap-2 transition-all active:scale-95"
+                      title="Consultor Buy & Hold algorítmico com IA"
+                    >
+                      <Sparkles className="w-4 h-4 text-black animate-pulse" />
+                      <span>🎯 No que investir hoje?</span>
+                    </button>
+
+                    <button
                       onClick={() => {
                         setPosicaoParaAporte(null);
                         setModalAddAberto(true);
@@ -627,6 +639,36 @@ export default function Dashboard() {
         isOpen={modalSimuladorAberto}
         onClose={() => setModalSimuladorAberto(false)}
         onSimular={handleSimularRebalanceamento}
+      />
+
+      <AdvisorModal
+        isOpen={modalAdvisorAberto}
+        onClose={() => setModalAdvisorAberto(false)}
+        token={token}
+        onAportarEmAtivo={(ticker, quantidade, precoEstimado, classe) => {
+          setPosicaoParaAporte({
+            id: 0,
+            usuario_id: usuario?.id || 0,
+            ticker: ticker,
+            classe: classe,
+            categoria_macro: "Aporte Recomendado por IA",
+            quantidade: quantidade,
+            preco_medio: precoEstimado,
+            valor_aplicado: quantidade * precoEstimado,
+            corretora: "Principal",
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            cotacao_atual: precoEstimado,
+            valor_atual_mercado: quantidade * precoEstimado,
+            lucro_prejuizo_valor: 0,
+            rentabilidade_pct: 0,
+            preco_teto_estimado: 0,
+            margem_seguranca_pct: 0,
+            score_fundamentalista: 100,
+            sinal_rebalanceamento: "COMPRAR_APORTE",
+          });
+          setModalAddAberto(true);
+        }}
       />
 
       <TransactionHistoryModal

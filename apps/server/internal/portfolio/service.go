@@ -231,6 +231,9 @@ func (s *Service) ExcluirPosicao(ctx context.Context, usuarioID, posicaoID int64
 
 // ObterResumoCarteira consolida todas as posições do usuário, calculando rentabilidade real e alocações.
 func (s *Service) ObterResumoCarteira(ctx context.Context, usuarioID int64) (*ResumoCarteira, error) {
+	if s.repo == nil {
+		return nil, nil
+	}
 	posicoes, err := s.repo.ListarPosicoes(ctx, usuarioID)
 	if err != nil {
 		return nil, err

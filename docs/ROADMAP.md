@@ -173,22 +173,23 @@ Este documento é a bússola viva do projeto. Ele mapeia as decisões arquitetur
 
 ---
 
-### 🧠 FASE 9: Assistente Cognitivo de Aportes com IA ("No que investir hoje?") & Pareceres SSE
-- [ ] **Passo 9.1: Motor Matemático de Pré-Alocação & Detecção de Assimetrias (`internal/advisor`)**:
-  - [ ] **Input Dinâmico de Aporte:** O usuário informa o montante disponível no dia (ex: R$ 500, R$ 2.000).
-  - [ ] **Auditoria Macro:** Identifica a classe mais defasada na regra institucional (Ações, FIIs ou Renda Fixa).
-  - [ ] **Auditoria Micro & Distorções de Mercado:**
+### ✅ FASE 9: Assistente Cognitivo de Aportes com IA ("No que investir hoje?") & Pareceres SSE (Concluída)
+- [x] **Passo 9.1: Motor Matemático de Pré-Alocação & Detecção de Assimetrias (`internal/advisor`)**:
+  - [x] **Input Dinâmico de Aporte:** O usuário informa o montante disponível no dia (ex: R$ 500, R$ 2.000).
+  - [x] **Auditoria Macro:** Identifica a classe mais defasada na regra institucional (Ações, FIIs ou Renda Fixa).
+  - [x] **Auditoria Micro & Distorções de Mercado:**
     - Compara Preço Médio do investidor vs Preço Teto Consolidado vs Cotação Atual.
-    - **Radar de Oportunidades Assimétricas:** Se uma classe não estiver defasada mas contiver um ativo com desconto extremo (ex: FII de tijolo com P/VP 0.70 ou Blue Chip com 40% de margem e IFR sobrevendido), essa distorção de preço não é ignorada e entra como sugestão prioritária.
-  - [ ] **Gerador de Payload Cognitivo:** Monta um JSON estruturado com o diagnóstico matemático, desvios e os ativos mais assimétricos para servir de contexto para a IA.
-- [ ] **Passo 9.2: Integração com Gemini Pro (Go SDK / REST) & Streaming SSE**:
-  - [ ] Prompt de engenharia institucional instruindo a IA a agir como um estrategista Buy & Hold senior.
-  - [ ] Streaming de resposta (`GET /api/v1/advisor/stream`) com efeito de digitação em tempo real (Server-Sent Events).
-- [ ] **Passo 9.3: Interface Interativa do Chatbot no Frontend Next.js (`apps/web`)**:
-  - [ ] Botão de destaque no topo da Carteira: `"🎯 No que investir hoje?"`.
-  - [ ] Modal conversacional flutuante em preto ônix e dourado champagne.
-  - [ ] Interação guiada com atalhos de valor (R$ 200, R$ 500, R$ 1.000, R$ 5.000 ou customizado).
-  - [ ] Card de sugestão de compra acionável com botão de "Aportar Agora" integrado à carteira.
+    - **Radar de Oportunidades Assimétricas:** Se uma classe não estiver defasada mas contiver um ativo com desconto extremo (ex: FII de tijolo com P/VP <= 0.88 ou Blue Chip com > 25% de margem no Teto e Score >= 85), essa distorção de preço entra como sugestão prioritária.
+  - [x] **Gerador de Payload Cognitivo:** Monta um JSON estruturado com o diagnóstico matemático, desvios e os ativos mais assimétricos para servir de contexto para a IA.
+- [x] **Passo 9.2: Integração com Gemini Pro & Streaming SSE**:
+  - [x] Prompt de engenharia institucional instruindo a IA a agir como um estrategista Buy & Hold senior.
+  - [x] Streaming de resposta em tempo real (`GET /api/v1/advisor/stream`) via Server-Sent Events (SSE) com digitação contínua.
+  - [x] Motor dual: conexão com a API do Google Gemini quando `GEMINI_API_KEY` estiver configurada, com fallback gracioso para o motor heurístico institucional nativo.
+- [x] **Passo 9.3: Interface Interativa do Assistente no Frontend Next.js (`apps/web`)**:
+  - [x] Botão de destaque no topo da Carteira: `"🎯 No que investir hoje?"`.
+  - [x] Modal conversacional flutuante `AdvisorModal` em preto ônix e dourado champagne.
+  - [x] Interação guiada com atalhos de valor (R$ 200, R$ 500, R$ 1.000, R$ 2.500, R$ 5.000 ou customizado) e seletores de perfil (Equilibrado, Dividendos, Assimetrias, Defensivo).
+  - [x] Card de sugestão de compra acionável com botão de "Aportar Este Ativo na Carteira" integrado diretamente ao modal de custódia.
 
 ---
 

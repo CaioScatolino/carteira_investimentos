@@ -114,3 +114,31 @@ export interface Transacao {
   notas?: string | null;
   created_at: string;
 }
+
+export type PerfilAdvisor = "EQUILIBRADO" | "DIVIDENDOS" | "OPORTUNIDADE" | "DEFENSIVO";
+
+export interface AssimetriaDetectada {
+  ticker: string;
+  nome: string;
+  classe: ClasseAtivo;
+  cotacao_atual: number;
+  preco_teto: number;
+  margem_seguranca_pct: number;
+  score: number;
+  dividend_yield: number;
+  motivo: string;
+}
+
+export interface DiagnosticoAdvisor {
+  valor_aporte_informado: number;
+  valor_aporte_efetivo: number;
+  saldo_restante_caixa: number;
+  patrimonio_atual: number;
+  patrimonio_projetado: number;
+  classe_mais_defasada: ClasseAtivo;
+  delta_defasagem: number;
+  assimetrias: AssimetriaDetectada[];
+  sugestoes: SugestaoAporteItem[];
+  diagnostico_macro: DiagnosticoMacroClasse[];
+  parecer_sintese?: string;
+}

@@ -97,23 +97,27 @@ func (h *Handler) ExigirAutenticacao(next http.Handler) http.Handler {
 			return
 		}
 
+		var tokenStr string
 		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" {
+		if authHeader != "" {
+			partes := strings.SplitN(authHeader, " ", 2)
+			if len(partes) == 2 && strings.ToLower(partes[0]) == "bearer" {
+				tokenStr = strings.TrimSpace(partes[1])
+			}
+		}
+
+		// Fallback para conexões SSE (EventSource) ou links protegidos via parâmetro ?token=
+		if tokenStr == "" {
+			tokenStr = strings.TrimSpace(r.URL.Query().Get("token"))
+		}
+
+		if tokenStr == "" {
 			responderJSON(w, http.StatusUnauthorized, map[string]string{
-				"erro": "cabeçalho Authorization ausente. Forneça: Bearer <token>",
+				"erro": "autenticação ausente. Forneça: Bearer <token> ou ?token=<token>",
 			})
 			return
 		}
 
-		partes := strings.SplitN(authHeader, " ", 2)
-		if len(partes) != 2 || strings.ToLower(partes[0]) != "bearer" {
-			responderJSON(w, http.StatusUnauthorized, map[string]string{
-				"erro": "formato de token inválido. Formato esperado: Bearer <token>",
-			})
-			return
-		}
-
-		tokenStr := strings.TrimSpace(partes[1])
 		claims, err := h.tokenManager.ValidarToken(tokenStr)
 		if err != nil {
 			responderJSON(w, http.StatusUnauthorized, map[string]string{

@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"carteira_investimentos/server/internal/advisor"
 	"carteira_investimentos/server/internal/api"
 	"carteira_investimentos/server/internal/auth"
 	"carteira_investimentos/server/internal/b3"
@@ -235,7 +236,19 @@ func main() {
 	}
 
 	calendarService := calendar.NovoService(store, b3Client)
-	apiHandler := api.NovoHandler(store, b3Client, authService, tokenManager, portfolioService, calendarService, ingestionService)
+	var advisorService *advisor.Service
+	if portfolioService != nil {
+		advisorService = advisor.NovoService(portfolioService, store, cfg.GeminiAPIKey)
+		fmt.Printf("🧠 [ADVISOR ATIVO] Assistente Cognitivo de Aportes inicializado (IA: %s)\n",
+			func() string {
+				if cfg.GeminiAPIKey != "" {
+					return "Google Gemini Pro Conectado"
+				}
+				return "Motor Heurístico Institucional Nativo"
+			}())
+	}
+
+	apiHandler := api.NovoHandler(store, b3Client, authService, tokenManager, portfolioService, calendarService, ingestionService, advisorService)
 	router := apiHandler.ConfigurarRotas()
 
 	servidor := &http.Server{
