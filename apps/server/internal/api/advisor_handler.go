@@ -74,3 +74,4 @@ func (h *Handler) StreamAdvisor(w http.ResponseWriter, r *http.Request) {
 
 	h.advisorService.StreamAdvisorSSE(w, r, claims.UsuarioID, req)
 }
+

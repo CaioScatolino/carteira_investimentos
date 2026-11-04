@@ -372,49 +372,90 @@ func (s *Service) refinarSugestoes(
 	return resultado, valorGasto
 }
 
+func formatarNomeClasse(c portfolio.ClasseAtivo) string {
+	switch c {
+	case portfolio.ClasseRendaFixa:
+		return "Renda Fixa"
+	case portfolio.ClasseFII:
+		return "Fundos Imobiliários"
+	case portfolio.ClasseAcaoBR:
+		return "Ações Brasileiras"
+	case portfolio.ClasseInternacional:
+		return "Ativos Globais"
+	case portfolio.ClasseCaixa:
+		return "Reserva de Caixa"
+	default:
+		return string(c)
+	}
+}
+
 // gerarParecerDeterministo cria o parecer institucional e pedagógico Buy & Hold
 func (s *Service) gerarParecerDeterministo(d *DiagnosticoAdvisor, perfil PerfilInvestidor) string {
 	var sb strings.Builder
 
 	sb.WriteString("### 🏛️ Estratégia Institucional de Aporte Buy & Hold\n\n")
 
-	sb.WriteString(fmt.Sprintf("• **Cenário Macroeconômico:** Selic Meta a **%.2f%% a.a.** e NTN-B (IPCA+) a **%.2f%% a.a.** real. O Hurdle mínimo exigido para ações de dividendo é de **%.2f%% a.a.**.\n",
-		d.CenarioMacro.TaxaSelic, d.CenarioMacro.TaxaNTNB, d.CenarioMacro.TaxaNTNB+d.CenarioMacro.SpreadMinimoAcoes))
+	sb.WriteString("#### 1. Cenário Macroeconômico & Diretrizes\n")
+	sb.WriteString(fmt.Sprintf("• **Taxa Selic Meta:** %.2f%% a.a. (Custo de oportunidade do capital no Brasil)\n", d.CenarioMacro.TaxaSelic))
+	sb.WriteString(fmt.Sprintf("• **Tesouro IPCA+ (NTN-B):** %.2f%% a.a. real (Taxa livre de risco indexada à inflação)\n", d.CenarioMacro.TaxaNTNB))
+	sb.WriteString(fmt.Sprintf("• **Hurdle Mínimo para Ações:** %.2f%% a.a. (Prêmio de risco exigido para justificar renda variável)\n\n",
+		d.CenarioMacro.TaxaNTNB+d.CenarioMacro.SpreadMinimoAcoes))
 
-	sb.WriteString(fmt.Sprintf("• **Diagnóstico de Custódia:** Patrimônio atual em **R$ %.2f**. A caixinha patrimonial com maior defasagem matemática no momento é **%s** (desvio de **%.1f%%** da meta institucional).\n\n",
-		d.PatrimonioAtual, d.ClasseMaisDefasada, d.DeltaDefasagem))
+	sb.WriteString("#### 2. Diagnóstico da Custódia & Rebalanceamento\n")
+	sb.WriteString(fmt.Sprintf("• **Patrimônio Total sob Custódia:** R$ %.2f\n", d.PatrimonioAtual))
+	sb.WriteString(fmt.Sprintf("• **Classe com Maior Defasagem:** %s (com desvio de **%.1f%%** da meta institucional)\n",
+		formatarNomeClasse(d.ClasseMaisDefasada), math.Abs(d.DeltaDefasagem)))
+	sb.WriteString(fmt.Sprintf("• **Diretriz de Aporte:** O montante de R$ %.2f foi distribuído matematicamente para recompor as caixinhas defasadas sem giro desnecessário de carteira.\n\n",
+		d.ValorAporteInformado))
 
-	sb.WriteString("#### 🎯 Recomendações Prioritárias para o Aporte de Hoje:\n\n")
-
-	for i, sug := range d.Sugestoes {
-		sb.WriteString(fmt.Sprintf("%d. **%s** (%s)\n", i+1, sug.Ticker, sug.Classe))
+	sb.WriteString("#### 3. Recomendações de Aporte Prioritárias\n")
+	for _, sug := range d.Sugestoes {
 		if sug.Classe == portfolio.ClasseRendaFixa || sug.Classe == portfolio.ClasseCaixa {
-			sb.WriteString(fmt.Sprintf("   - **Alocação:** R$ %.2f (Aporte em Título/CDB)\n", sug.ValorTotalSugerido))
+			sb.WriteString(fmt.Sprintf("• **%s** (%s):\n", sug.Ticker, formatarNomeClasse(sug.Classe)))
+			sb.WriteString(fmt.Sprintf("  - **Alocação Financeira:** R$ %.2f (Aporte em Título/CDB)\n", sug.ValorTotalSugerido))
+			sb.WriteString(fmt.Sprintf("  - **Racional:** %s\n\n", sug.Justificativa))
 		} else {
-			sb.WriteString(fmt.Sprintf("   - **Quantidade Sugerida:** %.0f cota(s) a R$ %.2f (Total: R$ %.2f)\n",
+			sb.WriteString(fmt.Sprintf("• **%s** (%s):\n", sug.Ticker, formatarNomeClasse(sug.Classe)))
+			sb.WriteString(fmt.Sprintf("  - **Quantidade Recomendada:** %.0f cota(s) a R$ %.2f (Total: R$ %.2f)\n",
 				sug.QuantidadeSugerida, sug.PrecoEstimado, sug.ValorTotalSugerido))
+			if sug.MargemSegurancaPct > 0 {
+				sb.WriteString(fmt.Sprintf("  - **Margem de Segurança:** +%.1f%% sobre o Preço Teto Consensual\n", sug.MargemSegurancaPct))
+			}
+			if sug.Score > 0 {
+				sb.WriteString(fmt.Sprintf("  - **Score Fundamentalista:** %d/100 pts\n", sug.Score))
+			}
+			sb.WriteString(fmt.Sprintf("  - **Racional:** %s\n\n", sug.Justificativa))
 		}
-		if sug.MargemSegurancaPct > 0 {
-			sb.WriteString(fmt.Sprintf("   - **Margem de Segurança:** +%.1f%% sobre o Preço Teto Consensual\n", sug.MargemSegurancaPct))
-		}
-		sb.WriteString(fmt.Sprintf("   - **Racional:** %s\n\n", sug.Justificativa))
 	}
 
 	if len(d.Assimetrias) > 0 {
-		sb.WriteString("#### ⚡ Radar de Assimetrias & Distorções de Preço:\n")
+		sb.WriteString("#### 4. Radar de Assimetrias & Distorções de Preço\n")
 		for _, a := range d.Assimetrias {
-			sb.WriteString(fmt.Sprintf("- **%s**: Negociando a R$ %.2f com Preço Teto de R$ %.2f (Margem: **+%.1f%%** | Score: **%d**). %s.\n",
-				a.Ticker, a.CotacaoAtual, a.PrecoTeto, a.MargemSegurancaPct, a.Score, a.Motivo))
+			sb.WriteString(fmt.Sprintf("• **%s**: Cotando a R$ %.2f vs Preço Teto de R$ %.2f (Margem: **+%.1f%%** | Score: **%d**)\n",
+				a.Ticker, a.CotacaoAtual, a.PrecoTeto, a.MargemSegurancaPct, a.Score))
+			sb.WriteString(fmt.Sprintf("  - *Diagnóstico:* %s.\n\n", a.Motivo))
 		}
-		sb.WriteString("\n")
 	}
 
-	sb.WriteString(fmt.Sprintf("💵 **Resumo Financeiro:** Aporte total recomendado de **R$ %.2f** (Saldo restante para caixa/próximo aporte: **R$ %.2f**).\n\n",
-		d.ValorAporteEfetivo, d.SaldoRestanteCaixa))
+	sb.WriteString("#### 5. Resumo da Execução\n")
+	sb.WriteString(fmt.Sprintf("• **Total Efetivo a Investir:** R$ %.2f\n", d.ValorAporteEfetivo))
+	sb.WriteString(fmt.Sprintf("• **Saldo Restante em Caixa:** R$ %.2f (preservado para a próxima rodada)\n\n", d.SaldoRestanteCaixa))
 
-	sb.WriteString("> *\"No Buy & Hold, você não tenta adivinhar o fundo do mercado. Você compra empresas boas, abaixo do preço teto, e reinveste os proventos com regularidade matemática.\"*")
+	sb.WriteString("> *\"No Buy & Hold, você não tenta adivinhar o humor do mercado. Você compra empresas e ativos excelentes abaixo do preço teto e reinveste os proventos com regularidade matemática.\"*\n")
 
 	return sb.String()
+}
+
+// TokenSSE estrutura o payload do token transmitido via Server-Sent Events
+type TokenSSE struct {
+	Texto string `json:"texto"`
+}
+
+// emitirTokenSSE encapsula com segurança cada token em JSON para que o protocolo SSE preserve quebras de linha
+func (s *Service) emitirTokenSSE(w http.ResponseWriter, flusher http.Flusher, token string) {
+	b, _ := json.Marshal(TokenSSE{Texto: token})
+	fmt.Fprintf(w, "event: token\ndata: %s\n\n", string(b))
+	flusher.Flush()
 }
 
 // StreamAdvisorSSE transmite o diagnóstico e a síntese da IA em streaming Server-Sent Events
@@ -455,13 +496,22 @@ func (s *Service) StreamAdvisorSSE(w http.ResponseWriter, r *http.Request, usuar
 	flusher.Flush()
 }
 
-// transmitirTextoEmStreaming simula a digitação token a token para parecer nativo
+// transmitirTextoEmStreaming transmite o texto de forma contínua com chunks respeitando quebras de linha
 func (s *Service) transmitirTextoEmStreaming(w http.ResponseWriter, flusher http.Flusher, texto string) {
-	palavras := strings.Split(texto, " ")
-	for _, p := range palavras {
-		fmt.Fprintf(w, "event: token\ndata: %s \n\n", p)
-		flusher.Flush()
-		time.Sleep(20 * time.Millisecond)
+	linhas := strings.Split(texto, "\n")
+	for i, linha := range linhas {
+		palavras := strings.Split(linha, " ")
+		for j, p := range palavras {
+			if j > 0 {
+				s.emitirTokenSSE(w, flusher, " ")
+			}
+			s.emitirTokenSSE(w, flusher, p)
+			time.Sleep(8 * time.Millisecond)
+		}
+		if i < len(linhas)-1 {
+			s.emitirTokenSSE(w, flusher, "\n")
+			time.Sleep(15 * time.Millisecond)
+		}
 	}
 }
 
@@ -489,11 +539,12 @@ ASSIMETRIAS DE MERCADO:
 
 INSTRUÇÕES DE RESPOSTA:
 1. Escreva um parecer conciso, elegante e altamente embasado.
-2. Destaque por que a disciplina de recompor a classe defasada e aproveitar assimetrias comprovadas traz retornos assimétricos no longo prazo.
-3. Não invente números. Use exatamente os valores, cotas e preços sugeridos acima.
-4. Conclua com uma recomendação prática de execução Buy & Hold.`,
+2. Formate sua resposta com títulos claros usando markdown (ex: ### Título, #### Seção) e listas com marcadores (• ou -).
+3. Nunca agrupe todo o texto em um único parágrafo longo. Use parágrafos bem espaçados e tópicos destacados em negrito.
+4. Não invente números. Use exatamente os valores, cotas e preços sugeridos acima.
+5. Conclua com uma citação ou recomendação prática de execução Buy & Hold.`,
 		d.CenarioMacro.TaxaSelic, d.CenarioMacro.TaxaNTNB, d.CenarioMacro.TaxaNTNB+d.CenarioMacro.SpreadMinimoAcoes,
-		d.PatrimonioAtual, d.ValorAporteInformado, req.Perfil, d.ClasseMaisDefasada, d.DeltaDefasagem,
+		d.PatrimonioAtual, d.ValorAporteInformado, req.Perfil, formatarNomeClasse(d.ClasseMaisDefasada), math.Abs(d.DeltaDefasagem),
 		formatarSugestoes(d.Sugestoes), formatarAssimetrias(d.Assimetrias),
 	)
 
@@ -547,8 +598,7 @@ INSTRUÇÕES DE RESPOSTA:
 					textoLimpo := strings.Trim(partes[1], " \",")
 					json.Unmarshal([]byte("\""+textoLimpo+"\""), &textoToken)
 					if textoToken != "" {
-						fmt.Fprintf(w, "event: token\ndata: %s\n\n", textoToken)
-						flusher.Flush()
+						s.emitirTokenSSE(w, flusher, textoToken)
 					}
 				}
 			}

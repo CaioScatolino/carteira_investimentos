@@ -16,6 +16,8 @@ import {
   Coins,
   ArrowRight,
   Lightbulb,
+  FileText,
+  PieChart,
 } from "lucide-react";
 import { API_V1_URL } from "@/config/api";
 import {
@@ -37,6 +39,124 @@ interface AdvisorModalProps {
   ) => void;
 }
 
+// Helper para formatar negrito e itálico inline
+function renderInlineFormatting(str: string): React.ReactNode {
+  if (!str) return null;
+  const parts = str.split(/(\*\*.*?\*\*|\*.*?\*)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return (
+        <strong key={i} className="font-bold text-white tracking-wide">
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+    if (part.startsWith("*") && part.endsWith("*")) {
+      return (
+        <em key={i} className="text-[#d4af37] not-italic font-semibold">
+          {part.slice(1, -1)}
+        </em>
+      );
+    }
+    return part;
+  });
+}
+
+// Componente para renderizar Markdown estruturado com design institucional
+function MarkdownViewer({ text, executando }: { text: string; executando: boolean }) {
+  if (!text) {
+    return (
+      <div className="py-8 text-center text-neutral-500 font-mono text-xs">
+        Aguardando resposta do assistente...
+      </div>
+    );
+  }
+
+  const lines = text.split("\n");
+
+  return (
+    <div className="space-y-1.5 text-neutral-200 text-xs sm:text-sm font-sans leading-relaxed">
+      {lines.map((line, idx) => {
+        const trimmed = line.trim();
+
+        if (!trimmed) {
+          return <div key={idx} className="h-2" />;
+        }
+
+        // Título Principal (###)
+        if (trimmed.startsWith("### ")) {
+          return (
+            <div
+              key={idx}
+              className="pt-2 pb-1.5 mb-2 border-b border-[#d4af37]/30 flex items-center gap-2 text-white font-extrabold text-sm sm:text-base font-mono"
+            >
+              <span>{renderInlineFormatting(trimmed.replace(/^###\s+/, ""))}</span>
+            </div>
+          );
+        }
+
+        // Subtítulos de Seção (####)
+        if (trimmed.startsWith("#### ")) {
+          return (
+            <div
+              key={idx}
+              className="pt-3 pb-1 text-[#d4af37] font-bold text-xs uppercase tracking-wider font-mono flex items-center gap-2"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-[#d4af37]" />
+              <span>{renderInlineFormatting(trimmed.replace(/^####\s+/, ""))}</span>
+            </div>
+          );
+        }
+
+        // Citação / Callout (> )
+        if (trimmed.startsWith("> ")) {
+          return (
+            <div
+              key={idx}
+              className="p-3.5 my-3 rounded-xl bg-gradient-to-r from-[#d4af37]/15 to-[#0e0e14] border-l-4 border-[#d4af37] text-neutral-200 italic text-xs leading-relaxed shadow-sm"
+            >
+              {renderInlineFormatting(trimmed.replace(/^>\s+/, ""))}
+            </div>
+          );
+        }
+
+        // Sub-tópico com recuo (  -)
+        if (line.startsWith("  - ") || line.startsWith("   - ")) {
+          const content = trimmed.replace(/^-\s+/, "");
+          return (
+            <div key={idx} className="flex items-start gap-2 pl-6 py-0.5 text-[11px] text-neutral-400">
+              <span className="w-1 h-1 rounded-full bg-neutral-600 mt-2 shrink-0" />
+              <span>{renderInlineFormatting(content)}</span>
+            </div>
+          );
+        }
+
+        // Marcador Principal (• ou - ou 1., 2.)
+        if (trimmed.startsWith("• ") || trimmed.startsWith("- ") || /^\d+\.\s+/.test(trimmed)) {
+          const content = trimmed.replace(/^([•\-]|(\d+\.))\s+/, "");
+          return (
+            <div key={idx} className="flex items-start gap-2 pl-2 py-0.5 text-xs text-neutral-300">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#d4af37] mt-1.5 shrink-0" />
+              <span>{renderInlineFormatting(content)}</span>
+            </div>
+          );
+        }
+
+        // Parágrafo Padrão
+        return (
+          <p key={idx} className="text-xs text-neutral-300 leading-relaxed py-0.5">
+            {renderInlineFormatting(line)}
+          </p>
+        );
+      })}
+
+      {executando && (
+        <span className="inline-block w-2 h-4 ml-1 bg-[#d4af37] animate-pulse align-middle" />
+      )}
+    </div>
+  );
+}
+
 export function AdvisorModal({
   isOpen,
   onClose,
@@ -51,6 +171,7 @@ export function AdvisorModal({
   const [streamingTexto, setStreamingTexto] = useState<string>("");
   const [diagnostico, setDiagnostico] = useState<DiagnosticoAdvisor | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const [abaVisualizacao, setAbaVisualizacao] = useState<"parecer" | "assimetrias" | "macro">("parecer");
 
   const eventSourceRef = useRef<EventSource | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -91,6 +212,7 @@ export function AdvisorModal({
     setStreamingTexto("");
     setDiagnostico(null);
     setExecutando(true);
+    setAbaVisualizacao("parecer");
 
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
@@ -114,6 +236,15 @@ export function AdvisorModal({
     });
 
     es.addEventListener("token", (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload && typeof payload.texto === "string") {
+          setStreamingTexto((prev) => prev + payload.texto);
+          return;
+        }
+      } catch {
+        // Fallback para texto plano
+      }
       setStreamingTexto((prev) => prev + event.data);
     });
 
@@ -138,6 +269,23 @@ export function AdvisorModal({
       style: "currency",
       currency: "BRL",
     }).format(val || 0);
+  };
+
+  const formatarNomeClasse = (classe: string) => {
+    switch (classe) {
+      case "RENDA_FIXA":
+        return "Renda Fixa";
+      case "FII":
+        return "Fundos Imobiliários";
+      case "ACAO_BR":
+        return "Ações Brasileiras";
+      case "INTERNACIONAL":
+        return "Ativos Globais";
+      case "CAIXA":
+        return "Reserva de Caixa";
+      default:
+        return classe;
+    }
   };
 
   return (
@@ -324,6 +472,36 @@ export function AdvisorModal({
             </div>
           )}
 
+          {/* Barra de Síntese Macroeconômica & Custódia */}
+          {diagnostico && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3.5 rounded-2xl bg-neutral-950 border border-neutral-800 text-[11px] font-mono shadow-inner">
+              <div className="flex flex-col">
+                <span className="text-[10px] text-neutral-500 uppercase tracking-wider">Selic Meta</span>
+                <span className="font-extrabold text-amber-400 text-xs sm:text-sm">
+                  {diagnostico.cenario_macro?.taxa_selic ? `${diagnostico.cenario_macro.taxa_selic.toFixed(2)}% a.a.` : "13.75% a.a."}
+                </span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[10px] text-neutral-500 uppercase tracking-wider">Tesouro IPCA+</span>
+                <span className="font-extrabold text-emerald-400 text-xs sm:text-sm">
+                  {diagnostico.cenario_macro?.taxa_ntnb ? `${diagnostico.cenario_macro.taxa_ntnb.toFixed(2)}% a.a.` : "6.50% a.a."}
+                </span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[10px] text-neutral-500 uppercase tracking-wider">Patrimônio Atual</span>
+                <span className="font-extrabold text-white text-xs sm:text-sm">
+                  {formatarMoeda(diagnostico.patrimonio_atual)}
+                </span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[10px] text-neutral-500 uppercase tracking-wider">Maior Defasagem</span>
+                <span className="font-extrabold text-rose-400 text-xs sm:text-sm truncate">
+                  {formatarNomeClasse(diagnostico.classe_mais_defasada)} ({diagnostico.delta_defasagem.toFixed(1)}%)
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* Cards das Sugestões Acionáveis Pré-Calculadas */}
           {diagnostico && diagnostico.sugestoes.length > 0 && (
             <div className="space-y-3">
@@ -338,112 +516,231 @@ export function AdvisorModal({
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {diagnostico.sugestoes.map((sug, idx) => (
-                  <div
-                    key={idx}
-                    className="p-4 rounded-xl bg-[#0f0f15] border border-neutral-800 hover:border-[#d4af37]/40 transition-all flex flex-col justify-between gap-3 shadow-sm"
-                  >
-                    <div>
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-extrabold text-white text-base font-mono">
-                              {sug.ticker}
-                            </span>
-                            <span className="text-[10px] px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 font-semibold font-mono">
-                              {sug.classe}
+                {diagnostico.sugestoes.map((sug, idx) => {
+                  const isRendaFixa = sug.classe === "RENDA_FIXA" || sug.classe === "CAIXA";
+                  return (
+                    <div
+                      key={idx}
+                      className="p-4 rounded-xl bg-[#0f0f15] border border-neutral-800 hover:border-[#d4af37]/40 transition-all flex flex-col justify-between gap-3 shadow-sm"
+                    >
+                      <div>
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-extrabold text-white text-base font-mono">
+                                {sug.ticker}
+                              </span>
+                              <span className={`text-[10px] px-2 py-0.5 rounded font-semibold font-mono ${
+                                isRendaFixa ? "bg-cyan-500/15 text-cyan-300 border border-cyan-500/30" : "bg-neutral-800 text-neutral-300"
+                              }`}>
+                                {formatarNomeClasse(sug.classe)}
+                              </span>
+                            </div>
+                            <p className="text-xs text-neutral-400 mt-1 line-clamp-2">
+                              {sug.justificativa}
+                            </p>
+                          </div>
+
+                          <div className="text-right shrink-0">
+                            <span className="text-[10px] text-neutral-500 block uppercase font-mono">Total</span>
+                            <span className="text-sm font-bold text-emerald-400 font-mono">
+                              {formatarMoeda(sug.valor_total_sugerido)}
                             </span>
                           </div>
-                          <p className="text-xs text-neutral-400 mt-1 line-clamp-2">
-                            {sug.justificativa}
-                          </p>
                         </div>
 
-                        <div className="text-right shrink-0">
-                          <span className="text-[10px] text-neutral-500 block uppercase font-mono">Total</span>
-                          <span className="text-sm font-bold text-emerald-400 font-mono">
-                            {formatarMoeda(sug.valor_total_sugerido)}
-                          </span>
+                        <div className="grid grid-cols-3 gap-2 pt-3 mt-3 border-t border-neutral-800/80 font-mono text-[11px]">
+                          <div>
+                            <span className="text-[10px] text-neutral-500 block">Qtd</span>
+                            <span className="font-semibold text-white">
+                              {isRendaFixa ? "Aporte Livre" : `${sug.quantidade_sugerida} cotas`}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-neutral-500 block">Preço</span>
+                            <span className="font-semibold text-white">
+                              {isRendaFixa ? "Sem Cotas" : formatarMoeda(sug.preco_estimado)}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-neutral-500 block">Margem</span>
+                            <span className={`font-semibold ${sug.margem_seguranca_pct >= 0 ? "text-emerald-400" : "text-amber-400"}`}>
+                              {isRendaFixa ? "Soberano / FGC" : (sug.margem_seguranca_pct > 0 ? `+${sug.margem_seguranca_pct.toFixed(1)}%` : "N/D")}
+                            </span>
+                          </div>
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-3 gap-2 pt-3 mt-3 border-t border-neutral-800/80 font-mono text-[11px]">
-                        <div>
-                          <span className="text-[10px] text-neutral-500 block">Qtd</span>
-                          <span className="font-semibold text-white">
-                            {sug.quantidade_sugerida} cotas
+                      {onAportarEmAtivo && (
+                        <button
+                          onClick={() => {
+                            onAportarEmAtivo(
+                              sug.ticker,
+                              sug.quantidade_sugerida,
+                              sug.preco_estimado,
+                              sug.classe
+                            );
+                            onClose();
+                          }}
+                          className="w-full py-2.5 rounded-lg bg-[#d4af37]/15 hover:bg-[#d4af37]/25 text-[#d4af37] border border-[#d4af37]/40 text-xs font-bold tracking-wide flex items-center justify-center gap-1.5 transition-colors active:scale-95"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>
+                            {isRendaFixa
+                              ? `+ Cadastrar Renda Fixa (${formatarMoeda(sug.valor_total_sugerido)})`
+                              : `+ Aportar ${sug.ticker} (${sug.quantidade_sugerida} cotas)`}
                           </span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-neutral-500 block">Preço</span>
-                          <span className="font-semibold text-white">
-                            {formatarMoeda(sug.preco_estimado)}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-neutral-500 block">Margem</span>
-                          <span className={`font-semibold ${sug.margem_seguranca_pct >= 0 ? "text-emerald-400" : "text-amber-400"}`}>
-                            {sug.margem_seguranca_pct > 0 ? `+${sug.margem_seguranca_pct.toFixed(1)}%` : "N/D"}
-                          </span>
-                        </div>
-                      </div>
+                        </button>
+                      )}
                     </div>
-
-                    {onAportarEmAtivo && (
-                      <button
-                        onClick={() => {
-                          onAportarEmAtivo(
-                            sug.ticker,
-                            sug.quantidade_sugerida,
-                            sug.preco_estimado,
-                            sug.classe
-                          );
-                          onClose();
-                        }}
-                        className="w-full py-2 rounded-lg bg-[#d4af37]/15 hover:bg-[#d4af37]/25 text-[#d4af37] border border-[#d4af37]/40 text-xs font-bold tracking-wide flex items-center justify-center gap-1.5 transition-colors"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>Aportar Este Ativo na Carteira</span>
-                      </button>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
 
-          {/* Área de Streaming do Parecer da IA */}
-          {(streamingTexto || executando) && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-2">
-                  <Lightbulb className="w-4 h-4 text-[#d4af37]" />
-                  Parecer do Estrategista Buy & Hold
-                </span>
+          {/* Área de Visualização Estruturada do Parecer da IA */}
+          {(streamingTexto || executando || diagnostico) && (
+            <div className="space-y-3 pt-2">
+              <div className="flex items-center justify-between border-b border-neutral-800 pb-2">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setAbaVisualizacao("parecer")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold font-mono transition-all flex items-center gap-1.5 ${
+                      abaVisualizacao === "parecer"
+                        ? "bg-[#d4af37] text-black shadow-md shadow-[#d4af37]/20"
+                        : "text-neutral-400 hover:text-white"
+                    }`}
+                  >
+                    <Lightbulb className="w-3.5 h-3.5" />
+                    <span>Parecer do Estrategista</span>
+                  </button>
+
+                  {diagnostico && diagnostico.assimetrias?.length > 0 && (
+                    <button
+                      onClick={() => setAbaVisualizacao("assimetrias")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold font-mono transition-all flex items-center gap-1.5 ${
+                        abaVisualizacao === "assimetrias"
+                          ? "bg-[#d4af37] text-black shadow-md shadow-[#d4af37]/20"
+                          : "text-neutral-400 hover:text-white"
+                      }`}
+                    >
+                      <Zap className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Assimetrias ({diagnostico.assimetrias.length})</span>
+                    </button>
+                  )}
+
+                  {diagnostico && diagnostico.diagnostico_macro?.length > 0 && (
+                    <button
+                      onClick={() => setAbaVisualizacao("macro")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold font-mono transition-all flex items-center gap-1.5 ${
+                        abaVisualizacao === "macro"
+                          ? "bg-[#d4af37] text-black shadow-md shadow-[#d4af37]/20"
+                          : "text-neutral-400 hover:text-white"
+                      }`}
+                    >
+                      <PieChart className="w-3.5 h-3.5" />
+                      <span>Macro Alocação</span>
+                    </button>
+                  )}
+                </div>
+
                 {executando && (
-                  <span className="text-[10px] text-[#d4af37] font-mono flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-[#d4af37] animate-ping"></span>
-                    Digitando...
+                  <span className="text-[10px] text-[#d4af37] font-mono flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-[#d4af37] animate-ping" />
+                    Processando IA...
                   </span>
                 )}
               </div>
 
-              <div
-                ref={scrollRef}
-                className="p-4 sm:p-5 rounded-2xl bg-neutral-950 border border-[#d4af37]/30 text-neutral-200 leading-relaxed font-sans text-xs sm:text-sm whitespace-pre-wrap max-h-72 overflow-y-auto custom-scrollbar shadow-inner"
-              >
-                {streamingTexto}
-                {executando && (
-                  <span className="inline-block w-2 h-4 ml-1 bg-[#d4af37] animate-pulse align-middle" />
-                )}
-              </div>
+              {/* Aba 1: Parecer Textual Formatado em Markdown Rico */}
+              {abaVisualizacao === "parecer" && (
+                <div
+                  ref={scrollRef}
+                  className="p-5 rounded-2xl bg-gradient-to-b from-[#0e0e14] to-[#07070a] border border-[#d4af37]/35 max-h-80 overflow-y-auto custom-scrollbar shadow-inner"
+                >
+                  <MarkdownViewer
+                    text={streamingTexto || diagnostico?.parecer_sintese || ""}
+                    executando={executando}
+                  />
+                </div>
+              )}
+
+              {/* Aba 2: Radar de Assimetrias em Cards Elegantes */}
+              {abaVisualizacao === "assimetrias" && diagnostico && (
+                <div className="space-y-2 max-h-80 overflow-y-auto custom-scrollbar pr-1">
+                  {diagnostico.assimetrias.map((a, idx) => (
+                    <div
+                      key={idx}
+                      className="p-3.5 rounded-xl bg-neutral-950 border border-amber-500/30 flex items-center justify-between gap-3 text-xs"
+                    >
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <span className="font-extrabold text-white text-sm font-mono">{a.ticker}</span>
+                          <span className="text-[10px] text-neutral-400">{a.nome}</span>
+                        </div>
+                        <p className="text-[11px] text-neutral-400">{a.motivo}</p>
+                      </div>
+
+                      <div className="text-right shrink-0 font-mono text-[11px]">
+                        <div>
+                          <span className="text-neutral-500">Preço: </span>
+                          <span className="font-bold text-white">{formatarMoeda(a.cotacao_atual)}</span>
+                        </div>
+                        <div>
+                          <span className="text-neutral-500">Teto: </span>
+                          <span className="text-neutral-300">{formatarMoeda(a.preco_teto)}</span>
+                        </div>
+                        <div className="text-emerald-400 font-extrabold">
+                          +{a.margem_seguranca_pct.toFixed(1)}% Margem
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Aba 3: Diagnóstico Macro das Caixinhas */}
+              {abaVisualizacao === "macro" && diagnostico && (
+                <div className="space-y-2 max-h-80 overflow-y-auto custom-scrollbar pr-1">
+                  {diagnostico.diagnostico_macro.map((d, idx) => (
+                    <div
+                      key={idx}
+                      className="p-3.5 rounded-xl bg-neutral-950 border border-neutral-800 flex items-center justify-between gap-3 text-xs font-mono"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-white">{formatarNomeClasse(d.classe)}</span>
+                          <span className={`text-[10px] px-1.5 py-0.2 rounded font-semibold ${
+                            d.status === "DEFASADO_APORTAR" ? "bg-rose-500/20 text-rose-300" :
+                            d.status === "EQUILIBRADO" ? "bg-emerald-500/20 text-emerald-300" :
+                            "bg-amber-500/20 text-amber-300"
+                          }`}>
+                            {d.status}
+                          </span>
+                        </div>
+                        <span className="text-[11px] text-neutral-500">
+                          Atual: {d.percentual_atual.toFixed(1)}% | Meta: {d.percentual_alvo.toFixed(1)}%
+                        </span>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <span className="text-[10px] text-neutral-500 block uppercase">Desvio</span>
+                        <span className={`font-bold ${d.delta_percentual < 0 ? "text-rose-400" : "text-emerald-400"}`}>
+                          {d.delta_percentual > 0 ? `+${d.delta_percentual.toFixed(1)}%` : `${d.delta_percentual.toFixed(1)}%`}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
 
         {/* Modal Footer */}
         <div className="p-4 border-t border-neutral-800 bg-[#0a0a0e] flex items-center justify-between text-xs text-neutral-500 font-mono">
-          <span>Metodologia: Décio Bazin • Graham • Buy & Hold</span>
+          <span>Metodologia: Décio Bazin • Graham • Peter Lynch • Buy & Hold</span>
           <button
             onClick={onClose}
             className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-neutral-300 transition-colors font-sans text-xs"

@@ -129,6 +129,14 @@ export interface AssimetriaDetectada {
   motivo: string;
 }
 
+export interface CenarioMacro {
+  taxa_selic: number;
+  taxa_ntnb: number;
+  spread_minimo_acoes?: number;
+  data_atualizacao?: string;
+  fonte?: string;
+}
+
 export interface DiagnosticoAdvisor {
   valor_aporte_informado: number;
   valor_aporte_efetivo: number;
@@ -137,6 +145,7 @@ export interface DiagnosticoAdvisor {
   patrimonio_projetado: number;
   classe_mais_defasada: ClasseAtivo;
   delta_defasagem: number;
+  cenario_macro?: CenarioMacro;
   assimetrias: AssimetriaDetectada[];
   sugestoes: SugestaoAporteItem[];
   diagnostico_macro: DiagnosticoMacroClasse[];

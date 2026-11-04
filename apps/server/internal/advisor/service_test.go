@@ -62,3 +62,4 @@ func TestAdvisor_AnalisarAporte(t *testing.T) {
 		t.Errorf("esperava parecer síntese preenchido")
 	}
 }
+

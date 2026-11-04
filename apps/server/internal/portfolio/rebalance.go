@@ -173,11 +173,28 @@ func SimularRebalanceamento(resumo *ResumoCarteira, valorAporte float64) *Result
 				}
 			}
 		} else {
-			// Classe sem ativos em custódia (ex: Internacional 0%): sugere iniciar alocação
-			tickerSugerido := "NOVA_POSICAO_" + string(diag.Classe)
-			if diag.Classe == ClasseInternacional {
+			// Classe sem ativos em custódia: sugere ativo de referência apropriado para cada classe
+			tickerSugerido := string(diag.Classe)
+			justificativa := "Classe defasada sem ativos cadastrados."
+
+			switch diag.Classe {
+			case ClasseRendaFixa:
+				tickerSugerido = "Tesouro Selic / IPCA+"
+				justificativa = "Classe defasada na carteira. Recomendado aplicar em Tesouro Selic, Tesouro IPCA+ ou CDB pós-fixado para segurança patrimonial e liquidez."
+			case ClasseInternacional:
 				tickerSugerido = "IVVB11 / WRLD11"
+				justificativa = "Classe 100% defasada. Recomendado iniciar alocação em ETF global (IVVB11 ou WRLD11) para dolarização e proteção cambial."
+			case ClasseFII:
+				tickerSugerido = "FIIs de Tijolo / Papel"
+				justificativa = "Classe sem Fundos Imobiliários em custódia. Recomendado selecionar FIIs consolidados para geração mensal de proventos isentos."
+			case ClasseAcaoBR:
+				tickerSugerido = "Ações Blue Chip (B3)"
+				justificativa = "Classe sem Ações em custódia. Recomendado selecionar Blue Chips líderes com dividendos consistentes abaixo do Preço Teto Bazin."
+			case ClasseCaixa:
+				tickerSugerido = "Reserva de Oportunidade"
+				justificativa = "Manter saldo em CDI 100% com resgate imediato para compras de oportunidade."
 			}
+
 			sugestoes = append(sugestoes, SugestaoAporteItem{
 				Ticker:             tickerSugerido,
 				Classe:             diag.Classe,
@@ -186,7 +203,7 @@ func SimularRebalanceamento(resumo *ResumoCarteira, valorAporte float64) *Result
 				ValorTotalSugerido: fatiaClasse,
 				Score:              100,
 				MargemSegurancaPct: 0,
-				Justificativa:      "Classe 100% defasada. Recomendado cadastrar ativo de referência global para proteção cambial.",
+				Justificativa:      justificativa,
 			})
 
 			saldoDisponivel -= fatiaClasse
