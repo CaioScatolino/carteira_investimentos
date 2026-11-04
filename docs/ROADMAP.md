@@ -355,6 +355,25 @@ Este documento é a bússola viva do projeto. Ele mapeia as decisões arquitetur
     - *Gatilho Sobrevenda Semanal:* "BBAS3 atingiu IFR 32 no gráfico Semanal (1S) em zona de compra histórica".
     - *Data-Com Confirmada:* "Alerta: Itaú (ITUB4) terá Data-Com amanhã com provento de R$ 0,35 por ação".
 
+---
+
+### 🛡️ FASE 20: Blindagem Arquitetural de Cache & Resiliência a Feriados/Fins de Semana (Alta Disponibilidade Stale-While-Revalidate)
+- [ ] **Passo 20.1: Eliminação de TTL Volátil de 25min & Política Stale-While-Revalidate no Redis (`internal/storage/store.go` & `cmd/api/main.go`)**:
+  - [ ] **Persistência de Último Pregão:** Dados de cotações, múltiplos e valuation de fechamento não devem expirar com TTL curto (25 minutos) em finais de semana ou feriados nacionais da B3 (ex: Finados, Carnaval, Páscoa).
+  - [ ] **Política Stale-While-Revalidate:** O snapshot em cache permanece válido indefinidamente (ou com TTL estendido de 7 a 14 dias), sendo substituído atomicamente apenas quando uma nova ingestão for concluída com sucesso. Se uma sincronização periódica falhar ou der timeout, o snapshot anterior é preservado intacto.
+  - [ ] **Persistência Consolidada em Lote (`SalvarLote`):** Ao término da sincronização do `IngestionService`, invocar `s.store.SalvarLote(todosAtivos)` para gravar a chave agregada `b3:snapshot:todos` via Redis Pipeline, viabilizando leitura em lote instantânea (< 1ms) e eliminando o comando `KEYS b3:snapshot:*` com timeout restritivo.
+- [ ] **Passo 20.2: Hidratação e Fallback Automático a partir do MySQL (`internal/history` & `cmd/api/main.go`)**:
+  - [ ] **Auto-Carga no Startup:** Se a API reiniciar e o Redis estiver vazio ou indisponível, o backend deve auto-hidratar a memória com os dados do último pregão registrado na tabela MySQL `historico_rankings_diarios`.
+  - [ ] **Zero Downtime de Dados:** Garantia de que a aplicação jamais responderá `total_ativos: 0` ou tabelas vazias caso ocorra qualquer instabilidade na rede externa ou no scraping da B3/StatusInvest.
+- [ ] **Passo 20.3: Calendário Oficial de Feriados B3 no Cron e Ingestores (`internal/history/scheduler.go` & `internal/b3/client.go`)**:
+  - [ ] **Dicionário Canônico de Feriados Nacionais e B3:** Mapeamento dos feriados em que o pregão não opera (Confraternização Universal, Carnaval, Paixão de Cristo, Tiradentes, Dia do Trabalho, Corpus Christi, Independência, N. Sra. Aparecida, Finados 02/11, Proclamação da República 15/11, Consciência Negra 20/11 e Natal).
+  - [ ] **Proteção no Agendador das 19h (`ProximoHorarioPregao`):** Além de sábado e domingo, ignorar automaticamente os feriados da B3, evitando a gravação de snapshots redundantes ou com falhas de fechamento.
+  - [ ] **Avanço Retroativo no Download do COTAHIST:** Quando um dia útil for feriado, saltar a data sem gerar requisições de erro HTTP 404 desnecessárias contra a B3.
+- [ ] **Passo 20.4: Resiliência da Carteira contra Ativos Fora do Snapshot (`internal/portfolio/service.go`)**:
+  - [ ] Se por ventura um ticker da custódia do usuário não estiver no snapshot imediato, manter a última cotação conhecida registrada no banco ou exibir badge de "Cotação do Último Fechamento", sem zerar os campos de Preço Teto, Margem de Segurança e Score.
+- [ ] **Passo 20.5: Endpoint Operacional de Forçar Re-Sincronização (`POST /api/v1/admin/sync`)**:
+  - [ ] Endpoint com autenticação administrativa para disparo sob demanda da sincronização completa de mercado e validação imediata do cache sem depender do ciclo de 20 minutos.
+
 
 
 
