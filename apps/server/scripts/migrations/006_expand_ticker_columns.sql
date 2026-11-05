@@ -5,3 +5,4 @@
 ALTER TABLE carteira_posicoes MODIFY COLUMN ticker VARCHAR(60) NOT NULL;
 ALTER TABLE carteira_transacoes MODIFY COLUMN ticker VARCHAR(60) NOT NULL;
 ALTER TABLE proventos_recebidos MODIFY COLUMN ticker VARCHAR(60) NOT NULL;
+

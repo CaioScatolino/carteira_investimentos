@@ -158,7 +158,7 @@ func (h *Handler) ObterRadarFuturoProventos(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	var radarFuturo []b3import.ProventoFuturo
+	radarFuturo := make([]b3import.ProventoFuturo, 0)
 	agora := time.Now()
 
 	for _, item := range resumoCarteira.Posicoes {

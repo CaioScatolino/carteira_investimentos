@@ -115,9 +115,36 @@ export function ProventosView({ token, onAbrirImportadorB3, onAbrirLogin }: Prov
     );
   }
 
-  const temProventos = resumo && resumo.total_acumulado > 0;
+  if (erro) {
+    return (
+      <div className="py-12 px-4 text-center rounded-3xl bg-neutral-950/80 border border-amber-500/30 max-w-xl mx-auto space-y-4">
+        <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-400">
+          <AlertCircle className="w-6 h-6" />
+        </div>
+        <div className="space-y-1">
+          <h4 className="font-extrabold text-white text-base font-mono">
+            Não foi possível carregar os proventos
+          </h4>
+          <p className="text-xs text-neutral-400">{erro}</p>
+        </div>
+        <button
+          onClick={carregarDados}
+          className="px-5 py-2.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-neutral-200 font-bold text-xs border border-neutral-700 transition-all font-mono"
+        >
+          Tentar Novamente
+        </button>
+      </div>
+    );
+  }
 
-  if (!temProventos && radarFuturo.length === 0) {
+  const totalPorAno = resumo?.total_por_ano || [];
+  const sazonalidade = resumo?.sazonalidade_mensal || [];
+  const topAtivos = resumo?.top_ativos_pagadores || [];
+  const ultimosPagamentos = resumo?.ultimos_pagamentos || [];
+  const temProventos = Boolean(resumo && resumo.total_acumulado > 0);
+  const temRadar = radarFuturo.length > 0;
+
+  if (!temProventos && !temRadar) {
     return (
       <div className="py-16 px-4 text-center rounded-3xl bg-neutral-950/60 border border-neutral-800/80 max-w-xl mx-auto space-y-4">
         <div className="w-14 h-14 rounded-2xl bg-[#d4af37]/10 border border-[#d4af37]/30 flex items-center justify-center mx-auto text-[#d4af37]">
@@ -144,72 +171,97 @@ export function ProventosView({ token, onAbrirImportadorB3, onAbrirLogin }: Prov
   }
 
   // Maior valor anual para normalizar as barras
-  const maxAno = resumo?.total_por_ano.reduce((acc, item) => Math.max(acc, item.valor), 1) || 1;
-  const maxMes = resumo?.sazonalidade_mensal.reduce((acc, item) => Math.max(acc, item.valor), 1) || 1;
+  const maxAno = totalPorAno.length > 0 ? totalPorAno.reduce((acc, item) => Math.max(acc, item.valor), 1) : 1;
+  const maxMes = sazonalidade.length > 0 ? sazonalidade.reduce((acc, item) => Math.max(acc, item.valor), 1) : 1;
 
   // Total futuro previsto
-  const totalFuturoPrevisto = radarFuturo.reduce((acc, item) => acc + item.valor_previsto, 0);
+  const totalFuturoPrevisto = radarFuturo.reduce((acc, item) => acc + (item.valor_previsto || 0), 0);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       
+      {/* Banner de Aviso caso o usuário não tenha importado ainda o histórico da B3 */}
+      {!temProventos && onAbrirImportadorB3 && (
+        <div className="p-4 sm:p-5 rounded-2xl bg-neutral-950/80 border border-[#d4af37]/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#d4af37]/10 border border-[#d4af37]/30 flex items-center justify-center text-[#d4af37] shrink-0">
+              <Coins className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-white font-mono">Histórico de Proventos B3 Pendente</h4>
+              <p className="text-xs text-neutral-400">
+                Importe seu extrato oficial (.xlsx) para consolidar seus rendimentos e dividendos históricos desde 2019.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onAbrirImportadorB3}
+            className="px-4 py-2 rounded-xl bg-[#d4af37] hover:bg-[#c49f2f] text-black font-extrabold text-xs transition-all font-mono shrink-0 shadow-md shadow-[#d4af37]/20"
+          >
+            📥 Importar B3 Agora
+          </button>
+        </div>
+      )}
+
       {/* 1. Header Cards de Performance de Renda Passiva */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 font-mono">
-        <div className="p-4 sm:p-5 rounded-2xl bg-neutral-950 border border-[#d4af37]/30 shadow-lg shadow-black/40">
-          <div className="flex items-center justify-between text-neutral-400 mb-2">
-            <span className="text-[10px] uppercase tracking-wider">Renda Passiva Acumulada</span>
-            <Coins className="w-4 h-4 text-[#d4af37]" />
+      {temProventos && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 font-mono">
+          <div className="p-4 sm:p-5 rounded-2xl bg-neutral-950 border border-[#d4af37]/30 shadow-lg shadow-black/40">
+            <div className="flex items-center justify-between text-neutral-400 mb-2">
+              <span className="text-[10px] uppercase tracking-wider">Renda Passiva Acumulada</span>
+              <Coins className="w-4 h-4 text-[#d4af37]" />
+            </div>
+            <span className="text-xl sm:text-2xl font-extrabold text-white block">
+              {formatarMoeda(resumo?.total_acumulado || 0)}
+            </span>
+            <span className="text-[10px] text-emerald-400 mt-1 block">
+              Desde 2019 na B3
+            </span>
           </div>
-          <span className="text-xl sm:text-2xl font-extrabold text-white block">
-            {formatarMoeda(resumo?.total_acumulado || 0)}
-          </span>
-          <span className="text-[10px] text-emerald-400 mt-1 block">
-            Desde 2019 na B3
-          </span>
-        </div>
 
-        <div className="p-4 sm:p-5 rounded-2xl bg-neutral-950 border border-neutral-800">
-          <div className="flex items-center justify-between text-neutral-400 mb-2">
-            <span className="text-[10px] uppercase tracking-wider">Média Mensal (12M)</span>
-            <Calendar className="w-4 h-4 text-emerald-400" />
+          <div className="p-4 sm:p-5 rounded-2xl bg-neutral-950 border border-neutral-800">
+            <div className="flex items-center justify-between text-neutral-400 mb-2">
+              <span className="text-[10px] uppercase tracking-wider">Média Mensal (12M)</span>
+              <Calendar className="w-4 h-4 text-emerald-400" />
+            </div>
+            <span className="text-xl sm:text-2xl font-extrabold text-emerald-400 block">
+              {formatarMoeda(resumo?.media_mensal_12m || 0)}
+            </span>
+            <span className="text-[10px] text-neutral-500 mt-1 block">
+              Fluxo mensal médio recente
+            </span>
           </div>
-          <span className="text-xl sm:text-2xl font-extrabold text-emerald-400 block">
-            {formatarMoeda(resumo?.media_mensal_12m || 0)}
-          </span>
-          <span className="text-[10px] text-neutral-500 mt-1 block">
-            Fluxo mensal médio recente
-          </span>
-        </div>
 
-        <div className="p-4 sm:p-5 rounded-2xl bg-neutral-950 border border-neutral-800">
-          <div className="flex items-center justify-between text-neutral-400 mb-2">
-            <span className="text-[10px] uppercase tracking-wider">Recebido em 12 Meses</span>
-            <TrendingUp className="w-4 h-4 text-blue-400" />
+          <div className="p-4 sm:p-5 rounded-2xl bg-neutral-950 border border-neutral-800">
+            <div className="flex items-center justify-between text-neutral-400 mb-2">
+              <span className="text-[10px] uppercase tracking-wider">Recebido em 12 Meses</span>
+              <TrendingUp className="w-4 h-4 text-blue-400" />
+            </div>
+            <span className="text-xl sm:text-2xl font-extrabold text-white block">
+              {formatarMoeda(resumo?.total_recebido_12m || 0)}
+            </span>
+            <span className="text-[10px] text-neutral-500 mt-1 block">
+              Últimos 12 meses fechados
+            </span>
           </div>
-          <span className="text-xl sm:text-2xl font-extrabold text-white block">
-            {formatarMoeda(resumo?.total_recebido_12m || 0)}
-          </span>
-          <span className="text-[10px] text-neutral-500 mt-1 block">
-            Últimos 12 meses fechados
-          </span>
-        </div>
 
-        <div className="p-4 sm:p-5 rounded-2xl bg-neutral-950 border border-amber-500/30">
-          <div className="flex items-center justify-between text-neutral-400 mb-2">
-            <span className="text-[10px] uppercase tracking-wider text-amber-400">Futuros Anunciados</span>
-            <Clock className="w-4 h-4 text-amber-400" />
+          <div className="p-4 sm:p-5 rounded-2xl bg-neutral-950 border border-amber-500/30">
+            <div className="flex items-center justify-between text-neutral-400 mb-2">
+              <span className="text-[10px] uppercase tracking-wider text-amber-400">Futuros Anunciados</span>
+              <Clock className="w-4 h-4 text-amber-400" />
+            </div>
+            <span className="text-xl sm:text-2xl font-extrabold text-amber-400 block">
+              {formatarMoeda(totalFuturoPrevisto)}
+            </span>
+            <span className="text-[10px] text-neutral-500 mt-1 block">
+              {radarFuturo.length} provento(s) em carteira
+            </span>
           </div>
-          <span className="text-xl sm:text-2xl font-extrabold text-amber-400 block">
-            {formatarMoeda(totalFuturoPrevisto)}
-          </span>
-          <span className="text-[10px] text-neutral-500 mt-1 block">
-            {radarFuturo.length} provento(s) em carteira
-          </span>
         </div>
-      </div>
+      )}
 
       {/* 2. Radar de Próximos Rendimentos Futuros */}
-      {radarFuturo.length > 0 && (
+      {temRadar && (
         <div className="p-5 rounded-3xl bg-neutral-950/80 border border-amber-500/30 shadow-xl space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -265,123 +317,131 @@ export function ProventosView({ token, onAbrirImportadorB3, onAbrirLogin }: Prov
       )}
 
       {/* 3. Gráfico de Evolução Anual & Matriz de Sazonalidade */}
-      {resumo && (
+      {temProventos && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 font-mono">
           
           {/* Evolução por Ano */}
-          <div className="p-5 rounded-3xl bg-neutral-950 border border-neutral-800 space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="font-extrabold text-sm text-white flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-emerald-400" />
-                Evolução Anual da Renda Passiva
-              </span>
-              <span className="text-[10px] text-neutral-500 uppercase">Crescimento Acumulado</span>
-            </div>
+          {totalPorAno.length > 0 && (
+            <div className="p-5 rounded-3xl bg-neutral-950 border border-neutral-800 space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="font-extrabold text-sm text-white flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-emerald-400" />
+                  Evolução Anual da Renda Passiva
+                </span>
+                <span className="text-[10px] text-neutral-500 uppercase">Crescimento Acumulado</span>
+              </div>
 
-            <div className="space-y-3 pt-2">
-              {resumo.total_por_ano.map((anoItem) => {
-                const pct = (anoItem.valor / maxAno) * 100;
-                return (
-                  <div key={anoItem.ano} className="space-y-1">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-bold text-neutral-300">{anoItem.ano}</span>
-                      <span className="font-extrabold text-white">{formatarMoeda(anoItem.valor)}</span>
+              <div className="space-y-3 pt-2">
+                {totalPorAno.map((anoItem) => {
+                  const pct = (anoItem.valor / maxAno) * 100;
+                  return (
+                    <div key={anoItem.ano} className="space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-bold text-neutral-300">{anoItem.ano}</span>
+                        <span className="font-extrabold text-white">{formatarMoeda(anoItem.valor)}</span>
+                      </div>
+                      <div className="h-3 w-full bg-neutral-900 rounded-full overflow-hidden p-0.5">
+                        <div
+                          className="h-full bg-gradient-to-r from-[#d4af37] to-emerald-400 rounded-full transition-all duration-500"
+                          style={{ width: `${Math.max(pct, 4)}%` }}
+                        />
+                      </div>
                     </div>
-                    <div className="h-3 w-full bg-neutral-900 rounded-full overflow-hidden p-0.5">
-                      <div
-                        className="h-full bg-gradient-to-r from-[#d4af37] to-emerald-400 rounded-full transition-all duration-500"
-                        style={{ width: `${Math.max(pct, 4)}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Sazonalidade Mensal (Jan a Dez) */}
-          <div className="p-5 rounded-3xl bg-neutral-950 border border-neutral-800 space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="font-extrabold text-sm text-white flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-[#d4af37]" />
-                Sazonalidade Mensal (Histórico)
-              </span>
-              <span className="text-[10px] text-neutral-500 uppercase">Meses mais fortes</span>
-            </div>
+          {sazonalidade.length > 0 && (
+            <div className="p-5 rounded-3xl bg-neutral-950 border border-neutral-800 space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="font-extrabold text-sm text-white flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-[#d4af37]" />
+                  Sazonalidade Mensal (Histórico)
+                </span>
+                <span className="text-[10px] text-neutral-500 uppercase">Meses mais fortes</span>
+              </div>
 
-            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 pt-2">
-              {resumo.sazonalidade_mensal.map((m) => (
-                <div key={m.mes} className="p-2.5 rounded-xl bg-neutral-900/60 border border-neutral-800/80 text-center space-y-1">
-                  <span className="text-[10px] text-neutral-400 uppercase tracking-wider block font-bold">{m.nome.slice(0, 3)}</span>
-                  <span className="text-xs font-extrabold text-emerald-400 block">{formatarMoeda(m.valor)}</span>
-                </div>
-              ))}
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 pt-2">
+                {sazonalidade.map((m) => (
+                  <div key={m.mes} className="p-2.5 rounded-xl bg-neutral-900/60 border border-neutral-800/80 text-center space-y-1">
+                    <span className="text-[10px] text-neutral-400 uppercase tracking-wider block font-bold">{m.nome.slice(0, 3)}</span>
+                    <span className="text-xs font-extrabold text-emerald-400 block">{formatarMoeda(m.valor)}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
         </div>
       )}
 
       {/* 4. Maiores Pagadores & Últimos Pagamentos */}
-      {resumo && (
+      {temProventos && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 font-mono">
           
           {/* Top Ativos Pagadores */}
-          <div className="p-5 rounded-3xl bg-neutral-950 border border-neutral-800 space-y-4">
-            <span className="font-extrabold text-sm text-white flex items-center gap-2">
-              <Coins className="w-4 h-4 text-[#d4af37]" />
-              Maiores Pagadores da Sua Carteira
-            </span>
+          {topAtivos.length > 0 && (
+            <div className="p-5 rounded-3xl bg-neutral-950 border border-neutral-800 space-y-4">
+              <span className="font-extrabold text-sm text-white flex items-center gap-2">
+                <Coins className="w-4 h-4 text-[#d4af37]" />
+                Maiores Pagadores da Sua Carteira
+              </span>
 
-            <div className="space-y-2 max-h-80 overflow-y-auto custom-scrollbar pr-1">
-              {resumo.top_ativos_pagadores.slice(0, 10).map((at, idx) => (
-                <div
-                  key={idx}
-                  className="p-3 rounded-xl bg-neutral-900/50 border border-neutral-800/60 flex items-center justify-between text-xs"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="w-6 text-center font-bold text-neutral-500 text-[11px]">{idx + 1}º</span>
-                    <div>
-                      <span className="font-extrabold text-white text-sm block">{at.ticker}</span>
-                      <span className="text-[10px] text-neutral-500">{at.total_eventos} pagamentos</span>
+              <div className="space-y-2 max-h-80 overflow-y-auto custom-scrollbar pr-1">
+                {topAtivos.slice(0, 10).map((at, idx) => (
+                  <div
+                    key={idx}
+                    className="p-3 rounded-xl bg-neutral-900/50 border border-neutral-800/60 flex items-center justify-between text-xs"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="w-6 text-center font-bold text-neutral-500 text-[11px]">{idx + 1}º</span>
+                      <div>
+                        <span className="font-extrabold text-white text-sm block">{at.ticker}</span>
+                        <span className="text-[10px] text-neutral-500">{at.total_eventos} pagamentos</span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-extrabold text-emerald-400 block">{formatarMoeda(at.total_recebido)}</span>
+                      <span className="text-[10px] text-neutral-400 font-semibold">{at.percentual}% do total</span>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <span className="font-extrabold text-emerald-400 block">{formatarMoeda(at.total_recebido)}</span>
-                    <span className="text-[10px] text-neutral-400 font-semibold">{at.percentual}% do total</span>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Últimos Pagamentos Recebidos */}
-          <div className="p-5 rounded-3xl bg-neutral-950 border border-neutral-800 space-y-4">
-            <span className="font-extrabold text-sm text-white flex items-center gap-2">
-              <Clock className="w-4 h-4 text-blue-400" />
-              Últimos Pagamentos Creditados na Conta
-            </span>
+          {ultimosPagamentos.length > 0 && (
+            <div className="p-5 rounded-3xl bg-neutral-950 border border-neutral-800 space-y-4">
+              <span className="font-extrabold text-sm text-white flex items-center gap-2">
+                <Clock className="w-4 h-4 text-blue-400" />
+                Últimos Pagamentos Creditados na Conta
+              </span>
 
-            <div className="space-y-2 max-h-80 overflow-y-auto custom-scrollbar pr-1">
-              {resumo.ultimos_pagamentos.slice(0, 10).map((p, idx) => (
-                <div
-                  key={idx}
-                  className="p-3 rounded-xl bg-neutral-900/50 border border-neutral-800/60 flex items-center justify-between text-xs"
-                >
-                  <div className="space-y-0.5">
-                    <div className="flex items-center gap-2">
-                      <span className="font-extrabold text-white text-sm">{p.ticker}</span>
-                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-neutral-800 text-neutral-300 font-semibold">{p.tipo}</span>
+              <div className="space-y-2 max-h-80 overflow-y-auto custom-scrollbar pr-1">
+                {ultimosPagamentos.slice(0, 10).map((p, idx) => (
+                  <div
+                    key={idx}
+                    className="p-3 rounded-xl bg-neutral-900/50 border border-neutral-800/60 flex items-center justify-between text-xs"
+                  >
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-extrabold text-white text-sm">{p.ticker}</span>
+                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-neutral-800 text-neutral-300 font-semibold">{p.tipo}</span>
+                      </div>
+                      <span className="text-[10px] text-neutral-500">{p.data_pagamento} • {p.corretora}</span>
                     </div>
-                    <span className="text-[10px] text-neutral-500">{p.data_pagamento} • {p.corretora}</span>
+                    <div className="text-right font-extrabold text-emerald-400">
+                      +{formatarMoeda(p.valor_liquido)}
+                    </div>
                   </div>
-                  <div className="text-right font-extrabold text-emerald-400">
-                    +{formatarMoeda(p.valor_liquido)}
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
         </div>
       )}

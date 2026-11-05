@@ -123,7 +123,7 @@ func (s *Service) ObterHistoricoProventos(ctx context.Context, usuarioID int64) 
 	}
 
 	// 1. Montar array ordenado de Anos
-	var totalPorAno []TotalAno
+	totalPorAno := make([]TotalAno, 0)
 	for ano, val := range totalPorAnoMap {
 		totalPorAno = append(totalPorAno, TotalAno{Ano: ano, Valor: math.Round(val*100) / 100})
 	}
@@ -132,7 +132,7 @@ func (s *Service) ObterHistoricoProventos(ctx context.Context, usuarioID int64) 
 	})
 
 	// 2. Montar array ordenado de Meses (1 a 12)
-	var sazonalidade []SazonalidadeMes
+	sazonalidade := make([]SazonalidadeMes, 0, 12)
 	for m := 1; m <= 12; m++ {
 		sazonalidade = append(sazonalidade, SazonalidadeMes{
 			Mes:   m,
@@ -142,7 +142,7 @@ func (s *Service) ObterHistoricoProventos(ctx context.Context, usuarioID int64) 
 	}
 
 	// 3. Montar Top Ativos Pagadores
-	var topAtivos []AtivoPagador
+	topAtivos := make([]AtivoPagador, 0)
 	for _, at := range ativosMap {
 		pct := 0.0
 		if totalAcumulado > 0 {
@@ -160,9 +160,13 @@ func (s *Service) ObterHistoricoProventos(ctx context.Context, usuarioID int64) 
 	})
 
 	// 4. Últimos pagamentos (limite de 30 para visualização)
-	ultimos := todos
-	if len(ultimos) > 30 {
-		ultimos = ultimos[:30]
+	ultimos := make([]ProventoRecebidoLinha, 0)
+	if len(todos) > 0 {
+		if len(todos) > 30 {
+			ultimos = todos[:30]
+		} else {
+			ultimos = todos
+		}
 	}
 
 	return &ResumoProventos{
