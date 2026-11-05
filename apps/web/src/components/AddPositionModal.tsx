@@ -27,6 +27,7 @@ export function AddPositionModal({
   const [categoriaMacro, setCategoriaMacro] = useState("");
   const [quantidade, setQuantidade] = useState("");
   const [precoMedio, setPrecoMedio] = useState("");
+  const [dataOperacao, setDataOperacao] = useState(() => new Date().toISOString().split("T")[0]);
   const [modoOperacao, setModoOperacao] = useState<"APORTE" | "SUBSTITUIR">("APORTE");
 
   // Renda Fixa (campos específicos)
@@ -241,6 +242,7 @@ export function AddPositionModal({
         indexador: classe === "RENDA_FIXA" && indexador.trim() ? indexador.trim() : undefined,
         vencimento: classe === "RENDA_FIXA" && vencimento.trim() ? vencimento.trim() : undefined,
         tipo_operacao: posicaoExistente ? modoOperacao : "COMPRA",
+        data_operacao: dataOperacao || undefined,
       });
 
       setTicker("");
@@ -249,6 +251,7 @@ export function AddPositionModal({
       setCategoriaMacro("");
       setAtivoEncontrado(null);
       setTaxaContratada("");
+      setDataOperacao(new Date().toISOString().split("T")[0]);
       onClose();
     } catch (err: any) {
       setErro(err.message || "Falha ao processar operação na carteira.");
@@ -469,8 +472,8 @@ export function AddPositionModal({
             </div>
           )}
 
-          {/* Linha 2: Quantidade & Preço Pago */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Linha 2: Quantidade, Preço Pago & Data da Operação */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block text-xs font-mono font-semibold uppercase text-neutral-400 mb-1">
                 {isModoAporteAtivo ? "Quantidade Comprada *" : "Quantidade *"}
@@ -488,7 +491,7 @@ export function AddPositionModal({
 
             <div>
               <label className="block text-xs font-mono font-semibold uppercase text-neutral-400 mb-1">
-                {isModoAporteAtivo ? "Preço Pago na Compra (R$) *" : "Preço Médio (R$) *"}
+                {isModoAporteAtivo ? "Preço Pago (R$) *" : "Preço Médio (R$) *"}
               </label>
               <input
                 type="number"
@@ -498,6 +501,19 @@ export function AddPositionModal({
                 value={precoMedio}
                 onChange={(e) => setPrecoMedio(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl bg-neutral-950 border border-neutral-800 text-sm font-mono text-white placeholder-neutral-600 focus:outline-none focus:border-[#d4af37]/80"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-mono font-semibold uppercase text-neutral-400 mb-1">
+                Data Operação *
+              </label>
+              <input
+                type="date"
+                required
+                value={dataOperacao}
+                onChange={(e) => setDataOperacao(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl bg-neutral-950 border border-neutral-800 text-xs font-mono text-white focus:outline-none focus:border-[#d4af37]/80 cursor-pointer"
               />
             </div>
           </div>

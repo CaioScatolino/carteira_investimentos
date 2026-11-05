@@ -29,6 +29,11 @@ export interface PosicaoConsolidada extends Posicao {
   sinal_rebalanceamento: "COMPRAR_APORTE" | "AGUARDAR" | "REAVALIAR" | string;
   percentual_na_classe?: number;
   percentual_na_carteira?: number;
+  total_proventos?: number;
+  preco_medio_descontado?: number;
+  lucro_com_proventos?: number;
+  rentabilidade_total_pct?: number;
+  proventos_yoc_pct?: number;
 }
 
 export interface ClasseConsolidada {
@@ -42,6 +47,8 @@ export interface ClasseConsolidada {
   percentual_alvo: number;
   quantidade_ativos: number;
   posicoes: PosicaoConsolidada[];
+  total_proventos?: number;
+  lucro_com_proventos?: number;
 }
 
 export interface ResumoCarteira {
@@ -53,6 +60,9 @@ export interface ResumoCarteira {
   classes?: ClasseConsolidada[];
   alocacao_atual_pct: Record<ClasseAtivo, number>;
   alocacao_alvo_pct: Record<ClasseAtivo, number>;
+  total_proventos_recebidos?: number;
+  lucro_total_com_proventos?: number;
+  rentabilidade_total_pct?: number;
 }
 
 export interface CriarPosicaoRequest {
@@ -67,6 +77,7 @@ export interface CriarPosicaoRequest {
   corretora: string;
   observacoes?: string;
   tipo_operacao?: "APORTE" | "SUBSTITUIR" | "COMPRA";
+  data_operacao?: string;
 }
 
 export interface DiagnosticoMacroClasse {

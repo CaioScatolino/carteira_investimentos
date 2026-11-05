@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 var (
@@ -21,6 +22,7 @@ type Repository interface {
 	RegistrarTransacao(ctx context.Context, t *Transacao) error
 	ListarTransacoes(ctx context.Context, usuarioID int64) ([]Transacao, error)
 	ListarTransacoesPorTicker(ctx context.Context, usuarioID int64, ticker string) ([]Transacao, error)
+	ObterTotalProventosPorAtivo(ctx context.Context, usuarioID int64) (map[string]float64, error)
 }
 
 type MySQLRepository struct {
@@ -308,4 +310,31 @@ func (r *MySQLRepository) ListarTransacoesPorTicker(ctx context.Context, usuario
 
 	return transacoes, rows.Err()
 }
+
+// ObterTotalProventosPorAtivo retorna o total em R$ de proventos recebidos agrupado por ticker para o usuário.
+func (r *MySQLRepository) ObterTotalProventosPorAtivo(ctx context.Context, usuarioID int64) (map[string]float64, error) {
+	query := `
+		SELECT ticker, COALESCE(SUM(valor_liquido), 0)
+		FROM proventos_recebidos
+		WHERE usuario_id = ?
+		GROUP BY ticker
+	`
+	rows, err := r.db.QueryContext(ctx, query, usuarioID)
+	if err != nil {
+		// Se houver erro transitório de tabela ainda vazia ou migrando, retorna mapa vazio sem quebrar a carteira
+		return make(map[string]float64), nil
+	}
+	defer rows.Close()
+
+	totais := make(map[string]float64)
+	for rows.Next() {
+		var ticker string
+		var total float64
+		if err := rows.Scan(&ticker, &total); err == nil {
+			totais[strings.ToUpper(strings.TrimSpace(ticker))] = total
+		}
+	}
+	return totais, nil
+}
+
 

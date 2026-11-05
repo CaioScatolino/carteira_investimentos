@@ -70,6 +70,14 @@ func (s *Service) AdicionarOuAtualizarPosicao(ctx context.Context, usuarioID int
 		}
 	}
 
+	// Data da operação contábil (permite retroagir para início do cálculo de proventos)
+	dataOperacao := time.Now()
+	if req.DataOperacao != nil && *req.DataOperacao != "" {
+		if dt, err := time.Parse("2006-01-02", *req.DataOperacao); err == nil {
+			dataOperacao = dt
+		}
+	}
+
 	// 1. Verifica se já existe uma posição prévia para este usuário, ticker e corretora
 	posExistente, err := s.repo.ObterPosicaoPorTicker(ctx, usuarioID, ticker, corretora)
 	if err == nil && posExistente != nil {
@@ -107,7 +115,7 @@ func (s *Service) AdicionarOuAtualizarPosicao(ctx context.Context, usuarioID int
 				PrecoUnitario: req.PrecoMedio,
 				CustosTaxas:   0.0,
 				ValorTotal:    posExistente.ValorAplicado,
-				DataOperacao:  time.Now(),
+				DataOperacao:  dataOperacao,
 				Corretora:     corretora,
 				Notas:         &nota,
 			}
@@ -174,7 +182,7 @@ func (s *Service) AdicionarOuAtualizarPosicao(ctx context.Context, usuarioID int
 			PrecoUnitario: precoCompra,
 			CustosTaxas:   0.0,
 			ValorTotal:    valNovo,
-			DataOperacao:  time.Now(),
+			DataOperacao:  dataOperacao,
 			Corretora:     corretora,
 			Notas:         &nota,
 		}
@@ -197,6 +205,8 @@ func (s *Service) AdicionarOuAtualizarPosicao(ctx context.Context, usuarioID int
 		Vencimento:     dataVencimento,
 		Corretora:      corretora,
 		Observacoes:    req.Observacoes,
+		CreatedAt:      dataOperacao,
+		UpdatedAt:      time.Now(),
 	}
 
 	// Salva no banco de dados
@@ -215,7 +225,7 @@ func (s *Service) AdicionarOuAtualizarPosicao(ctx context.Context, usuarioID int
 		PrecoUnitario: req.PrecoMedio,
 		CustosTaxas:   0.0,
 		ValorTotal:    valorAplicado,
-		DataOperacao:  time.Now(),
+		DataOperacao:  dataOperacao,
 		Corretora:     corretora,
 		Notas:         &nota,
 	}
@@ -229,7 +239,7 @@ func (s *Service) ExcluirPosicao(ctx context.Context, usuarioID, posicaoID int64
 	return s.repo.ExcluirPosicao(ctx, usuarioID, posicaoID)
 }
 
-// ObterResumoCarteira consolida todas as posições do usuário, calculando rentabilidade real e alocações.
+// ObterResumoCarteira consolida todas as posições do usuário, calculando rentabilidade real, proventos e alocações.
 func (s *Service) ObterResumoCarteira(ctx context.Context, usuarioID int64) (*ResumoCarteira, error) {
 	if s.repo == nil {
 		return nil, nil
@@ -239,8 +249,15 @@ func (s *Service) ObterResumoCarteira(ctx context.Context, usuarioID int64) (*Re
 		return nil, err
 	}
 
+	// 1. Obtém o mapa consolidado de proventos recebidos por ticker
+	mapaProventos, err := s.repo.ObterTotalProventosPorAtivo(ctx, usuarioID)
+	if err != nil || mapaProventos == nil {
+		mapaProventos = make(map[string]float64)
+	}
+
 	var totalInvestido float64
 	var patrimonioTotal float64
+	var totalProventosGeral float64
 	posicoesConsolidadas := make([]PosicaoConsolidada, 0, len(posicoes))
 	alocacaoValorPorClasse := make(map[ClasseAtivo]float64)
 
@@ -287,19 +304,46 @@ func (s *Service) ObterResumoCarteira(ctx context.Context, usuarioID int64) (*Re
 			}
 		}
 
+		// Cálculo analítico de Proventos e Preço Médio Descontado
+		tickerUpper := strings.ToUpper(strings.TrimSpace(p.Ticker))
+		totalProv := mapaProventos[tickerUpper]
+		totalProventosGeral += totalProv
+
+		pmDescontado := p.PrecoMedio
+		if p.Quantidade > 0 {
+			provPorCota := totalProv / p.Quantidade
+			pmDescontado = p.PrecoMedio - provPorCota
+			if pmDescontado < 0 {
+				pmDescontado = 0
+			}
+		}
+
+		lucroComProventos := lucroValor + totalProv
+		var rentabilidadeTotalPct float64
+		var proventosYoCPct float64
+		if p.ValorAplicado > 0 {
+			rentabilidadeTotalPct = (lucroComProventos / p.ValorAplicado) * 100
+			proventosYoCPct = (totalProv / p.ValorAplicado) * 100
+		}
+
 		patrimonioTotal += valorMercado
 		alocacaoValorPorClasse[p.Classe] += valorMercado
 
 		posicoesConsolidadas = append(posicoesConsolidadas, PosicaoConsolidada{
-			Posicao:              p,
-			CotacaoAtual:         cotacaoAtual,
-			ValorAtualMercado:    valorMercado,
-			LucroPrejuizoValor:   lucroValor,
-			RentabilidadePct:     rentabilidadePct,
-			PrecoTetoEstimado:    precoTeto,
-			MargemSegurancaPct:   margemSegurancaPct,
-			ScoreFundamentalista: scoreFund,
-			SinalRebalanceamento: sinal,
+			Posicao:                 p,
+			CotacaoAtual:            cotacaoAtual,
+			ValorAtualMercado:       valorMercado,
+			LucroPrejuizoValor:      lucroValor,
+			RentabilidadePct:        rentabilidadePct,
+			PrecoTetoEstimado:       precoTeto,
+			MargemSegurancaPct:      margemSegurancaPct,
+			ScoreFundamentalista:    scoreFund,
+			SinalRebalanceamento:    sinal,
+			TotalProventos:          totalProv,
+			PrecoMedioDescontado:    pmDescontado,
+			LucroComProventos:       lucroComProventos,
+			RentabilidadeTotalPct:   rentabilidadeTotalPct,
+			ProventosYieldOnCostPct: proventosYoCPct,
 		})
 	}
 
@@ -357,12 +401,14 @@ func (s *Service) ObterResumoCarteira(ctx context.Context, usuarioID int64) (*Re
 		var posClasse []PosicaoConsolidada
 		var totalInvestidoClasse float64
 		var valorMercadoClasse float64
+		var totalProventosClasse float64
 
 		for _, p := range posicoesConsolidadas {
 			if p.Classe == info.Classe {
 				posClasse = append(posClasse, p)
 				totalInvestidoClasse += p.ValorAplicado
 				valorMercadoClasse += p.ValorAtualMercado
+				totalProventosClasse += p.TotalProventos
 			}
 		}
 
@@ -393,18 +439,29 @@ func (s *Service) ObterResumoCarteira(ctx context.Context, usuarioID int64) (*Re
 			PercentualAlvo:       info.Alvo,
 			QuantidadeAtivos:     len(posClasse),
 			Posicoes:             posClasse,
+			TotalProventos:       totalProventosClasse,
+			LucroComProventos:    lucroClasse + totalProventosClasse,
 		})
 	}
 
+	lucroTotalComProventos := lucroTotal + totalProventosGeral
+	var rentabilidadeTotalGeralPct float64
+	if totalInvestido > 0 {
+		rentabilidadeTotalGeralPct = (lucroTotalComProventos / totalInvestido) * 100
+	}
+
 	return &ResumoCarteira{
-		PatrimonioTotal:  patrimonioTotal,
-		TotalInvestido:   totalInvestido,
-		LucroTotalValor:  lucroTotal,
-		RentabilidadePct: rentabilidadeTotalPct,
-		Posicoes:         posicoesConsolidadas,
-		Classes:          classesConsolidadas,
-		AlocacaoAtual:    alocacaoAtualPct,
-		AlocacaoAlvo:     alocacaoAlvoPct,
+		PatrimonioTotal:         patrimonioTotal,
+		TotalInvestido:          totalInvestido,
+		LucroTotalValor:         lucroTotal,
+		RentabilidadePct:        rentabilidadeTotalPct,
+		Posicoes:                posicoesConsolidadas,
+		Classes:                 classesConsolidadas,
+		AlocacaoAtual:           alocacaoAtualPct,
+		AlocacaoAlvo:            alocacaoAlvoPct,
+		TotalProventosRecebidos: totalProventosGeral,
+		LucroTotalComProventos:  lucroTotalComProventos,
+		RentabilidadeTotalPct:   rentabilidadeTotalGeralPct,
 	}, nil
 }
 

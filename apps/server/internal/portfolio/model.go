@@ -68,25 +68,31 @@ type CriarPosicaoRequest struct {
 	PrecoMedio     float64     `json:"preco_medio"`
 	TaxaContratada *string     `json:"taxa_contratada,omitempty"`
 	Indexador      *string     `json:"indexador,omitempty"`
-	Vencimento     *string     `json:"vencimento,omitempty"` // Formato YYYY-MM-DD
+	Vencimento     *string     `json:"vencimento,omitempty"`    // Formato YYYY-MM-DD
 	Corretora      string      `json:"corretora"`
 	Observacoes    *string     `json:"observacoes,omitempty"`
 	TipoOperacao   string      `json:"tipo_operacao,omitempty"` // "APORTE", "SUBSTITUIR", "COMPRA"
+	DataOperacao   *string     `json:"data_operacao,omitempty"` // Data de início/aquisição (YYYY-MM-DD)
 }
 
-// PosicaoConsolidada enriquece a posição física com a cotação e valuation atuais de mercado.
+// PosicaoConsolidada enriquece a posição física com a cotação, valuation e proventos acumulados.
 type PosicaoConsolidada struct {
 	Posicao
-	CotacaoAtual         float64 `json:"cotacao_atual"`
-	ValorAtualMercado    float64 `json:"valor_atual_mercado"`
-	LucroPrejuizoValor   float64 `json:"lucro_prejuizo_valor"`
-	RentabilidadePct     float64 `json:"rentabilidade_pct"`
-	PrecoTetoEstimado    float64 `json:"preco_teto_estimado"`
-	MargemSegurancaPct   float64 `json:"margem_seguranca_pct"`
-	ScoreFundamentalista int     `json:"score_fundamentalista"`
-	SinalRebalanceamento string  `json:"sinal_rebalanceamento"` // 'COMPRAR_APORTE', 'AGUARDAR', 'REAVALIAR'
-	PercentualNaClasse   float64 `json:"percentual_na_classe"`   // Peso relativo do ativo dentro da sua classe (ex: 50.0% das Ações)
-	PercentualNaCarteira float64 `json:"percentual_na_carteira"` // Peso absoluto do ativo na carteira inteira (ex: 10.0% do Total)
+	CotacaoAtual           float64 `json:"cotacao_atual"`
+	ValorAtualMercado      float64 `json:"valor_atual_mercado"`
+	LucroPrejuizoValor     float64 `json:"lucro_prejuizo_valor"`
+	RentabilidadePct       float64 `json:"rentabilidade_pct"`
+	PrecoTetoEstimado      float64 `json:"preco_teto_estimado"`
+	MargemSegurancaPct     float64 `json:"margem_seguranca_pct"`
+	ScoreFundamentalista   int     `json:"score_fundamentalista"`
+	SinalRebalanceamento   string  `json:"sinal_rebalanceamento"`   // 'COMPRAR_APORTE', 'AGUARDAR', 'REAVALIAR'
+	PercentualNaClasse     float64 `json:"percentual_na_classe"`     // Peso relativo do ativo dentro da sua classe (ex: 50.0% das Ações)
+	PercentualNaCarteira   float64 `json:"percentual_na_carteira"`   // Peso absoluto do ativo na carteira inteira (ex: 10.0% do Total)
+	TotalProventos         float64 `json:"total_proventos"`          // Total em R$ de proventos recebidos deste ativo
+	PrecoMedioDescontado   float64 `json:"preco_medio_descontado"`   // Preço Médio subtraindo os proventos recebidos por cota
+	LucroComProventos      float64 `json:"lucro_com_proventos"`      // Lucro Total = Ganho de Capital + Proventos
+	RentabilidadeTotalPct  float64 `json:"rentabilidade_total_pct"`  // Rentabilidade % considerando Valorização + Proventos
+	ProventosYieldOnCostPct float64 `json:"proventos_yoc_pct"`       // Yield on Cost Histórico (% de proventos sobre o capital investido)
 }
 
 // ClasseConsolidada agrupa os dados de uma macro-classe para a visão hierárquica por níveis e gráficos de composição.
@@ -98,19 +104,24 @@ type ClasseConsolidada struct {
 	LucroPrejuizoValor   float64              `json:"lucro_prejuizo_valor"`
 	RentabilidadePct     float64              `json:"rentabilidade_pct"`
 	PercentualNaCarteira float64              `json:"percentual_na_carteira"` // % do patrimônio total
-	PercentualAlvo       float64              `json:"percentual_alvo"`       // Meta institucional
+	PercentualAlvo       float64              `json:"percentual_alvo"`         // Meta institucional
 	QuantidadeAtivos     int                  `json:"quantidade_ativos"`
 	Posicoes             []PosicaoConsolidada `json:"posicoes"`
+	TotalProventos       float64              `json:"total_proventos"`        // Total em R$ de proventos desta classe
+	LucroComProventos    float64              `json:"lucro_com_proventos"`    // Lucro somando proventos da classe
 }
 
 // ResumoCarteira consolida o patrimônio total e as divisões por macro-classe.
 type ResumoCarteira struct {
-	PatrimonioTotal  float64                 `json:"patrimonio_total"`
-	TotalInvestido   float64                 `json:"total_investido"`
-	LucroTotalValor  float64                 `json:"lucro_total_valor"`
-	RentabilidadePct float64                 `json:"rentabilidade_pct"`
-	Posicoes         []PosicaoConsolidada    `json:"posicoes"`
-	Classes          []ClasseConsolidada     `json:"classes"`
-	AlocacaoAtual    map[ClasseAtivo]float64 `json:"alocacao_atual_pct"` // Ex: RENDA_FIXA: 42.5%
-	AlocacaoAlvo     map[ClasseAtivo]float64 `json:"alocacao_alvo_pct"`  // Ex: RENDA_FIXA: 40.0%
+	PatrimonioTotal         float64                 `json:"patrimonio_total"`
+	TotalInvestido          float64                 `json:"total_investido"`
+	LucroTotalValor         float64                 `json:"lucro_total_valor"`
+	RentabilidadePct        float64                 `json:"rentabilidade_pct"`
+	Posicoes                []PosicaoConsolidada    `json:"posicoes"`
+	Classes                 []ClasseConsolidada     `json:"classes"`
+	AlocacaoAtual           map[ClasseAtivo]float64 `json:"alocacao_atual_pct"` // Ex: RENDA_FIXA: 42.5%
+	AlocacaoAlvo            map[ClasseAtivo]float64 `json:"alocacao_alvo_pct"`  // Ex: RENDA_FIXA: 40.0%
+	TotalProventosRecebidos float64                 `json:"total_proventos_recebidos"`
+	LucroTotalComProventos  float64                 `json:"lucro_total_com_proventos"`
+	RentabilidadeTotalPct   float64                 `json:"rentabilidade_total_pct"`
 }
