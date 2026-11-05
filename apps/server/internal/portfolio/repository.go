@@ -23,6 +23,7 @@ type Repository interface {
 	ListarTransacoes(ctx context.Context, usuarioID int64) ([]Transacao, error)
 	ListarTransacoesPorTicker(ctx context.Context, usuarioID int64, ticker string) ([]Transacao, error)
 	ObterTotalProventosPorAtivo(ctx context.Context, usuarioID int64) (map[string]float64, error)
+	ObterTotalProventosGeral(ctx context.Context, usuarioID int64) (float64, error)
 }
 
 type MySQLRepository struct {
@@ -314,14 +315,14 @@ func (r *MySQLRepository) ListarTransacoesPorTicker(ctx context.Context, usuario
 // ObterTotalProventosPorAtivo retorna o total em R$ de proventos recebidos agrupado por ticker para o usuário.
 func (r *MySQLRepository) ObterTotalProventosPorAtivo(ctx context.Context, usuarioID int64) (map[string]float64, error) {
 	query := `
-		SELECT COALESCE(UPPER(TRIM(ticker)), ''), COALESCE(SUM(valor_liquido), 0)
+		SELECT ticker, COALESCE(SUM(valor_liquido), 0)
 		FROM proventos_recebidos
 		WHERE usuario_id = ?
-		GROUP BY UPPER(TRIM(ticker))
+		GROUP BY ticker
 	`
 	rows, err := r.db.QueryContext(ctx, query, usuarioID)
 	if err != nil {
-		// Se houver erro transitório de tabela ainda vazia ou migrando, retorna mapa vazio sem quebrar a carteira
+		fmt.Printf("[PORTFOLIO] Falha ao consultar proventos por ativo: %v\n", err)
 		return make(map[string]float64), nil
 	}
 	defer rows.Close()
@@ -336,6 +337,22 @@ func (r *MySQLRepository) ObterTotalProventosPorAtivo(ctx context.Context, usuar
 		}
 	}
 	return totais, nil
+}
+
+// ObterTotalProventosGeral retorna o total geral em R$ de todos os proventos já recebidos pelo usuário.
+func (r *MySQLRepository) ObterTotalProventosGeral(ctx context.Context, usuarioID int64) (float64, error) {
+	query := `
+		SELECT COALESCE(SUM(valor_liquido), 0)
+		FROM proventos_recebidos
+		WHERE usuario_id = ?
+	`
+	var total float64
+	err := r.db.QueryRowContext(ctx, query, usuarioID).Scan(&total)
+	if err != nil {
+		fmt.Printf("[PORTFOLIO] Falha ao consultar total geral de proventos: %v\n", err)
+		return 0, nil
+	}
+	return total, nil
 }
 
 

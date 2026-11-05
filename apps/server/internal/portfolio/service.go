@@ -255,10 +255,12 @@ func (s *Service) ObterResumoCarteira(ctx context.Context, usuarioID int64) (*Re
 		mapaProventos = make(map[string]float64)
 	}
 
-	// Total acumulado de proventos de toda a história do investidor (inclui ativos em custódia e ativos já vendidos)
-	var totalProventosHistoricoGeral float64
-	for _, val := range mapaProventos {
-		totalProventosHistoricoGeral += val
+	// 2. Total acumulado de proventos de toda a história do investidor (inclui ativos em custódia e ativos já vendidos)
+	totalProventosHistoricoGeral, err := s.repo.ObterTotalProventosGeral(ctx, usuarioID)
+	if err != nil || totalProventosHistoricoGeral == 0 {
+		for _, val := range mapaProventos {
+			totalProventosHistoricoGeral += val
+		}
 	}
 
 	var totalInvestido float64

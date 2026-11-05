@@ -112,6 +112,10 @@ func (m *mockRepo) ObterTotalProventosPorAtivo(ctx context.Context, usuarioID in
 	return make(map[string]float64), nil
 }
 
+func (m *mockRepo) ObterTotalProventosGeral(ctx context.Context, usuarioID int64) (float64, error) {
+	return 0, nil
+}
+
 func TestRecalculoPrecoMedioPonderado(t *testing.T) {
 	repo := novoMockRepo()
 	snapStore := storage.NovoInMemoryStore()
