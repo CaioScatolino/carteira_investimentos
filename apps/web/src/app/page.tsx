@@ -520,8 +520,8 @@ export default function Dashboard() {
             ) : (
               /* Estado Logado: Painel da Carteira */
               <div className="space-y-6">
-                {/* Header da Carteira & Ações Rápidas */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-neutral-800 pb-6">
+                {/* Header da Carteira & Toolbar de Ações Padronizada */}
+                <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 border-b border-neutral-800/80 pb-6">
                   <div>
                     <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white flex items-center gap-2.5">
                       Minha <span className="text-[#d4af37]">Carteira</span> & Alocação
@@ -531,63 +531,71 @@ export default function Dashboard() {
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-3 flex-wrap">
+                  {/* Toolbar Padronizada: mesma altura (h-9), mesma tipografia, ícones harmônicos sem emojis */}
+                  <div className="flex items-center gap-2 flex-wrap xl:flex-nowrap">
+                    {/* 1. Botão Destaque: Consultor IA */}
                     <button
                       onClick={() => setModalAdvisorAberto(true)}
-                      className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#d4af37] via-[#f7d983] to-[#c49f2f] hover:from-[#f0c84c] hover:to-[#b38f24] text-black font-extrabold text-xs shadow-lg shadow-[#d4af37]/25 flex items-center gap-2 transition-all active:scale-95"
+                      className="h-9 px-3.5 rounded-xl bg-[#d4af37] hover:bg-[#e5c158] text-black font-bold text-xs shadow-md shadow-[#d4af37]/20 flex items-center gap-1.5 transition-all active:scale-95 whitespace-nowrap"
                       title="Consultor Buy & Hold algorítmico com IA"
                     >
-                      <Sparkles className="w-4 h-4 text-black animate-pulse" />
-                      <span>🎯 No que investir hoje?</span>
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>No que investir hoje?</span>
                     </button>
 
+                    {/* 2. Adicionar Ativo */}
                     <button
                       onClick={() => {
                         setPosicaoParaAporte(null);
                         setModalAddAberto(true);
                       }}
-                      className="px-4 py-2.5 rounded-xl bg-[#d4af37] hover:bg-[#c49f2f] text-black font-bold text-xs shadow-lg shadow-[#d4af37]/20 flex items-center gap-2 transition-all"
+                      className="h-9 px-3 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-neutral-200 hover:text-white border border-neutral-800 hover:border-neutral-700 font-semibold text-xs flex items-center gap-1.5 transition-all active:scale-95 whitespace-nowrap"
                     >
-                      <Plus className="w-4 h-4" />
+                      <Plus className="w-3.5 h-3.5 text-[#d4af37]" />
                       <span>Adicionar Ativo</span>
                     </button>
 
+                    {/* 3. Importar B3 */}
                     <button
-                      onClick={() => setModalSimuladorAberto(true)}
-                      className="px-4 py-2.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white font-bold text-xs border border-neutral-700 flex items-center gap-2 transition-all"
+                      onClick={() => setModalImportB3Aberto(true)}
+                      className="h-9 px-3 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-neutral-200 hover:text-white border border-neutral-800 hover:border-emerald-500/40 font-semibold text-xs flex items-center gap-1.5 transition-all active:scale-95 whitespace-nowrap group"
+                      title="Importar extrato oficial (.xlsx) da Área do Investidor B3"
                     >
-                      <Scale className="w-4 h-4 text-[#d4af37]" />
-                      <span>Simulador de Aporte</span>
+                      <Upload className="w-3.5 h-3.5 text-emerald-400 transition-transform group-hover:-translate-y-0.5" />
+                      <span>Importar B3</span>
                     </button>
 
+                    {/* 4. Simulador de Aporte */}
+                    <button
+                      onClick={() => setModalSimuladorAberto(true)}
+                      className="h-9 px-3 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-neutral-200 hover:text-white border border-neutral-800 hover:border-neutral-700 font-semibold text-xs flex items-center gap-1.5 transition-all active:scale-95 whitespace-nowrap"
+                      title="Simulador de Aportes com base nas metas da carteira"
+                    >
+                      <Scale className="w-3.5 h-3.5 text-neutral-400" />
+                      <span>Simulador</span>
+                    </button>
+
+                    {/* 5. Extrato Contábil */}
                     <button
                       onClick={() => {
                         setTickerHistoricoFiltro(null);
                         setModalHistoricoAberto(true);
                       }}
-                      className="px-4 py-2.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white font-bold text-xs border border-neutral-700 flex items-center gap-2 transition-all"
+                      className="h-9 px-3 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-neutral-200 hover:text-white border border-neutral-800 hover:border-neutral-700 font-semibold text-xs flex items-center gap-1.5 transition-all active:scale-95 whitespace-nowrap"
                       title="Ver extrato e histórico de aportes e transações"
                     >
-                      <History className="w-4 h-4 text-[#d4af37]" />
-                      <span>Extrato Contábil</span>
+                      <History className="w-3.5 h-3.5 text-neutral-400" />
+                      <span>Extrato</span>
                     </button>
 
-                    <button
-                      onClick={() => setModalImportB3Aberto(true)}
-                      className="px-4 py-2.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 font-bold text-xs border border-emerald-500/30 hover:border-emerald-500/60 flex items-center gap-2 transition-all shadow-md shadow-emerald-500/10"
-                      title="Importar extrato oficial (.xlsx) da Área do Investidor B3"
-                    >
-                      <Upload className="w-4 h-4 text-emerald-400" />
-                      <span>📥 Importar B3</span>
-                    </button>
-
+                    {/* 6. Atualizar Carteira (Sync) */}
                     <button
                       onClick={carregarCarteira}
                       disabled={loadingCarteira}
-                      className="p-2.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-neutral-400 hover:text-white border border-neutral-800 transition-colors"
-                      title="Atualizar Carteira"
+                      className="h-9 w-9 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-neutral-400 hover:text-white border border-neutral-800 hover:border-neutral-700 flex items-center justify-center transition-all active:scale-95 shrink-0"
+                      title="Atualizar cotações e métricas da carteira"
                     >
-                      <RefreshCw className={`w-4 h-4 ${loadingCarteira ? "animate-spin text-[#d4af37]" : ""}`} />
+                      <RefreshCw className={`w-3.5 h-3.5 ${loadingCarteira ? "animate-spin text-[#d4af37]" : ""}`} />
                     </button>
                   </div>
                 </div>
