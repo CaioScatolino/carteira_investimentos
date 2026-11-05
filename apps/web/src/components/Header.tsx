@@ -10,8 +10,8 @@ interface HeaderProps {
   loading: boolean;
   onRefresh: () => void;
   ultimaAtualizacao?: string;
-  abaAtiva?: "mercado" | "carteira" | "calendario";
-  onMudarAba?: (aba: "mercado" | "carteira" | "calendario") => void;
+  abaAtiva?: "mercado" | "carteira" | "proventos" | "calendario";
+  onMudarAba?: (aba: "mercado" | "carteira" | "proventos" | "calendario") => void;
 }
 
 export function Header({
@@ -105,6 +105,16 @@ export function Header({
                   }`}
                 >
                   Minha Carteira
+                </button>
+                <button
+                  onClick={() => onMudarAba("proventos")}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                    abaAtiva === "proventos"
+                      ? "bg-[#d4af37] text-black font-bold shadow-md shadow-[#d4af37]/20"
+                      : "text-neutral-400 hover:text-white"
+                  }`}
+                >
+                  Proventos & Renda
                 </button>
                 <button
                   onClick={() => onMudarAba("calendario")}

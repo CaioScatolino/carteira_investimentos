@@ -17,6 +17,8 @@ import { RebalanceSimulatorModal } from "@/components/RebalanceSimulatorModal";
 import { TransactionHistoryModal } from "@/components/TransactionHistoryModal";
 import { AssetChartModal } from "@/components/AssetChartModal";
 import { AdvisorModal } from "@/components/AdvisorModal";
+import { B3ImportModal } from "@/components/B3ImportModal";
+import { ProventosView } from "@/components/ProventosView";
 import { AuthModal } from "@/components/AuthModal";
 import { DividendCalendar } from "@/components/DividendCalendar";
 import { useAuth } from "@/context/AuthContext";
@@ -35,13 +37,14 @@ import {
   ShieldCheck,
   History,
   Sparkles,
+  Upload,
 } from "lucide-react";
 
 export default function Dashboard() {
   const { usuario, token, loading: authLoading } = useAuth();
 
   // Estado de navegação
-  const [abaAtiva, setAbaAtiva] = useState<"mercado" | "carteira" | "calendario">("mercado");
+  const [abaAtiva, setAbaAtiva] = useState<"mercado" | "carteira" | "proventos" | "calendario">("mercado");
 
   // Dados do Mercado
   const [data, setData] = useState<RespostaRankings>({
@@ -64,6 +67,7 @@ export default function Dashboard() {
 
   // Modais
   const [modalAddAberto, setModalAddAberto] = useState(false);
+  const [modalImportB3Aberto, setModalImportB3Aberto] = useState(false);
   const [modalSimuladorAberto, setModalSimuladorAberto] = useState(false);
   const [modalAdvisorAberto, setModalAdvisorAberto] = useState(false);
   const [modalAuthAberto, setModalAuthAberto] = useState(false);
@@ -542,6 +546,15 @@ export default function Dashboard() {
                     </button>
 
                     <button
+                      onClick={() => setModalImportB3Aberto(true)}
+                      className="px-4 py-2.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 font-bold text-xs border border-emerald-500/30 hover:border-emerald-500/60 flex items-center gap-2 transition-all shadow-md shadow-emerald-500/10"
+                      title="Importar extrato oficial (.xlsx) da Área do Investidor B3"
+                    >
+                      <Upload className="w-4 h-4 text-emerald-400" />
+                      <span>📥 Importar B3</span>
+                    </button>
+
+                    <button
                       onClick={carregarCarteira}
                       disabled={loadingCarteira}
                       className="p-2.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-neutral-400 hover:text-white border border-neutral-800 transition-colors"
@@ -605,7 +618,17 @@ export default function Dashboard() {
         )}
 
         {/* ========================================================================= */}
-        {/* ABA 3: CALENDÁRIO MDI (MAPA DE DIVIDENDOS INTELIGENTE)                    */}
+        {/* ABA 3: PROVENTOS & RENDA PASSIVA                                         */}
+        {/* ========================================================================= */}
+        {abaAtiva === "proventos" && (
+          <ProventosView
+            token={token}
+            onAbrirImportadorB3={() => setModalImportB3Aberto(true)}
+          />
+        )}
+
+        {/* ========================================================================= */}
+        {/* ABA 4: CALENDÁRIO MDI (MAPA DE DIVIDENDOS INTELIGENTE)                    */}
         {/* ========================================================================= */}
         {abaAtiva === "calendario" && (
           <DividendCalendar
@@ -678,6 +701,15 @@ export default function Dashboard() {
           setTickerHistoricoFiltro(null);
         }}
         tickerFiltroInicial={tickerHistoricoFiltro}
+      />
+
+      <B3ImportModal
+        isOpen={modalImportB3Aberto}
+        onClose={() => setModalImportB3Aberto(false)}
+        token={token}
+        onImportadoSucesso={() => {
+          carregarCarteira();
+        }}
       />
 
       <AuthModal

@@ -38,6 +38,14 @@ func (h *Handler) ConfigurarRotas() http.Handler {
 	mux.Handle("POST /api/v1/advisor/analisar", h.ExigirAutenticacao(http.HandlerFunc(h.AnalisarAporteAdvisor)))
 	mux.Handle("GET /api/v1/advisor/stream", h.ExigirAutenticacao(http.HandlerFunc(h.StreamAdvisor)))
 
+	// Endpoints Protegidos do Importador Oficial B3 (Requer JWT)
+	mux.Handle("POST /api/v1/carteira/importar-b3/preview", h.ExigirAutenticacao(http.HandlerFunc(h.PreviewImportacaoB3)))
+	mux.Handle("POST /api/v1/carteira/importar-b3/confirmar", h.ExigirAutenticacao(http.HandlerFunc(h.ConfirmarImportacaoB3)))
+
+	// Endpoints Protegidos do Módulo de Proventos & Renda Passiva (Requer JWT)
+	mux.Handle("GET /api/v1/carteira/proventos/historico", h.ExigirAutenticacao(http.HandlerFunc(h.ObterHistoricoProventos)))
+	mux.Handle("GET /api/v1/carteira/proventos/radar-futuro", h.ExigirAutenticacao(http.HandlerFunc(h.ObterRadarFuturoProventos)))
+
 	// 2. Encadeamento de Middlewares: Logging -> CORS -> Mux
 	var handler http.Handler = mux
 	handler = corsMiddleware(handler)

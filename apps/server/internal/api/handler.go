@@ -4,6 +4,7 @@ import (
 	"carteira_investimentos/server/internal/advisor"
 	"carteira_investimentos/server/internal/auth"
 	"carteira_investimentos/server/internal/b3"
+	"carteira_investimentos/server/internal/b3import"
 	"carteira_investimentos/server/internal/calendar"
 	"carteira_investimentos/server/internal/domain"
 	"carteira_investimentos/server/internal/macro"
@@ -32,6 +33,7 @@ type Handler struct {
 	technicalService *technical.Service
 	ingestionService *statusinvest.IngestionService
 	advisorService   *advisor.Service
+	b3ImportService  *b3import.Service
 }
 
 func NovoHandler(
@@ -43,6 +45,7 @@ func NovoHandler(
 	calendarService *calendar.Service,
 	ingestionService *statusinvest.IngestionService,
 	advisorService *advisor.Service,
+	b3ImportService *b3import.Service,
 ) *Handler {
 	if b3Client == nil {
 		b3Client = b3.NovoB3Client()
@@ -67,6 +70,7 @@ func NovoHandler(
 		technicalService: technicalService,
 		ingestionService: ingestionService,
 		advisorService:   advisorService,
+		b3ImportService:  b3ImportService,
 	}
 }
 

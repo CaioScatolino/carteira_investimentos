@@ -13,6 +13,7 @@ import (
 	"carteira_investimentos/server/internal/api"
 	"carteira_investimentos/server/internal/auth"
 	"carteira_investimentos/server/internal/b3"
+	"carteira_investimentos/server/internal/b3import"
 	"carteira_investimentos/server/internal/bazin"
 	"carteira_investimentos/server/internal/calendar"
 	"carteira_investimentos/server/internal/catalog"
@@ -248,7 +249,13 @@ func main() {
 			}())
 	}
 
-	apiHandler := api.NovoHandler(store, b3Client, authService, tokenManager, portfolioService, calendarService, ingestionService, advisorService)
+	var b3ImportService *b3import.Service
+	if err == nil && db != nil {
+		b3ImportService = b3import.NovoService(db)
+		fmt.Printf("📥 [B3 IMPORT ATIVO] Motor de Ingestão de Extratos da Área do Investidor inicializado\n")
+	}
+
+	apiHandler := api.NovoHandler(store, b3Client, authService, tokenManager, portfolioService, calendarService, ingestionService, advisorService, b3ImportService)
 	router := apiHandler.ConfigurarRotas()
 
 	servidor := &http.Server{
