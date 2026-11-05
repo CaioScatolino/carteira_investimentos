@@ -255,9 +255,15 @@ func (s *Service) ObterResumoCarteira(ctx context.Context, usuarioID int64) (*Re
 		mapaProventos = make(map[string]float64)
 	}
 
+	// Total acumulado de proventos de toda a história do investidor (inclui ativos em custódia e ativos já vendidos)
+	var totalProventosHistoricoGeral float64
+	for _, val := range mapaProventos {
+		totalProventosHistoricoGeral += val
+	}
+
 	var totalInvestido float64
 	var patrimonioTotal float64
-	var totalProventosGeral float64
+	var totalProventosCustodia float64
 	posicoesConsolidadas := make([]PosicaoConsolidada, 0, len(posicoes))
 	alocacaoValorPorClasse := make(map[ClasseAtivo]float64)
 
@@ -307,7 +313,7 @@ func (s *Service) ObterResumoCarteira(ctx context.Context, usuarioID int64) (*Re
 		// Cálculo analítico de Proventos e Preço Médio Descontado
 		tickerUpper := strings.ToUpper(strings.TrimSpace(p.Ticker))
 		totalProv := mapaProventos[tickerUpper]
-		totalProventosGeral += totalProv
+		totalProventosCustodia += totalProv
 
 		pmDescontado := p.PrecoMedio
 		if p.Quantidade > 0 {
@@ -444,7 +450,7 @@ func (s *Service) ObterResumoCarteira(ctx context.Context, usuarioID int64) (*Re
 		})
 	}
 
-	lucroTotalComProventos := lucroTotal + totalProventosGeral
+	lucroTotalComProventos := lucroTotal + totalProventosHistoricoGeral
 	var rentabilidadeTotalGeralPct float64
 	if totalInvestido > 0 {
 		rentabilidadeTotalGeralPct = (lucroTotalComProventos / totalInvestido) * 100
@@ -459,7 +465,7 @@ func (s *Service) ObterResumoCarteira(ctx context.Context, usuarioID int64) (*Re
 		Classes:                 classesConsolidadas,
 		AlocacaoAtual:           alocacaoAtualPct,
 		AlocacaoAlvo:            alocacaoAlvoPct,
-		TotalProventosRecebidos: totalProventosGeral,
+		TotalProventosRecebidos: totalProventosHistoricoGeral,
 		LucroTotalComProventos:  lucroTotalComProventos,
 		RentabilidadeTotalPct:   rentabilidadeTotalGeralPct,
 	}, nil

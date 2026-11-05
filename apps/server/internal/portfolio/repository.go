@@ -314,10 +314,10 @@ func (r *MySQLRepository) ListarTransacoesPorTicker(ctx context.Context, usuario
 // ObterTotalProventosPorAtivo retorna o total em R$ de proventos recebidos agrupado por ticker para o usuário.
 func (r *MySQLRepository) ObterTotalProventosPorAtivo(ctx context.Context, usuarioID int64) (map[string]float64, error) {
 	query := `
-		SELECT ticker, COALESCE(SUM(valor_liquido), 0)
+		SELECT COALESCE(UPPER(TRIM(ticker)), ''), COALESCE(SUM(valor_liquido), 0)
 		FROM proventos_recebidos
 		WHERE usuario_id = ?
-		GROUP BY ticker
+		GROUP BY UPPER(TRIM(ticker))
 	`
 	rows, err := r.db.QueryContext(ctx, query, usuarioID)
 	if err != nil {
@@ -331,7 +331,8 @@ func (r *MySQLRepository) ObterTotalProventosPorAtivo(ctx context.Context, usuar
 		var ticker string
 		var total float64
 		if err := rows.Scan(&ticker, &total); err == nil {
-			totais[strings.ToUpper(strings.TrimSpace(ticker))] = total
+			tUpper := strings.ToUpper(strings.TrimSpace(ticker))
+			totais[tUpper] += total
 		}
 	}
 	return totais, nil
