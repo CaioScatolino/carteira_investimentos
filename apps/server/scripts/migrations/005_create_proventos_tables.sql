@@ -3,7 +3,7 @@
 CREATE TABLE IF NOT EXISTS proventos_recebidos (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     usuario_id BIGINT NOT NULL,
-    ticker VARCHAR(20) NOT NULL,
+    ticker VARCHAR(60) NOT NULL,
     tipo ENUM('RENDIMENTO', 'DIVIDENDO', 'JCP', 'JUROS', 'RESTITUICAO_CAPITAL') NOT NULL,
     data_pagamento DATE NOT NULL,
     quantidade DECIMAL(18, 6) NOT NULL DEFAULT 0.000000,
@@ -18,3 +18,4 @@ CREATE TABLE IF NOT EXISTS proventos_recebidos (
     INDEX idx_proventos_ticker (usuario_id, ticker),
     INDEX idx_proventos_tipo (usuario_id, tipo)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+

@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"math"
 	"net/http"
 	"sort"
@@ -537,12 +536,24 @@ SUGESTÕES MATEMÁTICAS PRÉ-CALCULADAS:
 ASSIMETRIAS DE MERCADO:
 %s
 
-INSTRUÇÕES DE RESPOSTA:
-1. Escreva um parecer conciso, elegante e altamente embasado.
-2. Formate sua resposta com títulos claros usando markdown (ex: ### Título, #### Seção) e listas com marcadores (• ou -).
-3. Nunca agrupe todo o texto em um único parágrafo longo. Use parágrafos bem espaçados e tópicos destacados em negrito.
-4. Não invente números. Use exatamente os valores, cotas e preços sugeridos acima.
-5. Conclua com uma citação ou recomendação prática de execução Buy & Hold.`,
+INSTRUÇÕES ESTRITAS DE FORMATO E DESIGN:
+1. Escreva um parecer executivo, claro e de altíssima legibilidade.
+2. É OBRIGATÓRIO utilizar markdown estruturado com quebras de linha duplas (\n\n) entre seções e tópicos. NUNCA cole títulos no texto seguinte.
+3. Estruture em 4 seções claras:
+   ### 🏛️ Estratégia de Aporte Buy & Hold
+
+   #### 1. Diagnóstico Macroeconômico & Alocação
+   (Apresente a leitura da taxa de juros, inflação e a caixinha defasada em parágrafos separados)
+
+   #### 2. Recomendações Prioritárias de Aporte
+   (Liste cada ativo com um marcador '•' em linha individual, informando quantidade de cotas, preço teto e o racional)
+
+   #### 3. Radar de Assimetrias & Oportunidades
+   (Apresente cada ativo com assimetria favorável em linha própria com margem de segurança destacada)
+
+   #### 4. Diretriz de Execução Buy & Hold
+   (Finalize com conselho prático sobre disciplina de aportes constantes)
+4. Não invente números; use estritamente os valores e cotas calculados acima.`,
 		d.CenarioMacro.TaxaSelic, d.CenarioMacro.TaxaNTNB, d.CenarioMacro.TaxaNTNB+d.CenarioMacro.SpreadMinimoAcoes,
 		d.PatrimonioAtual, d.ValorAporteInformado, req.Perfil, formatarNomeClasse(d.ClasseMaisDefasada), math.Abs(d.DeltaDefasagem),
 		formatarSugestoes(d.Sugestoes), formatarAssimetrias(d.Assimetrias),
@@ -569,7 +580,7 @@ INSTRUÇÕES DE RESPOSTA:
 		return
 	}
 
-	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent?key=%s", s.geminiAPIKey)
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent?alt=sse&key=%s", s.geminiAPIKey)
 	reqHTTP, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(bodyBytes))
 	if err != nil {
 		s.transmitirTextoEmStreaming(w, flusher, d.ParecerSintese)
@@ -585,30 +596,39 @@ INSTRUÇÕES DE RESPOSTA:
 	}
 	defer resp.Body.Close()
 
-	reader := bufio.NewReader(resp.Body)
-	for {
-		line, err := reader.ReadBytes('\n')
-		if len(line) > 0 {
-			lineStr := strings.TrimSpace(string(line))
-			if strings.HasPrefix(lineStr, "\"text\":") {
-				// Extrai o texto gerado
-				partes := strings.SplitN(lineStr, "\"text\":", 2)
-				if len(partes) == 2 {
-					var textoToken string
-					textoLimpo := strings.Trim(partes[1], " \",")
-					json.Unmarshal([]byte("\""+textoLimpo+"\""), &textoToken)
-					if textoToken != "" {
-						s.emitirTokenSSE(w, flusher, textoToken)
+	type geminiSSEPart struct {
+		Candidates []struct {
+			Content struct {
+				Parts []struct {
+					Text string `json:"text"`
+				} `json:"parts"`
+			} `json:"content"`
+		} `json:"candidates"`
+	}
+
+	tokensEmitidos := 0
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if strings.HasPrefix(line, "data: ") {
+			jsonData := strings.TrimPrefix(line, "data: ")
+			var part geminiSSEPart
+			if err := json.Unmarshal([]byte(jsonData), &part); err == nil {
+				for _, cand := range part.Candidates {
+					for _, p := range cand.Content.Parts {
+						if p.Text != "" {
+							s.emitirTokenSSE(w, flusher, p.Text)
+							tokensEmitidos++
+						}
 					}
 				}
 			}
 		}
-		if err != nil {
-			if err != io.EOF {
-				// Qualquer erro encerra
-			}
-			break
-		}
+	}
+
+	if tokensEmitidos == 0 {
+		// Se a stream não retornou tokens úteis, emite o parecer nativo
+		s.transmitirTextoEmStreaming(w, flusher, d.ParecerSintese)
 	}
 }
 

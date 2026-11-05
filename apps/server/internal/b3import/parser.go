@@ -432,10 +432,12 @@ func (p *ParserB3) extrairTickerENome(produto string) (string, string) {
 		return "", ""
 	}
 
-	// Casos especiais de Tesouro Direto
-	if strings.HasPrefix(strings.ToUpper(prod), "TESOURO") {
-		// ex: "Tesouro IPCA+ com Juros Semestrais 2035" -> Ticker: "Tesouro IPCA+ 2035"
-		return prod, "Tesouro Nacional / Renda Fixa"
+	pUpper := strings.ToUpper(prod)
+
+	// Casos especiais de Tesouro Direto: padroniza em código curto e legível
+	if strings.HasPrefix(pUpper, "TESOURO") {
+		tickerCurto := p.padronizarTickerTesouro(prod)
+		return tickerCurto, prod
 	}
 
 	parts := strings.SplitN(prod, " - ", 2)
@@ -454,11 +456,50 @@ func (p *ParserB3) extrairTickerENome(produto string) (string, string) {
 	return tickerLimpo, razao
 }
 
+func (p *ParserB3) padronizarTickerTesouro(prod string) string {
+	pUpper := strings.ToUpper(prod)
+	ano := ""
+	for _, w := range strings.Fields(prod) {
+		if len(w) == 4 {
+			if _, err := strconv.Atoi(w); err == nil {
+				ano = w
+				break
+			}
+		}
+	}
+
+	prefixo := "TD"
+	if strings.Contains(pUpper, "IPCA") {
+		if strings.Contains(pUpper, "JUROS") {
+			prefixo = "TD-IPCA+J"
+		} else {
+			prefixo = "TD-IPCA+"
+		}
+	} else if strings.Contains(pUpper, "PREFIXADO") {
+		if strings.Contains(pUpper, "JUROS") {
+			prefixo = "TD-PRE-J"
+		} else {
+			prefixo = "TD-PRE"
+		}
+	} else if strings.Contains(pUpper, "SELIC") {
+		prefixo = "TD-SELIC"
+	}
+
+	if ano != "" {
+		return fmt.Sprintf("%s %s", prefixo, ano)
+	}
+
+	if len(prod) > 20 {
+		return prod[:20]
+	}
+	return prod
+}
+
 func (p *ParserB3) classificarClasse(ticker, produto string) portfolio.ClasseAtivo {
 	t := strings.ToUpper(strings.TrimSpace(ticker))
 	pUpper := strings.ToUpper(produto)
 
-	if strings.HasPrefix(t, "TESOURO") || strings.Contains(pUpper, "TESOURO") || strings.Contains(pUpper, "CDB") {
+	if strings.HasPrefix(t, "TD-") || strings.HasPrefix(t, "TESOURO") || strings.Contains(pUpper, "TESOURO") || strings.Contains(pUpper, "CDB") {
 		return portfolio.ClasseRendaFixa
 	}
 

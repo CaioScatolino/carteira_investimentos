@@ -154,6 +154,25 @@ export default function Dashboard() {
     }
   }, [token]);
 
+  // Sincronização inicial com o path da URL (/carteira, /proventos, /calendario)
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const path = window.location.pathname.replace(/^\//, "").toLowerCase();
+      if (path === "carteira") setAbaAtiva("carteira");
+      else if (path === "proventos") setAbaAtiva("proventos");
+      else if (path === "calendario" || path === "mdi") setAbaAtiva("calendario");
+      else if (path === "" || path === "mercado") setAbaAtiva("mercado");
+    }
+  }, []);
+
+  const handleMudarAba = (aba: "mercado" | "carteira" | "proventos" | "calendario") => {
+    setAbaAtiva(aba);
+    if (typeof window !== "undefined") {
+      const targetPath = aba === "mercado" ? "/" : `/${aba}`;
+      window.history.pushState(null, "", targetPath);
+    }
+  };
+
   useEffect(() => {
     carregarRankings();
   }, []);
@@ -250,33 +269,41 @@ export default function Dashboard() {
         onRefresh={handleSincronizar}
         ultimaAtualizacao={ultimaAtualizacao}
         abaAtiva={abaAtiva}
-        onMudarAba={(aba) => setAbaAtiva(aba)}
+        onMudarAba={handleMudarAba}
       />
 
       {/* Conteúdo Principal */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Seletor de Abas Mobile */}
-        <div className="flex md:hidden items-center gap-2 mb-6 p-1 rounded-xl bg-neutral-900 border border-neutral-800">
+        <div className="grid grid-cols-4 md:hidden items-center gap-1.5 mb-6 p-1 rounded-xl bg-neutral-900 border border-neutral-800">
           <button
-            onClick={() => setAbaAtiva("mercado")}
-            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
-              abaAtiva === "mercado" ? "bg-[#d4af37] text-black" : "text-neutral-400"
+            onClick={() => handleMudarAba("mercado")}
+            className={`py-2 rounded-lg text-xs font-bold transition-all text-center ${
+              abaAtiva === "mercado" ? "bg-[#d4af37] text-black shadow-md shadow-[#d4af37]/20" : "text-neutral-400"
             }`}
           >
-            Mercado B3
+            Mercado
           </button>
           <button
-            onClick={() => setAbaAtiva("carteira")}
-            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
-              abaAtiva === "carteira" ? "bg-[#d4af37] text-black" : "text-neutral-400"
+            onClick={() => handleMudarAba("carteira")}
+            className={`py-2 rounded-lg text-xs font-bold transition-all text-center ${
+              abaAtiva === "carteira" ? "bg-[#d4af37] text-black shadow-md shadow-[#d4af37]/20" : "text-neutral-400"
             }`}
           >
-            Minha Carteira
+            Carteira
           </button>
           <button
-            onClick={() => setAbaAtiva("calendario")}
-            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
-              abaAtiva === "calendario" ? "bg-[#d4af37] text-black" : "text-neutral-400"
+            onClick={() => handleMudarAba("proventos")}
+            className={`py-2 rounded-lg text-xs font-bold transition-all text-center ${
+              abaAtiva === "proventos" ? "bg-[#d4af37] text-black shadow-md shadow-[#d4af37]/20" : "text-neutral-400"
+            }`}
+          >
+            Proventos
+          </button>
+          <button
+            onClick={() => handleMudarAba("calendario")}
+            className={`py-2 rounded-lg text-xs font-bold transition-all text-center ${
+              abaAtiva === "calendario" ? "bg-[#d4af37] text-black shadow-md shadow-[#d4af37]/20" : "text-neutral-400"
             }`}
           >
             MDI
@@ -624,6 +651,7 @@ export default function Dashboard() {
           <ProventosView
             token={token}
             onAbrirImportadorB3={() => setModalImportB3Aberto(true)}
+            onAbrirLogin={() => setModalAuthAberto(true)}
           />
         )}
 

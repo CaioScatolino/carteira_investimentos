@@ -15,6 +15,7 @@ import {
   Building2,
   DollarSign,
   ChevronRight,
+  Lock,
 } from "lucide-react";
 import { API_V1_URL } from "@/config/api";
 import { ResumoProventos, ProventoFuturo } from "@/types/portfolio";
@@ -22,16 +23,20 @@ import { ResumoProventos, ProventoFuturo } from "@/types/portfolio";
 interface ProventosViewProps {
   token: string | null;
   onAbrirImportadorB3?: () => void;
+  onAbrirLogin?: () => void;
 }
 
-export function ProventosView({ token, onAbrirImportadorB3 }: ProventosViewProps) {
+export function ProventosView({ token, onAbrirImportadorB3, onAbrirLogin }: ProventosViewProps) {
   const [resumo, setResumo] = useState<ResumoProventos | null>(null);
   const [radarFuturo, setRadarFuturo] = useState<ProventoFuturo[]>([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
   const carregarDados = async () => {
-    if (!token) return;
+    if (!token) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setErro(null);
 
@@ -72,6 +77,34 @@ export function ProventosView({ token, onAbrirImportadorB3 }: ProventosViewProps
       currency: "BRL",
     }).format(val);
   };
+
+  if (!token) {
+    return (
+      <div className="py-16 text-center max-w-2xl mx-auto space-y-6">
+        <div className="w-16 h-16 rounded-3xl bg-[#d4af37]/10 border border-[#d4af37]/30 flex items-center justify-center mx-auto text-[#d4af37] shadow-xl">
+          <Lock className="w-8 h-8" />
+        </div>
+        <div>
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-white">
+            Histórico de Proventos & Renda Passiva
+          </h2>
+          <p className="text-sm text-neutral-400 mt-2">
+            Consolide todos os seus rendimentos de FIIs, dividendos e JCP recebidos na B3 desde 2019, acompanhe a sazonalidade mês a mês e consulte o radar preditivo de futuros proventos.
+          </p>
+        </div>
+        {onAbrirLogin && (
+          <div className="flex items-center justify-center pt-2">
+            <button
+              onClick={onAbrirLogin}
+              className="px-6 py-3 rounded-xl bg-[#d4af37] hover:bg-[#c49f2f] text-black font-bold text-sm shadow-xl shadow-[#d4af37]/25 transition-all font-mono"
+            >
+              Entrar ou Criar Minha Conta
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -356,3 +389,4 @@ export function ProventosView({ token, onAbrirImportadorB3 }: ProventosViewProps
     </div>
   );
 }
+

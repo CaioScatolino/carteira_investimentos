@@ -81,3 +81,4 @@ type ConfirmarImportacaoRequest struct {
 	Operacoes             []OperacaoImportada `json:"operacoes"`
 	Proventos             []ProventoImportado `json:"proventos"`
 }
+

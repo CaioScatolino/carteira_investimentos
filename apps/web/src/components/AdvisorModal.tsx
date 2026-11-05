@@ -39,15 +39,58 @@ interface AdvisorModalProps {
   ) => void;
 }
 
-// Helper para formatar negrito e itálico inline
+// Normalizador inteligente para garantir quebras de linha e estrutura mesmo com respostas brutas de LLM
+function normalizarMarkdown(texto: string): string {
+  if (!texto) return "";
+  let t = texto;
+
+  // 1. Quebra títulos principais e seções que foram colados no texto anterior
+  t = t.replace(/([^\n])\s*(#{1,4}\s+)/g, "$1\n\n$2");
+
+  // 2. Quebra títulos principais que grudaram no texto imediatamente posterior sem quebra de linha:
+  // Exemplo: "### 🏛️ Estratégia Buy & Hold**Cenário" -> "### 🏛️ Estratégia Buy & Hold\n\n**Cenário"
+  t = t.replace(/(^|\n)(#{1,4}\s[^\n*#]+?)(\*\*[A-ZÀ-Úa-z0-9])/g, "$1$2\n\n$3");
+
+  // 3. Quebra emojis temáticos que funcionam como cabeçalhos de bloco (🎯, ⚡, 🏛️, 💡, 📊)
+  t = t.replace(/([^\n])\s*([🎯⚡🏛️💡📊]\s+[A-ZÀ-Ú])/gu, "$1\n\n$2");
+
+  // 4. Quebra quando um negrito de seção ou ativo gruda no fim de outra sentença ou negrito
+  // Exemplo: "**8.00% a.a.****Diagnóstico de Custódia:**" -> "**8.00% a.a.**\n\n#### Diagnóstico de Custódia\n"
+  // Exemplo: "Score 85**NOVA_POSICAO**" -> "Score 85\n\n• **NOVA_POSICAO**"
+  // Exemplo: "Score 97.**CMIG4**:" -> "Score 97.\n\n• **CMIG4**:"
+  t = t.replace(/(\*\*|\.|\))\s*(\*\*([A-Z0-9_]{3,15}(?:[0-9]{1,2})?)\*\*)/g, "$1\n\n• $2");
+  t = t.replace(/(\*\*|\.|\))\s*(\*\*(?:Diagnóstico|Cenário|Recomendações|Radar|Diretriz)[^:]*:\*\*)/g, "$1\n\n#### $2");
+
+  // 5. Quebra itens com marcadores colados
+  t = t.replace(/([^\n])\s*(•\s+)/g, "$1\n$2");
+  t = t.replace(/([^\n])\s*(-\s+\*\*)/g, "$1\n$2");
+
+  return t;
+}
+
+// Helper para formatar negrito, tickers, métricas e itálico inline
 function renderInlineFormatting(str: string): React.ReactNode {
   if (!str) return null;
-  const parts = str.split(/(\*\*.*?\*\*|\*.*?\*)/g);
+  const parts = str.split(/(\*\*.*?\*\*|\*.*?\*|`.*?`)/g);
+
   return parts.map((part, i) => {
     if (part.startsWith("**") && part.endsWith("**")) {
+      const content = part.slice(2, -2);
+      // Se for um ticker da B3 ou código de ativo (ex: MOTV3, PETR4, CMIG4, TD-PRE, etc.)
+      const isTicker = /^[A-Z0-9_-]{4,15}$/.test(content);
+      if (isTicker) {
+        return (
+          <span
+            key={i}
+            className="px-2 py-0.5 mx-1 rounded-md bg-[#d4af37]/20 text-[#f5df88] border border-[#d4af37]/40 font-mono font-extrabold text-xs tracking-wider inline-block shadow-sm"
+          >
+            {content}
+          </span>
+        );
+      }
       return (
         <strong key={i} className="font-bold text-white tracking-wide">
-          {part.slice(2, -2)}
+          {content}
         </strong>
       );
     }
@@ -58,6 +101,13 @@ function renderInlineFormatting(str: string): React.ReactNode {
         </em>
       );
     }
+    if (part.startsWith("`") && part.endsWith("`")) {
+      return (
+        <code key={i} className="px-1.5 py-0.5 mx-0.5 rounded bg-neutral-900 text-emerald-400 font-mono text-xs border border-neutral-800">
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
     return part;
   });
 }
@@ -66,21 +116,23 @@ function renderInlineFormatting(str: string): React.ReactNode {
 function MarkdownViewer({ text, executando }: { text: string; executando: boolean }) {
   if (!text) {
     return (
-      <div className="py-8 text-center text-neutral-500 font-mono text-xs">
-        Aguardando resposta do assistente...
+      <div className="py-12 text-center text-neutral-500 font-mono text-xs flex flex-col items-center justify-center gap-2">
+        <Sparkles className="w-5 h-5 text-[#d4af37]/60 animate-pulse" />
+        <span>Aguardando parecer do estrategista institucional...</span>
       </div>
     );
   }
 
-  const lines = text.split("\n");
+  const cleanText = normalizarMarkdown(text);
+  const lines = cleanText.split("\n");
 
   return (
-    <div className="space-y-1.5 text-neutral-200 text-xs sm:text-sm font-sans leading-relaxed">
+    <div className="space-y-3 text-neutral-200 text-xs sm:text-sm font-sans leading-relaxed">
       {lines.map((line, idx) => {
         const trimmed = line.trim();
 
         if (!trimmed) {
-          return <div key={idx} className="h-2" />;
+          return <div key={idx} className="h-1.5" />;
         }
 
         // Título Principal (###)
@@ -88,8 +140,9 @@ function MarkdownViewer({ text, executando }: { text: string; executando: boolea
           return (
             <div
               key={idx}
-              className="pt-2 pb-1.5 mb-2 border-b border-[#d4af37]/30 flex items-center gap-2 text-white font-extrabold text-sm sm:text-base font-mono"
+              className="pt-2 pb-2 mb-3 border-b border-[#d4af37]/35 flex items-center gap-2 text-white font-extrabold text-sm sm:text-base font-mono bg-gradient-to-r from-[#d4af37]/10 to-transparent p-2.5 rounded-lg"
             >
+              <Lightbulb className="w-4 h-4 text-[#d4af37] shrink-0" />
               <span>{renderInlineFormatting(trimmed.replace(/^###\s+/, ""))}</span>
             </div>
           );
@@ -100,9 +153,9 @@ function MarkdownViewer({ text, executando }: { text: string; executando: boolea
           return (
             <div
               key={idx}
-              className="pt-3 pb-1 text-[#d4af37] font-bold text-xs uppercase tracking-wider font-mono flex items-center gap-2"
+              className="pt-3 pb-1 mt-2 text-[#d4af37] font-bold text-xs uppercase tracking-wider font-mono flex items-center gap-2 border-b border-neutral-800/60"
             >
-              <span className="w-1.5 h-1.5 rounded-full bg-[#d4af37]" />
+              <span className="w-2 h-2 rounded-full bg-[#d4af37] shrink-0 shadow-sm shadow-[#d4af37]/50" />
               <span>{renderInlineFormatting(trimmed.replace(/^####\s+/, ""))}</span>
             </div>
           );
@@ -113,18 +166,18 @@ function MarkdownViewer({ text, executando }: { text: string; executando: boolea
           return (
             <div
               key={idx}
-              className="p-3.5 my-3 rounded-xl bg-gradient-to-r from-[#d4af37]/15 to-[#0e0e14] border-l-4 border-[#d4af37] text-neutral-200 italic text-xs leading-relaxed shadow-sm"
+              className="p-3.5 my-2 rounded-xl bg-gradient-to-r from-[#d4af37]/15 to-[#0e0e14] border-l-4 border-[#d4af37] text-neutral-200 italic text-xs leading-relaxed shadow-sm"
             >
               {renderInlineFormatting(trimmed.replace(/^>\s+/, ""))}
             </div>
           );
         }
 
-        // Sub-tópico com recuo (  -)
-        if (line.startsWith("  - ") || line.startsWith("   - ")) {
-          const content = trimmed.replace(/^-\s+/, "");
+        // Sub-tópico com recuo (  - ou   •)
+        if (line.startsWith("  - ") || line.startsWith("   - ") || line.startsWith("  • ")) {
+          const content = trimmed.replace(/^([•\-]|(\d+\.))\s+/, "");
           return (
-            <div key={idx} className="flex items-start gap-2 pl-6 py-0.5 text-[11px] text-neutral-400">
+            <div key={idx} className="flex items-start gap-2 pl-6 py-1 text-[11px] text-neutral-400">
               <span className="w-1 h-1 rounded-full bg-neutral-600 mt-2 shrink-0" />
               <span>{renderInlineFormatting(content)}</span>
             </div>
@@ -134,24 +187,46 @@ function MarkdownViewer({ text, executando }: { text: string; executando: boolea
         // Marcador Principal (• ou - ou 1., 2.)
         if (trimmed.startsWith("• ") || trimmed.startsWith("- ") || /^\d+\.\s+/.test(trimmed)) {
           const content = trimmed.replace(/^([•\-]|(\d+\.))\s+/, "");
+          // Verifica se é uma recomendação de ativo destacado
+          const isAtivoCard = content.includes("**") && (content.includes("Total:") || content.includes("Margem:") || content.includes("Racional:") || content.includes("Score:"));
+          
+          if (isAtivoCard) {
+            return (
+              <div
+                key={idx}
+                className="p-3 my-1 rounded-xl bg-neutral-950/70 border border-neutral-800/80 hover:border-[#d4af37]/40 transition-colors flex items-start gap-2.5 shadow-sm"
+              >
+                <span className="w-2 h-2 rounded-full bg-[#d4af37] mt-1.5 shrink-0" />
+                <div className="flex-1 text-xs text-neutral-300 leading-relaxed">
+                  {renderInlineFormatting(content)}
+                </div>
+              </div>
+            );
+          }
+
           return (
             <div key={idx} className="flex items-start gap-2 pl-2 py-0.5 text-xs text-neutral-300">
               <span className="w-1.5 h-1.5 rounded-full bg-[#d4af37] mt-1.5 shrink-0" />
-              <span>{renderInlineFormatting(content)}</span>
+              <div className="flex-1 leading-relaxed">
+                {renderInlineFormatting(content)}
+              </div>
             </div>
           );
         }
 
         // Parágrafo Padrão
         return (
-          <p key={idx} className="text-xs text-neutral-300 leading-relaxed py-0.5">
+          <p key={idx} className="text-xs text-neutral-300 leading-relaxed py-1">
             {renderInlineFormatting(line)}
           </p>
         );
       })}
 
       {executando && (
-        <span className="inline-block w-2 h-4 ml-1 bg-[#d4af37] animate-pulse align-middle" />
+        <div className="flex items-center gap-2 pt-2 text-[#d4af37] font-mono text-xs">
+          <span className="inline-block w-2 h-3.5 bg-[#d4af37] animate-pulse align-middle" />
+          <span className="text-[11px] text-neutral-400">Digitando parecer ao vivo...</span>
+        </div>
       )}
     </div>
   );

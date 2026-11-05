@@ -84,9 +84,13 @@ func (s *Service) SalvarImportacao(ctx context.Context, usuarioID int64, req Con
 			corretora = "Principal"
 		}
 		categoria := "GERAL"
+		ticker := p.Ticker
+		if len(ticker) > 60 {
+			ticker = ticker[:60]
+		}
 
 		_, err := posStmt.ExecContext(ctx,
-			usuarioID, p.Ticker, p.Classe, categoria,
+			usuarioID, ticker, p.Classe, categoria,
 			p.Quantidade, p.PrecoMedio, p.ValorAplicado, corretora,
 		)
 		if err != nil {
@@ -115,9 +119,13 @@ func (s *Service) SalvarImportacao(ctx context.Context, usuarioID int64, req Con
 		if notas == "" {
 			notas = "Importação B3"
 		}
+		ticker := op.Ticker
+		if len(ticker) > 60 {
+			ticker = ticker[:60]
+		}
 
 		_, err := opStmt.ExecContext(ctx,
-			usuarioID, op.Ticker, op.Tipo, op.Quantidade,
+			usuarioID, ticker, op.Tipo, op.Quantidade,
 			op.PrecoUnitario, op.ValorTotal, op.Data, corretora, notas,
 		)
 		if err != nil {
@@ -145,9 +153,13 @@ func (s *Service) SalvarImportacao(ctx context.Context, usuarioID int64, req Con
 			if corretora == "" {
 				corretora = "Principal"
 			}
+			ticker := pv.Ticker
+			if len(ticker) > 60 {
+				ticker = ticker[:60]
+			}
 
 			res, err := provStmt.ExecContext(ctx,
-				usuarioID, pv.Ticker, pv.Tipo, pv.DataPagamento,
+				usuarioID, ticker, pv.Tipo, pv.DataPagamento,
 				pv.Quantidade, pv.ValorUnitario, pv.ValorTotal, corretora,
 			)
 			if err == nil {
@@ -172,3 +184,4 @@ func (s *Service) SalvarImportacao(ctx context.Context, usuarioID int64, req Con
 		DadosSubstituidos: req.LimparDadosAnteriores,
 	}, nil
 }
+
