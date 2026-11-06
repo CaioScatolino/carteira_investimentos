@@ -22,11 +22,12 @@ import { ResumoProventos, ProventoFuturo } from "@/types/portfolio";
 
 interface ProventosViewProps {
   token: string | null;
+  ocultarValores?: boolean;
   onAbrirImportadorB3?: () => void;
   onAbrirLogin?: () => void;
 }
 
-export function ProventosView({ token, onAbrirImportadorB3, onAbrirLogin }: ProventosViewProps) {
+export function ProventosView({ token, ocultarValores = false, onAbrirImportadorB3, onAbrirLogin }: ProventosViewProps) {
   const [resumo, setResumo] = useState<ResumoProventos | null>(null);
   const [radarFuturo, setRadarFuturo] = useState<ProventoFuturo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -76,6 +77,14 @@ export function ProventosView({ token, onAbrirImportadorB3, onAbrirLogin }: Prov
       style: "currency",
       currency: "BRL",
     }).format(val);
+  };
+
+  const renderMoeda = (val: number, extraClasses = "") => {
+    return (
+      <span className={`${extraClasses} ${ocultarValores ? "filter blur-[6px] select-none transition-all duration-200" : ""}`}>
+        {formatarMoeda(val)}
+      </span>
+    );
   };
 
   if (!token) {
@@ -212,7 +221,7 @@ export function ProventosView({ token, onAbrirImportadorB3, onAbrirLogin }: Prov
               <Coins className="w-4 h-4 text-[#d4af37]" />
             </div>
             <span className="text-xl sm:text-2xl font-extrabold text-white block">
-              {formatarMoeda(resumo?.total_acumulado || 0)}
+              {renderMoeda(resumo?.total_acumulado || 0)}
             </span>
             <span className="text-[10px] text-emerald-400 mt-1 block">
               Desde 2019 na B3
@@ -225,7 +234,7 @@ export function ProventosView({ token, onAbrirImportadorB3, onAbrirLogin }: Prov
               <Calendar className="w-4 h-4 text-emerald-400" />
             </div>
             <span className="text-xl sm:text-2xl font-extrabold text-emerald-400 block">
-              {formatarMoeda(resumo?.media_mensal_12m || 0)}
+              {renderMoeda(resumo?.media_mensal_12m || 0)}
             </span>
             <span className="text-[10px] text-neutral-500 mt-1 block">
               Fluxo mensal médio recente
@@ -238,7 +247,7 @@ export function ProventosView({ token, onAbrirImportadorB3, onAbrirLogin }: Prov
               <TrendingUp className="w-4 h-4 text-blue-400" />
             </div>
             <span className="text-xl sm:text-2xl font-extrabold text-white block">
-              {formatarMoeda(resumo?.total_recebido_12m || 0)}
+              {renderMoeda(resumo?.total_recebido_12m || 0)}
             </span>
             <span className="text-[10px] text-neutral-500 mt-1 block">
               Últimos 12 meses fechados
@@ -251,7 +260,7 @@ export function ProventosView({ token, onAbrirImportadorB3, onAbrirLogin }: Prov
               <Clock className="w-4 h-4 text-amber-400" />
             </div>
             <span className="text-xl sm:text-2xl font-extrabold text-amber-400 block">
-              {formatarMoeda(totalFuturoPrevisto)}
+              {renderMoeda(totalFuturoPrevisto)}
             </span>
             <span className="text-[10px] text-neutral-500 mt-1 block">
               {radarFuturo.length} provento(s) em carteira
@@ -271,7 +280,7 @@ export function ProventosView({ token, onAbrirImportadorB3, onAbrirLogin }: Prov
               </h4>
             </div>
             <span className="text-[11px] font-mono text-amber-400 font-bold">
-              Total Previsto: {formatarMoeda(totalFuturoPrevisto)}
+              Total Previsto: {renderMoeda(totalFuturoPrevisto)}
             </span>
           </div>
 
@@ -297,15 +306,21 @@ export function ProventosView({ token, onAbrirImportadorB3, onAbrirLogin }: Prov
                     <td className="p-2.5 text-neutral-400">{rf.data_com || "-"}</td>
                     <td className="p-2.5 text-white font-bold">{rf.data_pagamento}</td>
                     <td className="p-2.5 text-right text-neutral-300">{rf.quantidade_cotas}</td>
-                    <td className="p-2.5 text-right text-neutral-300">{formatarMoeda(rf.valor_unitario)}</td>
-                    <td className="p-2.5 text-right font-extrabold text-amber-400">{formatarMoeda(rf.valor_previsto)}</td>
+                    <td className="p-2.5 text-right text-neutral-300">{renderMoeda(rf.valor_unitario)}</td>
+                    <td className="p-2.5 text-right font-extrabold text-amber-400">{renderMoeda(rf.valor_previsto)}</td>
                     <td className="p-2.5 text-center">
                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
                         rf.status === "DATA_COM_IMINENTE"
                           ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                          : rf.status === "A_DEFINIR"
+                          ? "bg-blue-500/20 text-blue-300 border border-blue-500/40"
                           : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
                       }`}>
-                        {rf.status === "DATA_COM_IMINENTE" ? "Data-Com Iminente" : "Confirmado"}
+                        {rf.status === "DATA_COM_IMINENTE"
+                          ? "Data-Com Iminente"
+                          : rf.status === "A_DEFINIR"
+                          ? "Data Pagto a Definir"
+                          : "Confirmado"}
                       </span>
                     </td>
                   </tr>
@@ -338,7 +353,7 @@ export function ProventosView({ token, onAbrirImportadorB3, onAbrirLogin }: Prov
                     <div key={anoItem.ano} className="space-y-1">
                       <div className="flex items-center justify-between text-xs">
                         <span className="font-bold text-neutral-300">{anoItem.ano}</span>
-                        <span className="font-extrabold text-white">{formatarMoeda(anoItem.valor)}</span>
+                        <span className="font-extrabold text-white">{renderMoeda(anoItem.valor)}</span>
                       </div>
                       <div className="h-3 w-full bg-neutral-900 rounded-full overflow-hidden p-0.5">
                         <div
@@ -368,7 +383,7 @@ export function ProventosView({ token, onAbrirImportadorB3, onAbrirLogin }: Prov
                 {sazonalidade.map((m) => (
                   <div key={m.mes} className="p-2.5 rounded-xl bg-neutral-900/60 border border-neutral-800/80 text-center space-y-1">
                     <span className="text-[10px] text-neutral-400 uppercase tracking-wider block font-bold">{m.nome.slice(0, 3)}</span>
-                    <span className="text-xs font-extrabold text-emerald-400 block">{formatarMoeda(m.valor)}</span>
+                    <span className="text-xs font-extrabold text-emerald-400 block">{renderMoeda(m.valor)}</span>
                   </div>
                 ))}
               </div>
@@ -404,7 +419,7 @@ export function ProventosView({ token, onAbrirImportadorB3, onAbrirLogin }: Prov
                       </div>
                     </div>
                     <div className="text-right">
-                      <span className="font-extrabold text-emerald-400 block">{formatarMoeda(at.total_recebido)}</span>
+                      <span className="font-extrabold text-emerald-400 block">{renderMoeda(at.total_recebido)}</span>
                       <span className="text-[10px] text-neutral-400 font-semibold">{at.percentual}% do total</span>
                     </div>
                   </div>
@@ -435,7 +450,7 @@ export function ProventosView({ token, onAbrirImportadorB3, onAbrirLogin }: Prov
                       <span className="text-[10px] text-neutral-500">{p.data_pagamento} • {p.corretora}</span>
                     </div>
                     <div className="text-right font-extrabold text-emerald-400">
-                      +{formatarMoeda(p.valor_liquido)}
+                      +{renderMoeda(p.valor_liquido)}
                     </div>
                   </div>
                 ))}

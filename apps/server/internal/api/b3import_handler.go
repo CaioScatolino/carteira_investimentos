@@ -2,12 +2,16 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"carteira_investimentos/server/internal/auth"
 	"carteira_investimentos/server/internal/b3import"
+	"carteira_investimentos/server/internal/portfolio"
 )
 
 // PreviewImportacaoB3 recebe o upload do arquivo XLSX e retorna o preview sem gravar no banco
@@ -133,6 +137,20 @@ func (h *Handler) ObterHistoricoProventos(w http.ResponseWriter, r *http.Request
 	responderJSON(w, http.StatusOK, resumo)
 }
 
+// parseDataFlexivel tenta converter diferentes formatos usuais de data retornados pela B3/StatusInvest
+func parseDataFlexivel(s string) (time.Time, bool) {
+	s = strings.TrimSpace(s)
+	if s == "" || s == "-" || strings.EqualFold(s, "A definir") {
+		return time.Time{}, false
+	}
+	for _, layout := range []string{"02/01/2006", "2006-01-02", "02/01/06", "02-01-2006"} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t, true
+		}
+	}
+	return time.Time{}, false
+}
+
 // ObterRadarFuturoProventos cruza as cotas em custódia com proventos já anunciados
 func (h *Handler) ObterRadarFuturoProventos(w http.ResponseWriter, r *http.Request) {
 	if h.portfolioService == nil || h.b3Client == nil {
@@ -158,49 +176,157 @@ func (h *Handler) ObterRadarFuturoProventos(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	radarFuturo := make([]b3import.ProventoFuturo, 0)
-	agora := time.Now()
+	// 1. Agrupa posições da custódia por ticker (somando quantidades caso tenha em mais de uma corretora)
+	// Filtra Renda Fixa e Caixa para não disparar consultas desnecessárias
+	type itemCustodia struct {
+		Ticker     string
+		Quantidade float64
+		IsFII      bool
+	}
+	mapaItens := make(map[string]*itemCustodia)
 
 	for _, item := range resumoCarteira.Posicoes {
 		if item.Quantidade <= 0 {
 			continue
 		}
-
-		isFII := item.Classe == "FII"
-		// Consulta eventos do ativo via StatusInvest / B3
-		hist, err := h.b3Client.ObterProventosStatusInvest(item.Ticker, isFII)
-		if err != nil || hist == nil {
+		if item.Classe == portfolio.ClasseRendaFixa || item.Classe == portfolio.ClasseCaixa {
 			continue
 		}
 
-		for _, ev := range hist.AssetEarningsModels {
-			dataCom, errCom := time.Parse("02/01/2006", ev.Ed)
-			dataPag, errPag := time.Parse("02/01/2006", ev.Pd)
-			if errPag != nil {
-				continue
-			}
+		tk := strings.ToUpper(strings.TrimSpace(item.Ticker))
+		if strings.HasPrefix(tk, "TESOURO") || strings.HasPrefix(tk, "CDB") || strings.HasPrefix(tk, "LCI") || strings.HasPrefix(tk, "LCA") || tk == "CAIXA" {
+			continue
+		}
 
-			// Se a data de pagamento for futura (ou até 3 dias atrás para visualização imediata)
-			if dataPag.After(agora.AddDate(0, 0, -3)) {
-				status := "AGUARDANDO_PAGAMENTO"
-				if errCom == nil && dataCom.After(agora) {
-					status = "DATA_COM_IMINENTE"
-				}
-
-				totalPrevisto := item.Quantidade * ev.V
-				radarFuturo = append(radarFuturo, b3import.ProventoFuturo{
-					Ticker:          item.Ticker,
-					Tipo:            ev.Et,
-					DataCom:         ev.Ed,
-					DataPagamento:   ev.Pd,
-					ValorUnitario:   ev.V,
-					QuantidadeCotas: item.Quantidade,
-					ValorPrevisto:   totalPrevisto,
-					Status:          status,
-				})
+		isFII := item.Classe == portfolio.ClasseFII || strings.HasSuffix(tk, "11")
+		if pos, exists := mapaItens[tk]; exists {
+			pos.Quantidade += item.Quantidade
+		} else {
+			mapaItens[tk] = &itemCustodia{
+				Ticker:     tk,
+				Quantidade: item.Quantidade,
+				IsFII:      isFII,
 			}
 		}
 	}
+
+	// 2. Processamento concorrente ultra-rápido via Worker Pool
+	itens := make([]*itemCustodia, 0, len(mapaItens))
+	for _, it := range mapaItens {
+		itens = append(itens, it)
+	}
+
+	radarFuturo := make([]b3import.ProventoFuturo, 0)
+	if len(itens) == 0 {
+		responderJSON(w, http.StatusOK, map[string]interface{}{
+			"total_previsto": 0,
+			"proventos":      radarFuturo,
+		})
+		return
+	}
+
+	workerCount := 8
+	if len(itens) < workerCount {
+		workerCount = len(itens)
+	}
+
+	jobs := make(chan *itemCustodia, len(itens))
+	for _, it := range itens {
+		jobs <- it
+	}
+	close(jobs)
+
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	agora := time.Now()
+	chavesVistas := make(map[string]bool)
+
+	for worker := 0; worker < workerCount; worker++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for item := range jobs {
+				hist, err := h.b3Client.ObterProventosStatusInvest(item.Ticker, item.IsFII)
+				if err != nil || hist == nil {
+					continue
+				}
+
+				for _, ev := range hist.AssetEarningsModels {
+					dataCom, okCom := parseDataFlexivel(ev.Ed)
+					dataPag, okPag := parseDataFlexivel(ev.Pd)
+
+					isFuturo := false
+					status := "AGUARDANDO_PAGAMENTO"
+
+					if okPag && dataPag.After(agora.AddDate(0, 0, -3)) {
+						isFuturo = true
+						if okCom && dataCom.After(agora) {
+							status = "DATA_COM_IMINENTE"
+						}
+					} else if !okPag && okCom && dataCom.After(agora.AddDate(0, 0, -30)) {
+						// Provento já deliberado com data com recente ou futura, mas data de pagamento a definir
+						isFuturo = true
+						status = "A_DEFINIR"
+						if dataCom.After(agora) {
+							status = "DATA_COM_IMINENTE"
+						}
+					}
+
+					if isFuturo {
+						dataPagDisplay := strings.TrimSpace(ev.Pd)
+						if dataPagDisplay == "" || dataPagDisplay == "-" {
+							dataPagDisplay = "A definir"
+						}
+
+						chaveUnica := fmt.Sprintf("%s|%s|%s|%s", item.Ticker, ev.Et, ev.Ed, dataPagDisplay)
+
+						mu.Lock()
+						if !chavesVistas[chaveUnica] {
+							chavesVistas[chaveUnica] = true
+							totalPrevisto := item.Quantidade * ev.V
+							radarFuturo = append(radarFuturo, b3import.ProventoFuturo{
+								Ticker:          item.Ticker,
+								Tipo:            ev.Et,
+								DataCom:         ev.Ed,
+								DataPagamento:   dataPagDisplay,
+								ValorUnitario:   ev.V,
+								QuantidadeCotas: item.Quantidade,
+								ValorPrevisto:   totalPrevisto,
+								Status:          status,
+							})
+						}
+						mu.Unlock()
+					}
+				}
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	// 3. Ordenação cronológica intuitiva:
+	// Proventos com data de pagamento mais próxima aparecem no topo
+	// Proventos "A definir" ficam ordenados por data-com
+	sort.Slice(radarFuturo, func(i, j int) bool {
+		t1, ok1 := parseDataFlexivel(radarFuturo[i].DataPagamento)
+		t2, ok2 := parseDataFlexivel(radarFuturo[j].DataPagamento)
+		if ok1 && ok2 {
+			return t1.Before(t2)
+		}
+		if ok1 && !ok2 {
+			return true
+		}
+		if !ok1 && ok2 {
+			return false
+		}
+		// Ambos "A definir": ordena pela data-com
+		c1, okC1 := parseDataFlexivel(radarFuturo[i].DataCom)
+		c2, okC2 := parseDataFlexivel(radarFuturo[j].DataCom)
+		if okC1 && okC2 {
+			return c1.Before(c2)
+		}
+		return radarFuturo[i].Ticker < radarFuturo[j].Ticker
+	})
 
 	responderJSON(w, http.StatusOK, map[string]interface{}{
 		"total_previsto": len(radarFuturo),

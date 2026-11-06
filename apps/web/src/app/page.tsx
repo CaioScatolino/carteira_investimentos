@@ -717,6 +717,7 @@ export default function Dashboard() {
         {abaAtiva === "proventos" && (
           <ProventosView
             token={token}
+            ocultarValores={ocultarValores}
             onAbrirImportadorB3={() => setModalImportB3Aberto(true)}
             onAbrirLogin={() => setModalAuthAberto(true)}
           />

@@ -70,12 +70,19 @@ type AnaliseProventos5A struct {
 	Observacao                   string             `json:"observacao"`
 }
 
+type statusInvestCacheItem struct {
+	dados    *StatusInvestProventosResponse
+	expiraEm time.Time
+}
+
 var (
-	cacheAnalise5A         = make(map[string]*AnaliseProventos5A)
-	cacheAnalise5AMu       sync.RWMutex
-	cacheEventosBrutosB3   = make(map[string][]B3ProventoItem)
-	cacheTradingNameB3     = make(map[string]string)
-	cacheEventosBrutosB3Mu sync.RWMutex
+	cacheAnalise5A          = make(map[string]*AnaliseProventos5A)
+	cacheAnalise5AMu        sync.RWMutex
+	cacheEventosBrutosB3    = make(map[string][]B3ProventoItem)
+	cacheTradingNameB3      = make(map[string]string)
+	cacheEventosBrutosB3Mu  sync.RWMutex
+	cacheStatusInvestProv   = make(map[string]*statusInvestCacheItem)
+	cacheStatusInvestProvMu sync.RWMutex
 
 	// Dicionário canônico de Trading Names da B3 para Blue Chips, Mid Caps e principais pagadoras
 	mapaTradingNamesB3 = map[string]string{
@@ -757,9 +764,57 @@ func (c *B3Client) ObterProventos12MAcao(tradingName, ticker string) float64 {
 	return 0.0
 }
 
-// ObterProventosStatusInvest busca histórico anual e eventos de dividendos/rendimentos no StatusInvest
+// ObterProventosStatusInvest busca histórico anual e eventos de dividendos/rendimentos no StatusInvest com cache e fallback
 func (c *B3Client) ObterProventosStatusInvest(ticker string, isFII bool) (*StatusInvestProventosResponse, error) {
 	tickerUpper := strings.ToUpper(strings.TrimSpace(ticker))
+	if tickerUpper == "" {
+		return nil, fmt.Errorf("ticker vazio")
+	}
+
+	// 1. Checa cache em memória (TTL de 1 hora)
+	cacheStatusInvestProvMu.RLock()
+	if item, ok := cacheStatusInvestProv[tickerUpper]; ok && item != nil {
+		if time.Now().Before(item.expiraEm) && item.dados != nil {
+			cacheStatusInvestProvMu.RUnlock()
+			return item.dados, nil
+		}
+	}
+	cacheStatusInvestProvMu.RUnlock()
+
+	// 2. Consulta primária com o tipo indicado (acao ou fii)
+	siResp, err := c.executarRequisicaoStatusInvest(tickerUpper, isFII)
+	if err == nil && siResp != nil && len(siResp.AssetEarningsModels) > 0 {
+		cacheStatusInvestProvMu.Lock()
+		cacheStatusInvestProv[tickerUpper] = &statusInvestCacheItem{
+			dados:    siResp,
+			expiraEm: time.Now().Add(1 * time.Hour),
+		}
+		cacheStatusInvestProvMu.Unlock()
+		return siResp, nil
+	}
+
+	// 3. Fallback invertendo isFII (caso um FII tenha sido classificado como ação ou vice-versa)
+	siRespAlt, errAlt := c.executarRequisicaoStatusInvest(tickerUpper, !isFII)
+	if errAlt == nil && siRespAlt != nil && len(siRespAlt.AssetEarningsModels) > 0 {
+		cacheStatusInvestProvMu.Lock()
+		cacheStatusInvestProv[tickerUpper] = &statusInvestCacheItem{
+			dados:    siRespAlt,
+			expiraEm: time.Now().Add(1 * time.Hour),
+		}
+		cacheStatusInvestProvMu.Unlock()
+		return siRespAlt, nil
+	}
+
+	if siResp != nil {
+		return siResp, nil
+	}
+	if siRespAlt != nil {
+		return siRespAlt, nil
+	}
+	return nil, err
+}
+
+func (c *B3Client) executarRequisicaoStatusInvest(tickerUpper string, isFII bool) (*StatusInvestProventosResponse, error) {
 	tickerLower := strings.ToLower(tickerUpper)
 
 	tipo := "acao"
@@ -774,9 +829,20 @@ func (c *B3Client) ObterProventosStatusInvest(ticker string, isFII bool) (*Statu
 	if err != nil {
 		return nil, err
 	}
+
+	// Headers idênticos aos de um navegador legítimo com suporte a AJAX
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
 	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Accept-Language", "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7")
+	req.Header.Set("X-Requested-With", "XMLHttpRequest")
 	req.Header.Set("Referer", referer)
+	req.Header.Set("Origin", "https://statusinvest.com.br")
+	req.Header.Set("Sec-Ch-Ua", "\"Chromium\";v=\"124\", \"Google Chrome\";v=\"124\", \"Not-A.Brand\";v=\"99\"")
+	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+	req.Header.Set("Sec-Ch-Ua-Platform", "\"Windows\"")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "cors")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
