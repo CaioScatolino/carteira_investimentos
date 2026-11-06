@@ -7,6 +7,7 @@ import { TrendingUp, Building2, ShieldCheck, Globe, Coins, PieChart } from "luci
 interface PortfolioDonutChartProps {
   resumo: ResumoCarteira;
   classeSelecionada?: ClasseAtivo | null;
+  ocultarValores?: boolean;
   onSelecionarClasse: (classe: ClasseAtivo) => void;
 }
 
@@ -72,12 +73,28 @@ const CLASSE_CONFIG: Record<
 export function PortfolioDonutChart({
   resumo,
   classeSelecionada,
+  ocultarValores = false,
   onSelecionarClasse,
 }: PortfolioDonutChartProps) {
   const [hoveredClasse, setHoveredClasse] = useState<ClasseAtivo | null>(null);
 
   const formatarMoeda = (val: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
+
+  const renderMoeda = (val: number, prefixo = "") => {
+    const texto = `${prefixo}${formatarMoeda(val)}`;
+    return (
+      <span
+        className={
+          ocultarValores
+            ? "filter blur-[6px] select-none pointer-events-none transition-all duration-300 inline-block"
+            : "transition-all duration-300"
+        }
+      >
+        {texto}
+      </span>
+    );
+  };
 
   // Calcula segmentos do Donut
   const total = resumo.patrimonio_total > 0 ? resumo.patrimonio_total : 0;
@@ -211,7 +228,7 @@ export function PortfolioDonutChart({
                     {itemAtivo.nome}
                   </span>
                   <span className="text-lg font-black text-white font-mono tracking-tight">
-                    {formatarMoeda(itemAtivo.valorMercado)}
+                    {renderMoeda(itemAtivo.valorMercado)}
                   </span>
                   <div className="flex items-center gap-1.5 mt-1">
                     <span
@@ -231,7 +248,7 @@ export function PortfolioDonutChart({
                     Patrimônio Total
                   </span>
                   <span className="text-xl font-black text-white font-mono tracking-tight">
-                    {formatarMoeda(total)}
+                    {renderMoeda(total)}
                   </span>
                   <span className="text-[11px] font-mono text-neutral-400 mt-1">
                     {resumo.posicoes.length} {resumo.posicoes.length === 1 ? "ativo" : "ativos"} cadastrados
@@ -288,7 +305,7 @@ export function PortfolioDonutChart({
 
                 <div className="flex items-baseline justify-between gap-2 mb-2">
                   <span className="text-sm font-extrabold text-white font-mono">
-                    {formatarMoeda(item.valorMercado)}
+                    {renderMoeda(item.valorMercado)}
                   </span>
                   <div className="text-right">
                     <span className="text-xs font-black font-mono text-white">

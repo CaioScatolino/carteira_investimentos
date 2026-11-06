@@ -29,6 +29,7 @@ interface PortfolioTableProps {
   classes?: ClasseConsolidada[];
   patrimonioTotal?: number;
   classeFiltroDonut?: ClasseAtivo | null;
+  ocultarValores?: boolean;
   onExcluirPosicao: (id: number, ticker: string) => void;
   onAportar?: (posicao: PosicaoConsolidada) => void;
   onVerHistorico?: (ticker?: string) => void;
@@ -93,6 +94,7 @@ export function PortfolioTable({
   classes,
   patrimonioTotal = 0,
   classeFiltroDonut,
+  ocultarValores = false,
   onExcluirPosicao,
   onAportar,
   onVerHistorico,
@@ -153,8 +155,15 @@ export function PortfolioTable({
     });
   };
 
-  const formatarMoeda = (val: number) =>
-    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
+  const formatarMoeda = (val: number): React.ReactNode => {
+    const str = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
+    if (!ocultarValores) return str;
+    return (
+      <span className="filter blur-[6px] select-none pointer-events-none transition-all duration-300 inline-block">
+        {str}
+      </span>
+    );
+  };
 
   const getBadgeSinal = (sinal: string) => {
     switch (sinal) {

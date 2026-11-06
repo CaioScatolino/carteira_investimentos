@@ -6,6 +6,7 @@ import { ShieldCheck, Building2, TrendingUp, Globe, Coins } from "lucide-react";
 
 interface MacroAllocationViewProps {
   resumo: ResumoCarteira;
+  ocultarValores?: boolean;
 }
 
 const META_CONFIG: Record<
@@ -49,8 +50,26 @@ const META_CONFIG: Record<
   },
 };
 
-export function MacroAllocationView({ resumo }: MacroAllocationViewProps) {
+export function MacroAllocationView({ resumo, ocultarValores = false }: MacroAllocationViewProps) {
   const classes: ClasseAtivo[] = ["RENDA_FIXA", "FII", "ACAO_BR", "INTERNACIONAL", "CAIXA"];
+
+  const formatarMoeda = (val: number) =>
+    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
+
+  const renderMoeda = (val: number, prefixo = "") => {
+    const texto = `${prefixo}${formatarMoeda(val)}`;
+    return (
+      <span
+        className={
+          ocultarValores
+            ? "filter blur-[6px] select-none pointer-events-none transition-all duration-300 inline-block"
+            : "transition-all duration-300"
+        }
+      >
+        {texto}
+      </span>
+    );
+  };
 
   return (
     <div className="p-6 rounded-2xl bg-[#0f1015]/90 border border-neutral-800/80 shadow-2xl mb-8 backdrop-blur-sm">
@@ -65,7 +84,7 @@ export function MacroAllocationView({ resumo }: MacroAllocationViewProps) {
           </p>
         </div>
         <div className="text-xs font-mono text-neutral-400 self-start sm:self-auto bg-neutral-900/80 px-3 py-1.5 rounded-lg border border-neutral-800">
-          Patrimônio Base: <span className="text-white font-bold">{new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(resumo.patrimonio_total)}</span>
+          Patrimônio Base: <span className="text-white font-bold">{renderMoeda(resumo.patrimonio_total)}</span>
         </div>
       </div>
 
@@ -123,7 +142,7 @@ export function MacroAllocationView({ resumo }: MacroAllocationViewProps) {
                   </div>
                   <div className="text-right hidden sm:block">
                     <span className="text-neutral-400 text-[11px] block">Valor Atual</span>
-                    <span className="text-white font-medium">{new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(valorAtualClasse)}</span>
+                    <span className="text-white font-medium">{renderMoeda(valorAtualClasse)}</span>
                   </div>
                 </div>
               </div>

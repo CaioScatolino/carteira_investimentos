@@ -13,11 +13,27 @@ import {
 
 interface PortfolioSummaryCardsProps {
   resumo: ResumoCarteira;
+  ocultarValores?: boolean;
 }
 
-export function PortfolioSummaryCards({ resumo }: PortfolioSummaryCardsProps) {
+export function PortfolioSummaryCards({ resumo, ocultarValores = false }: PortfolioSummaryCardsProps) {
   const formatarMoeda = (val: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
+
+  const renderMoeda = (val: number, prefixo = "") => {
+    const texto = `${prefixo}${formatarMoeda(val)}`;
+    return (
+      <span
+        className={
+          ocultarValores
+            ? "filter blur-[6px] select-none pointer-events-none transition-all duration-300 inline-block"
+            : "transition-all duration-300"
+        }
+      >
+        {texto}
+      </span>
+    );
+  };
 
   // 1. Proventos totais acumulados
   const totalProventos =
@@ -61,7 +77,7 @@ export function PortfolioSummaryCards({ resumo }: PortfolioSummaryCardsProps) {
             </div>
           </div>
           <div className="text-2xl font-black text-white font-mono tracking-tight">
-            {formatarMoeda(resumo.patrimonio_total)}
+            {renderMoeda(resumo.patrimonio_total)}
           </div>
         </div>
         <div className="mt-3 flex items-center gap-1.5 text-xs text-neutral-500 font-mono">
@@ -81,7 +97,7 @@ export function PortfolioSummaryCards({ resumo }: PortfolioSummaryCardsProps) {
             </div>
           </div>
           <div className="text-2xl font-black text-neutral-200 font-mono tracking-tight">
-            {formatarMoeda(resumo.total_investido)}
+            {renderMoeda(resumo.total_investido)}
           </div>
         </div>
         <div className="mt-3 flex items-center gap-1.5 text-xs text-neutral-500 font-mono">
@@ -102,7 +118,7 @@ export function PortfolioSummaryCards({ resumo }: PortfolioSummaryCardsProps) {
             </div>
           </div>
           <div className="text-2xl font-black text-emerald-400 font-mono tracking-tight">
-            +{formatarMoeda(totalProventos)}
+            {renderMoeda(totalProventos, "+")}
           </div>
         </div>
         <div className="mt-3 flex items-center justify-between text-xs font-mono">
@@ -144,8 +160,7 @@ export function PortfolioSummaryCards({ resumo }: PortfolioSummaryCardsProps) {
               isResultadoPositivo ? "text-emerald-400" : "text-red-400"
             }`}
           >
-            {isResultadoPositivo ? "+" : ""}
-            {formatarMoeda(resultadoGlobal)}
+            {renderMoeda(resultadoGlobal, isResultadoPositivo ? "+" : "")}
           </div>
           <div className="mt-1 flex items-center gap-1.5 text-xs font-mono">
             <span
@@ -165,15 +180,14 @@ export function PortfolioSummaryCards({ resumo }: PortfolioSummaryCardsProps) {
           <span title="Ganho/Perda pura de cotação dos ativos">
             Ativos:{" "}
             <strong className={isValorizacaoPositiva ? "text-emerald-400" : "text-red-400"}>
-              {isValorizacaoPositiva ? "+" : ""}
-              {formatarMoeda(valorizacaoAtivos)}
+              {renderMoeda(valorizacaoAtivos, isValorizacaoPositiva ? "+" : "")}
             </strong>
           </span>
           <span className="text-neutral-600">•</span>
           <span title="Total de proventos (dividendos e JCP) recebidos">
             Prov.:{" "}
             <strong className="text-emerald-400">
-              +{formatarMoeda(totalProventos)}
+              {renderMoeda(totalProventos, "+")}
             </strong>
           </span>
         </div>

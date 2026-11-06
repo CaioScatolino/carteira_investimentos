@@ -38,6 +38,8 @@ import {
   History,
   Sparkles,
   Upload,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 
 export default function Dashboard() {
@@ -64,6 +66,28 @@ export default function Dashboard() {
   const [loadingCarteira, setLoadingCarteira] = useState(false);
   const [erroCarteira, setErroCarteira] = useState<string | null>(null);
   const [classeFiltroDonut, setClasseFiltroDonut] = useState<ClasseAtivo | null>(null);
+
+  // Privacidade: Ocultar valores em reais com efeito de Blur
+  const [ocultarValores, setOcultarValores] = useState(false);
+
+  useEffect(() => {
+    try {
+      const salvo = localStorage.getItem("carteira_ocultar_valores");
+      if (salvo !== null) {
+        setOcultarValores(salvo === "true");
+      }
+    } catch (e) {}
+  }, []);
+
+  const toggleOcultarValores = () => {
+    setOcultarValores((prev) => {
+      const novo = !prev;
+      try {
+        localStorage.setItem("carteira_ocultar_valores", String(novo));
+      } catch (e) {}
+      return novo;
+    });
+  };
 
   // Modais
   const [modalAddAberto, setModalAddAberto] = useState(false);
@@ -588,7 +612,34 @@ export default function Dashboard() {
                       <span>Extrato</span>
                     </button>
 
-                    {/* 6. Atualizar Carteira (Sync) */}
+                    {/* 6. Modo Privacidade: Ocultar/Exibir Valores com Efeito Blur */}
+                    <button
+                      onClick={toggleOcultarValores}
+                      className={`h-9 px-3 rounded-xl border font-semibold text-xs flex items-center gap-1.5 transition-all active:scale-95 whitespace-nowrap ${
+                        ocultarValores
+                          ? "bg-[#d4af37]/15 text-[#d4af37] border-[#d4af37]/40 shadow-sm shadow-[#d4af37]/10"
+                          : "bg-neutral-900 hover:bg-neutral-800 text-neutral-400 hover:text-white border-neutral-800 hover:border-neutral-700"
+                      }`}
+                      title={
+                        ocultarValores
+                          ? "Exibir valores da carteira"
+                          : "Ocultar valores em reais (Efeito Blur de Privacidade)"
+                      }
+                    >
+                      {ocultarValores ? (
+                        <>
+                          <EyeOff className="w-3.5 h-3.5 text-[#d4af37]" />
+                          <span>Valores Ocultos</span>
+                        </>
+                      ) : (
+                        <>
+                          <Eye className="w-3.5 h-3.5 text-neutral-400" />
+                          <span>Ocultar Valores</span>
+                        </>
+                      )}
+                    </button>
+
+                    {/* 7. Atualizar Carteira (Sync) */}
                     <button
                       onClick={carregarCarteira}
                       disabled={loadingCarteira}
@@ -610,12 +661,16 @@ export default function Dashboard() {
                 {resumoCarteira ? (
                   <>
                     {/* 1. Cards de Resumo */}
-                    <PortfolioSummaryCards resumo={resumoCarteira} />
+                    <PortfolioSummaryCards
+                      resumo={resumoCarteira}
+                      ocultarValores={ocultarValores}
+                    />
 
                     {/* 2. Gráfico Donut de Composição & Foco Interativo */}
                     <PortfolioDonutChart
                       resumo={resumoCarteira}
                       classeSelecionada={classeFiltroDonut}
+                      ocultarValores={ocultarValores}
                       onSelecionarClasse={(cl) => {
                         setClasseFiltroDonut((prev) => (prev === cl ? null : cl));
                       }}
@@ -627,6 +682,7 @@ export default function Dashboard() {
                       classes={resumoCarteira.classes}
                       patrimonioTotal={resumoCarteira.patrimonio_total}
                       classeFiltroDonut={classeFiltroDonut}
+                      ocultarValores={ocultarValores}
                       onExcluirPosicao={handleExcluirPosicao}
                       onAportar={(pos) => {
                         setPosicaoParaAporte(pos);
@@ -640,7 +696,10 @@ export default function Dashboard() {
                     />
 
                     {/* 4. Macro Alocação das 5 Caixinhas */}
-                    <MacroAllocationView resumo={resumoCarteira} />
+                    <MacroAllocationView
+                      resumo={resumoCarteira}
+                      ocultarValores={ocultarValores}
+                    />
                   </>
                 ) : (
                   <div className="p-12 text-center text-neutral-400 font-mono text-xs">
