@@ -345,15 +345,15 @@ Este documento é a bússola viva do projeto. Ele mapeia as decisões arquitetur
 ---
 
 ### 🔔 FASE 19: Central de Notificações de Oportunidades & Importador Rápido de Custódia (B3 / CEI)
-- [ ] **Passo 19.1: Motor de Ingestão e Parser do Extrato Oficial de Movimentação B3 (`.xlsx`)**:
-  - [ ] **Upload e Validação em Memória:** Leitor Go nativo de planilhas `.xlsx` da Área do Investidor B3 (`Entrada/Saída`, `Data`, `Movimentação`, `Produto`, `Instituição`, `Quantidade`, `Preço unitário`, `Valor da Operação`).
-  - [ ] **Mapeamento Cronológico do Livro-Razão:**
+- [x] **Passo 19.1: Motor de Ingestão e Parser do Extrato Oficial de Movimentação B3 (`.xlsx`)**:
+  - [x] **Upload e Validação em Memória:** Leitor Go nativo de planilhas `.xlsx` da Área do Investidor B3 (`Entrada/Saída`, `Data`, `Movimentação`, `Produto`, `Instituição`, `Quantidade`, `Preço unitário`, `Valor da Operação`).
+  - [x] **Mapeamento Cronológico do Livro-Razão:**
     - Ordenação cronológica automática (do evento mais antigo de 2019 até o mais recente).
     - Tratamento de Compras e Vendas (`Transferência - Liquidação`, `Compra`, `Venda`) via `Credito`/`Debito` populando a tabela `transacoes`.
     - **Tratamento Inteligente de Direitos de Subscrição:** Filtro e isolamento de direitos transitórios (`12`, `13`, `14` como `BTLG12`, `XPML12`, `RECR12`), registro de sobras/cessões e conversão do recibo de subscrição (`13`) no ativo base (`11`).
     - **Reconciliação de Eventos Corporativos:** Ingestão de `Desdobro` (split), `Bonificação em Ativos` (incorporação de novas cotas sem desembolso), `Grupamento` e `Leilão de Fração`.
     - **Reconhecimento de Títulos Públicos / Renda Fixa:** Mapeamento de compras/vendas de `Tesouro IPCA+` e `Tesouro Prefixado` com juros semestrais.
-  - [ ] **Tela de Preview & Reconciliação (Frontend Next.js):** Modal com drag & drop do `.xlsx`, resumo dos ativos identificados, contagem de operações, preço médio calculado e confirmação em lote.
+  - [x] **Tela de Preview & Reconciliação (Frontend Next.js):** Modal com drag & drop do `.xlsx`, resumo dos ativos identificados, contagem de operações, preço médio calculado e confirmação em lote.
 - [ ] **Passo 19.2: Scanner de Gatilhos & Alertas de Valuation Ativos**:
   - [ ] Notificações no painel para ativos da carteira ou watchlist:
     - *Gatilho Preço Teto:* "VALE3 rompeu o Preço Teto Consolidado para baixo (agora a R$ 56,10 com 22% de margem)".
@@ -377,22 +377,25 @@ Este documento é a bússola viva do projeto. Ele mapeia as decisões arquitetur
 
 ---
 
-### 💰 FASE 21: Módulo de Proventos, Renda Passiva Real & Radar de Futuros Rendimentos
-- [ ] **Passo 21.1: Histórico Real de Proventos Recebidos (Extrato B3 & Livro-Caixa)**:
-  - [ ] **Tabela `proventos_recebidos` no MySQL:** Persistência de `Rendimento` (FIIs), `Dividendo` (Ações), `Juros Sobre Capital Próprio - JCP`, `Juros` (Tesouro Direto) e `Restituição de Capital`.
-  - [ ] **Deduplicação & Idempotência:** Chave única composta (`usuario_id + ticker + data_pagamento + tipo + valor_total`) impedindo duplicidade em re-importações.
-  - [ ] **Métricas de Renda Passiva Consolidada:** Total histórico acumulado recebido, média mensal de proventos e Yield on Cost (YoC) real baseado no preço médio de compra.
-  - [ ] **Visualização Gráfica no Frontend:**
-    - Gráfico de barras com histórico anual (2020 a 2026).
+### ✅ FASE 21: Módulo de Proventos, Renda Passiva Real & Radar de Futuros Rendimentos (Concluída)
+- [x] **Passo 21.1: Histórico Real de Proventos Recebidos (Extrato B3 & Livro-Caixa)**:
+  - [x] **Tabela `proventos_recebidos` no MySQL:** Persistência de `Rendimento` (FIIs), `Dividendo` (Ações), `Juros Sobre Capital Próprio - JCP`, `Juros` (Tesouro Direto) e `Restituição de Capital`.
+  - [x] **Deduplicação & Idempotência:** Chave única composta (`usuario_id + ticker + data_pagamento + tipo + valor_total`) impedindo duplicidade em re-importações.
+  - [x] **Métricas de Renda Passiva Consolidada:** Total histórico acumulado recebido, média mensal de proventos e Yield on Cost (YoC) real baseado no preço médio de compra.
+  - [x] **Visualização Gráfica no Frontend (`ProventosView`):**
+    - Gráfico de barras com histórico anual (2019 a 2026).
     - Matriz de sazonalidade mensal (Janeiro a Dezembro) para identificar os meses mais fortes de dividendos.
-- [ ] **Passo 21.2: Radar de Próximos Rendimentos (Data-Com & Pagamentos Anunciados)**:
-  - [ ] **Cruzamento Automático com a Custódia:** Conectar os ativos que o usuário possui com os proventos futuros anunciados na B3 (StatusInvest / B3 Oficial).
-  - [ ] **Cálculo da Renda Futura Garantida:**
+    - Integração de Preço Médio Descontado de Proventos na tabela da carteira.
+    - Modo Privacidade com efeito de blur em todos os valores monetários.
+- [x] **Passo 21.2: Radar de Próximos Rendimentos (Data-Com & Pagamentos Anunciados)**:
+  - [x] **Cruzamento Automático com a Custódia:** Conectar os ativos que o usuário possui com os proventos futuros anunciados na B3 (StatusInvest / B3 Oficial).
+  - [x] **Cálculo da Renda Futura Garantida:**
     $$\text{Valor a Receber} = \text{Quantidade de Cotas na Data-Com} \times \text{Provento por Cota Anunciado}$$
-  - [ ] **Agenda / Calendário de Proventos Futuros:**
+  - [x] **Agenda / Calendário de Proventos Futuros:**
     - Tabela cronológica com: Ticker, Tipo (`Dividendo`, `JCP`, `Rendimento`), Data-Com, Data de Pagamento, Valor por Cota, Quantidade Elegível e Total Previsto em Reais.
-    - Badges de Status: `Data-Com Iminente` (oportunidade de aporte antes do corte), `Aguardando Pagamento` (crédito futuro garantido), `Creditado na Conta`.
-  - [ ] **Alertas Ativos no Dashboard da Carteira:** Card de destaque no topo da tela: *"Você tem R$ X,XX previstos para cair na conta nos próximos 15 dias"*.
+    - Badges de Status: `Data-Com Iminente` (oportunidade de aporte antes do corte), `Confirmado` (crédito futuro garantido), `Data Pagto a Definir`.
+    - Otimização com Worker Pool concorrente e cache inteligente em memória com TTL.
+  - [x] **Alertas Ativos no Dashboard da Carteira:** Card "Futuros Anunciados" integrado ao topo das telas de Carteira e Proventos.
 
 
 
