@@ -41,6 +41,9 @@ import {
   Upload,
   Eye,
   EyeOff,
+  PieChart,
+  Layers,
+  Activity,
 } from "lucide-react";
 
 export default function Dashboard() {
@@ -668,15 +671,81 @@ export default function Dashboard() {
                       ocultarValores={ocultarValores}
                     />
 
-                    {/* 2. Gráfico Donut de Composição & Foco Interativo */}
-                    <PortfolioDonutChart
-                      resumo={resumoCarteira}
-                      classeSelecionada={classeFiltroDonut}
-                      ocultarValores={ocultarValores}
-                      onSelecionarClasse={(cl) => {
-                        setClasseFiltroDonut((prev) => (prev === cl ? null : cl));
-                      }}
-                    />
+                    {/* 2. Seção de Alocação e Auditoria de Risco: Macro Classes vs Concentração Setorial & HHI */}
+                    <div className="space-y-4 pt-1">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-neutral-800/80 pb-3">
+                        <div className="flex items-center gap-1.5 p-1 bg-neutral-900/90 rounded-xl border border-neutral-800">
+                          <button
+                            onClick={() => setSubAbaAlocacao("classes")}
+                            className={`px-4 py-2 rounded-lg text-xs font-mono font-bold transition-all flex items-center gap-2 ${
+                              subAbaAlocacao === "classes"
+                                ? "bg-[#d4af37] text-black shadow-md shadow-[#d4af37]/20"
+                                : "text-neutral-400 hover:text-white"
+                            }`}
+                          >
+                            <PieChart className="w-4 h-4" />
+                            <span>Macro Alocação (Classes)</span>
+                          </button>
+                          <button
+                            onClick={() => setSubAbaAlocacao("setores")}
+                            className={`px-4 py-2 rounded-lg text-xs font-mono font-bold transition-all flex items-center gap-2 ${
+                              subAbaAlocacao === "setores"
+                                ? "bg-cyan-500 text-black shadow-md shadow-cyan-500/20"
+                                : "text-neutral-400 hover:text-white"
+                            }`}
+                          >
+                            <Layers className="w-4 h-4" />
+                            <span>Concentração Setorial & HHI</span>
+                            {resumoCarteira.analise_concentracao && (
+                              <span className="text-[10px] px-1.5 py-0.2 rounded bg-black/40 font-extrabold text-white">
+                                {resumoCarteira.analise_concentracao.hhi_ativos.toFixed(0)} pts
+                              </span>
+                            )}
+                          </button>
+                        </div>
+
+                        {subAbaAlocacao === "setores" && resumoCarteira.analise_concentracao && (
+                          <div className="text-xs font-mono text-neutral-400 flex items-center gap-2 bg-neutral-900/60 px-3 py-1.5 rounded-lg border border-neutral-800">
+                            <Activity className="w-3.5 h-3.5 text-cyan-400" />
+                            <span>HHI Setorial:</span>
+                            <span className="text-cyan-400 font-bold">
+                              {resumoCarteira.analise_concentracao.hhi_setores.toFixed(0)} pts
+                            </span>
+                            <span className="text-neutral-500">•</span>
+                            <span className="text-neutral-400">
+                              {resumoCarteira.analise_concentracao.setores.length} setores
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Conteúdo Dinâmico da Visão Selecionada */}
+                      {subAbaAlocacao === "classes" ? (
+                        <>
+                          {/* Gráfico Donut de Composição & Foco Interativo */}
+                          <PortfolioDonutChart
+                            resumo={resumoCarteira}
+                            classeSelecionada={classeFiltroDonut}
+                            ocultarValores={ocultarValores}
+                            onSelecionarClasse={(cl) => {
+                              setClasseFiltroDonut((prev) => (prev === cl ? null : cl));
+                            }}
+                          />
+
+                          {/* Barras de Macro Alocação */}
+                          <MacroAllocationView
+                            resumo={resumoCarteira}
+                            ocultarValores={ocultarValores}
+                          />
+                        </>
+                      ) : (
+                        <SectorConcentrationView
+                          analise={resumoCarteira.analise_concentracao}
+                          patrimonioTotal={resumoCarteira.patrimonio_total}
+                          ocultarValores={ocultarValores}
+                        />
+                      )}
+                    </div>
 
                     {/* 3. Tabela de Ativos em Custódia com Decomposição em Níveis */}
                     <PortfolioTable
@@ -696,63 +765,6 @@ export default function Dashboard() {
                       }}
                       onAbrirGrafico={(ticker) => handleAbrirGrafico(ticker)}
                     />
-
-                    {/* 4. Seção de Alocação e Auditoria de Risco: Macro Classes vs Concentração Setorial & HHI */}
-                    <div className="space-y-4 pt-2">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-neutral-800/80 pb-3">
-                        <div className="flex items-center gap-1.5 p-1 bg-neutral-900/90 rounded-xl border border-neutral-800">
-                          <button
-                            onClick={() => setSubAbaAlocacao("classes")}
-                            className={`px-3.5 py-1.5 rounded-lg text-xs font-mono font-bold transition-all flex items-center gap-2 ${
-                              subAbaAlocacao === "classes"
-                                ? "bg-[#d4af37] text-black shadow-md shadow-[#d4af37]/20"
-                                : "text-neutral-400 hover:text-white"
-                            }`}
-                          >
-                            <span className="w-2 h-2 rounded-full bg-current" />
-                            Macro Alocação (Classes)
-                          </button>
-                          <button
-                            onClick={() => setSubAbaAlocacao("setores")}
-                            className={`px-3.5 py-1.5 rounded-lg text-xs font-mono font-bold transition-all flex items-center gap-2 ${
-                              subAbaAlocacao === "setores"
-                                ? "bg-cyan-500 text-black shadow-md shadow-cyan-500/20"
-                                : "text-neutral-400 hover:text-white"
-                            }`}
-                          >
-                            <span className="w-2 h-2 rounded-full bg-current" />
-                            Concentração Setorial & HHI
-                            {resumoCarteira.analise_concentracao && (
-                              <span className="text-[10px] px-1.5 py-0.2 rounded bg-black/40 font-extrabold text-white">
-                                {resumoCarteira.analise_concentracao.hhi_ativos.toFixed(0)} pts
-                              </span>
-                            )}
-                          </button>
-                        </div>
-
-                        {subAbaAlocacao === "setores" && resumoCarteira.analise_concentracao && (
-                          <div className="text-xs font-mono text-neutral-400 flex items-center gap-2">
-                            <span>HHI Setorial:</span>
-                            <span className="text-cyan-400 font-bold">
-                              {resumoCarteira.analise_concentracao.hhi_setores.toFixed(0)} pts
-                            </span>
-                          </div>
-                        )}
-                      </div>
-
-                      {subAbaAlocacao === "classes" ? (
-                        <MacroAllocationView
-                          resumo={resumoCarteira}
-                          ocultarValores={ocultarValores}
-                        />
-                      ) : (
-                        <SectorConcentrationView
-                          analise={resumoCarteira.analise_concentracao}
-                          patrimonioTotal={resumoCarteira.patrimonio_total}
-                          ocultarValores={ocultarValores}
-                        />
-                      )}
-                    </div>
                   </>
                 ) : (
                   <div className="p-12 text-center text-neutral-400 font-mono text-xs">

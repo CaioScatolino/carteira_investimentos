@@ -239,6 +239,8 @@ export function PortfolioTable({
         const termo = busca.toLowerCase().trim();
         return (
           (p.ticker && p.ticker.toLowerCase().includes(termo)) ||
+          (p.setor && p.setor.toLowerCase().includes(termo)) ||
+          (p.segmento && p.segmento.toLowerCase().includes(termo)) ||
           (p.corretora && p.corretora.toLowerCase().includes(termo)) ||
           (p.categoria_macro && p.categoria_macro.toLowerCase().includes(termo))
         );
@@ -291,6 +293,8 @@ export function PortfolioTable({
       const termo = busca.toLowerCase().trim();
       return (
         (p.ticker && p.ticker.toLowerCase().includes(termo)) ||
+        (p.setor && p.setor.toLowerCase().includes(termo)) ||
+        (p.segmento && p.segmento.toLowerCase().includes(termo)) ||
         (p.corretora && p.corretora.toLowerCase().includes(termo)) ||
         (p.categoria_macro && p.categoria_macro.toLowerCase().includes(termo))
       );
@@ -386,7 +390,7 @@ export function PortfolioTable({
           <div className="w-full sm:w-56">
             <input
               type="text"
-              placeholder="Buscar por ticker, corretora..."
+              placeholder="Buscar por ticker, setor, corretora..."
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
               className="w-full px-3.5 py-1.5 rounded-xl bg-neutral-950 border border-neutral-800 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-[#d4af37]/60"
@@ -569,6 +573,11 @@ export function PortfolioTable({
                                       <span className="font-extrabold text-white text-sm font-mono tracking-wide">
                                         {p.ticker}
                                       </span>
+                                      {p.setor && (
+                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-neutral-800/80 text-neutral-300 font-sans border border-neutral-700/50 font-medium">
+                                          {p.setor}
+                                        </span>
+                                      )}
                                     </div>
                                     <div className="flex items-center gap-2 text-[10px] text-neutral-400 font-mono mt-0.5">
                                       <span>{p.corretora}</span>
@@ -866,6 +875,11 @@ export function PortfolioTable({
                           >
                             {CLASSE_INFO[p.classe]?.nome}
                           </span>
+                          {p.setor && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-neutral-800/80 text-neutral-300 font-sans border border-neutral-700/50 font-medium">
+                              {p.setor}
+                            </span>
+                          )}
                         </div>
                         <div className="flex items-center gap-2 text-[11px] text-neutral-400 font-mono mt-0.5">
                           <span>{p.corretora}</span>
