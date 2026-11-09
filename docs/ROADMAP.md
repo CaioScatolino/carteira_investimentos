@@ -324,8 +324,8 @@ Este documento é a bússola viva do projeto. Ele mapeia as decisões arquitetur
 - [x] **Passo 17.1: Motor de Decomposição Patrimonial e Exposição Hierárquica**:
   - [x] **Exposição Relativa e Absoluta:**
     - Decomposição em 2 níveis: Peso do ativo na respectiva classe ($\% \text{ da Classe}$) e no patrimônio total consolidado ($\% \text{ da Carteira}$).
-  - [ ] **Agregação por Setores Oficiais B3:** Mapeamento da concentração setorial (Bancos, Energia Elétrica, Petróleo & Gás, Saneamento, Commodities, etc.).
-  - [ ] **Indicador de Concentração de Risco (HHI):** Detecção de sobreconcentração em emissor único ($> 15\%$) ou setor ($> 30\%$).
+  - [x] **Agregação por Setores Oficiais B3:** Mapeamento da concentração setorial (Bancos, Energia Elétrica, Petróleo & Gás, Saneamento, Commodities, etc.).
+  - [x] **Indicador de Concentração de Risco (HHI):** Detecção de sobreconcentração em emissor único ($> 15\%$) ou setor ($> 30\%$).
 - [x] **Passo 17.2: Componentes Visuais de Exposição no Frontend Next.js (`apps/web`)**:
   - [x] **Gráfico Interativo de Composição (Donut Chart):** Visualização estilizada em anel ônix e dourado/esmeralda com cálculo dinâmico de percentuais e filtro interativo por clique.
   - [x] **Tabela Hierárquica por Níveis:** Agrupamento por classes com colunas de alocação macro, micro, rentabilidade e margens de segurança.

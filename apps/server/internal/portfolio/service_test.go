@@ -360,5 +360,32 @@ func TestDecomposicaoHierarquicaCarteira(t *testing.T) {
 	if classeAcoes.Posicoes[0].Ticker != "PETR4" {
 		t.Errorf("esperava primeiro ativo ser PETR4, obteve %s", classeAcoes.Posicoes[0].Ticker)
 	}
+
+	// Validação da Análise de Concentração e HHI
+	if resumo.AnaliseConcentracao == nil {
+		t.Fatalf("esperava AnaliseConcentracao não nula")
+	}
+
+	conc := resumo.AnaliseConcentracao
+	// O maior ativo deve ser TESOURO_IPCA (R$ 50.000 de R$ 100.000 = 50%)
+	if conc.MaiorAtivoTicker != "TESOURO_IPCA" {
+		t.Errorf("esperava maior ativo ser TESOURO_IPCA, obteve %s", conc.MaiorAtivoTicker)
+	}
+	if conc.MaiorAtivoPercentual != 50.0 {
+		t.Errorf("esperava maior ativo ter 50%%, obteve %.2f%%", conc.MaiorAtivoPercentual)
+	}
+
+	// HHI dos ativos: 50^2 (2500) + 30^2 (900) + 10^2 (100) + 7^2 (49) + 3^2 (9) = 3558
+	if conc.HHIAtivos < 3500 || conc.HHIAtivos > 3600 {
+		t.Errorf("esperava HHI ativos próximo de 3558, obteve %.2f", conc.HHIAtivos)
+	}
+	if conc.ClassificacaoAtivos != "CONCENTRADO" {
+		t.Errorf("esperava ClassificacaoAtivos CONCENTRADO, obteve %s", conc.ClassificacaoAtivos)
+	}
+
+	// Deve conter alertas de sobreconcentração de TESOURO_IPCA e HGLG11 (> 15%)
+	if len(conc.Alertas) == 0 {
+		t.Errorf("esperava alertas de sobreconcentração")
+	}
 }
 

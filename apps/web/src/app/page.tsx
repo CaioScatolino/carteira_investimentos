@@ -11,6 +11,7 @@ import { AssetDetailModal } from "@/components/AssetDetailModal";
 import { PortfolioSummaryCards } from "@/components/PortfolioSummaryCards";
 import { PortfolioDonutChart } from "@/components/PortfolioDonutChart";
 import { MacroAllocationView } from "@/components/MacroAllocationView";
+import { SectorConcentrationView } from "@/components/SectorConcentrationView";
 import { PortfolioTable } from "@/components/PortfolioTable";
 import { AddPositionModal } from "@/components/AddPositionModal";
 import { RebalanceSimulatorModal } from "@/components/RebalanceSimulatorModal";
@@ -66,6 +67,7 @@ export default function Dashboard() {
   const [loadingCarteira, setLoadingCarteira] = useState(false);
   const [erroCarteira, setErroCarteira] = useState<string | null>(null);
   const [classeFiltroDonut, setClasseFiltroDonut] = useState<ClasseAtivo | null>(null);
+  const [subAbaAlocacao, setSubAbaAlocacao] = useState<"classes" | "setores">("classes");
 
   // Privacidade: Ocultar valores em reais com efeito de Blur
   const [ocultarValores, setOcultarValores] = useState(false);
@@ -695,11 +697,62 @@ export default function Dashboard() {
                       onAbrirGrafico={(ticker) => handleAbrirGrafico(ticker)}
                     />
 
-                    {/* 4. Macro Alocação das 5 Caixinhas */}
-                    <MacroAllocationView
-                      resumo={resumoCarteira}
-                      ocultarValores={ocultarValores}
-                    />
+                    {/* 4. Seção de Alocação e Auditoria de Risco: Macro Classes vs Concentração Setorial & HHI */}
+                    <div className="space-y-4 pt-2">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-neutral-800/80 pb-3">
+                        <div className="flex items-center gap-1.5 p-1 bg-neutral-900/90 rounded-xl border border-neutral-800">
+                          <button
+                            onClick={() => setSubAbaAlocacao("classes")}
+                            className={`px-3.5 py-1.5 rounded-lg text-xs font-mono font-bold transition-all flex items-center gap-2 ${
+                              subAbaAlocacao === "classes"
+                                ? "bg-[#d4af37] text-black shadow-md shadow-[#d4af37]/20"
+                                : "text-neutral-400 hover:text-white"
+                            }`}
+                          >
+                            <span className="w-2 h-2 rounded-full bg-current" />
+                            Macro Alocação (Classes)
+                          </button>
+                          <button
+                            onClick={() => setSubAbaAlocacao("setores")}
+                            className={`px-3.5 py-1.5 rounded-lg text-xs font-mono font-bold transition-all flex items-center gap-2 ${
+                              subAbaAlocacao === "setores"
+                                ? "bg-cyan-500 text-black shadow-md shadow-cyan-500/20"
+                                : "text-neutral-400 hover:text-white"
+                            }`}
+                          >
+                            <span className="w-2 h-2 rounded-full bg-current" />
+                            Concentração Setorial & HHI
+                            {resumoCarteira.analise_concentracao && (
+                              <span className="text-[10px] px-1.5 py-0.2 rounded bg-black/40 font-extrabold text-white">
+                                {resumoCarteira.analise_concentracao.hhi_ativos.toFixed(0)} pts
+                              </span>
+                            )}
+                          </button>
+                        </div>
+
+                        {subAbaAlocacao === "setores" && resumoCarteira.analise_concentracao && (
+                          <div className="text-xs font-mono text-neutral-400 flex items-center gap-2">
+                            <span>HHI Setorial:</span>
+                            <span className="text-cyan-400 font-bold">
+                              {resumoCarteira.analise_concentracao.hhi_setores.toFixed(0)} pts
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {subAbaAlocacao === "classes" ? (
+                        <MacroAllocationView
+                          resumo={resumoCarteira}
+                          ocultarValores={ocultarValores}
+                        />
+                      ) : (
+                        <SectorConcentrationView
+                          analise={resumoCarteira.analise_concentracao}
+                          patrimonioTotal={resumoCarteira.patrimonio_total}
+                          ocultarValores={ocultarValores}
+                        />
+                      )}
+                    </div>
                   </>
                 ) : (
                   <div className="p-12 text-center text-neutral-400 font-mono text-xs">

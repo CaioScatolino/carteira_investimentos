@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"time"
 
+	"carteira_investimentos/server/internal/domain"
 	"carteira_investimentos/server/internal/storage"
 )
 
@@ -276,23 +278,35 @@ func (s *Service) ObterResumoCarteira(ctx context.Context, usuarioID int64) (*Re
 		var precoTeto float64
 		var scoreFund int
 		sinal := "AGUARDAR"
+		var ativoSnap *domain.Ativo
+		nomeAtivo := p.Ticker
+		subsetor := ""
+		segmento := ""
 
 		// Se o ativo for de renda variável e estiver no nosso Snapshot, pegamos a cotação e valuation reais
 		if s.store != nil && (p.Classe == ClasseAcaoBR || p.Classe == ClasseFII || p.Classe == ClasseInternacional) {
-			if ativo, err := s.store.Obter(p.Ticker); err == nil && ativo != nil {
-				if ativo.PrecoAtual > 0 {
-					cotacaoAtual = ativo.PrecoAtual
+			if at, err := s.store.Obter(p.Ticker); err == nil && at != nil {
+				ativoSnap = at
+				if at.PrecoAtual > 0 {
+					cotacaoAtual = at.PrecoAtual
 				}
-				scoreFund = int(ativo.Score)
-				if ativo.PrecoTetoConsolidado > 0 {
-					precoTeto = ativo.PrecoTetoConsolidado
-				} else if ativo.PrecoTetoBazin > 0 {
-					precoTeto = ativo.PrecoTetoBazin
-				} else if ativo.ValorGraham > 0 {
-					precoTeto = ativo.ValorGraham
+				scoreFund = int(at.Score)
+				if at.PrecoTetoConsolidado > 0 {
+					precoTeto = at.PrecoTetoConsolidado
+				} else if at.PrecoTetoBazin > 0 {
+					precoTeto = at.PrecoTetoBazin
+				} else if at.ValorGraham > 0 {
+					precoTeto = at.ValorGraham
 				}
+				if at.Nome != "" {
+					nomeAtivo = at.Nome
+				}
+				subsetor = at.Subsetor
+				segmento = at.Segmento
 			}
 		}
+
+		setor := determinarSetorAtivo(p, ativoSnap)
 
 		valorMercado := p.Quantidade * cotacaoAtual
 		lucroValor := valorMercado - p.ValorAplicado
@@ -339,6 +353,10 @@ func (s *Service) ObterResumoCarteira(ctx context.Context, usuarioID int64) (*Re
 
 		posicoesConsolidadas = append(posicoesConsolidadas, PosicaoConsolidada{
 			Posicao:                 p,
+			NomeAtivo:               nomeAtivo,
+			Setor:                   setor,
+			Subsetor:                subsetor,
+			Segmento:                segmento,
 			CotacaoAtual:            cotacaoAtual,
 			ValorAtualMercado:       valorMercado,
 			LucroPrejuizoValor:      lucroValor,
@@ -458,6 +476,8 @@ func (s *Service) ObterResumoCarteira(ctx context.Context, usuarioID int64) (*Re
 		rentabilidadeTotalGeralPct = (lucroTotalComProventos / totalInvestido) * 100
 	}
 
+	analiseConcentracao := calcularAnaliseConcentracao(patrimonioTotal, posicoesConsolidadas)
+
 	return &ResumoCarteira{
 		PatrimonioTotal:         patrimonioTotal,
 		TotalInvestido:          totalInvestido,
@@ -470,7 +490,237 @@ func (s *Service) ObterResumoCarteira(ctx context.Context, usuarioID int64) (*Re
 		TotalProventosRecebidos: totalProventosHistoricoGeral,
 		LucroTotalComProventos:  lucroTotalComProventos,
 		RentabilidadeTotalPct:   rentabilidadeTotalGeralPct,
+		AnaliseConcentracao:     analiseConcentracao,
 	}, nil
+}
+
+// determinarSetorAtivo classifica de forma unificada o setor econômico do ativo na B3.
+func determinarSetorAtivo(p Posicao, ativo *domain.Ativo) string {
+	tk := strings.ToUpper(strings.TrimSpace(p.Ticker))
+
+	// Renda Fixa
+	if p.Classe == ClasseRendaFixa || strings.HasPrefix(tk, "TESOURO") || strings.HasPrefix(tk, "CDB") || strings.HasPrefix(tk, "LCI") || strings.HasPrefix(tk, "LCA") || strings.HasPrefix(tk, "CRI") || strings.HasPrefix(tk, "CRA") || strings.HasPrefix(tk, "DEB") {
+		if strings.HasPrefix(tk, "TESOURO") {
+			return "Renda Fixa Pública (Tesouro)"
+		}
+		return "Renda Fixa Privada (CDB/LCI/LCA)"
+	}
+
+	// Caixa
+	if p.Classe == ClasseCaixa || tk == "CAIXA" {
+		return "Caixa & Oportunidade"
+	}
+
+	// Internacional
+	if p.Classe == ClasseInternacional {
+		return "Internacional / Global"
+	}
+
+	if ativo != nil {
+		if p.Classe == ClasseFII {
+			seg := strings.TrimSpace(ativo.Segmento)
+			if seg != "" && seg != "Indefinido" && seg != "-" {
+				return "FII - " + seg
+			}
+			set := strings.TrimSpace(ativo.Setor)
+			if set != "" && set != "Indefinido" && set != "-" {
+				return set
+			}
+			return "Fundos Imobiliários"
+		}
+
+		// Ações
+		set := strings.TrimSpace(ativo.Setor)
+		if set != "" && set != "Indefinido" && set != "-" {
+			return set
+		}
+		sub := strings.TrimSpace(ativo.Subsetor)
+		if sub != "" && sub != "Indefinido" && sub != "-" {
+			return sub
+		}
+		seg := strings.TrimSpace(ativo.Segmento)
+		if seg != "" && seg != "Indefinido" && seg != "-" {
+			return seg
+		}
+	}
+
+	if p.Classe == ClasseFII || strings.HasSuffix(tk, "11") {
+		return "Fundos Imobiliários"
+	}
+	return "Ações Brasil"
+}
+
+// calcularAnaliseConcentracao processa a decomposição por setores e o Índice Herfindahl-Hirschman (HHI).
+func calcularAnaliseConcentracao(patrimonioTotal float64, posicoes []PosicaoConsolidada) *AnaliseConcentracaoHHI {
+	if patrimonioTotal <= 0 || len(posicoes) == 0 {
+		return &AnaliseConcentracaoHHI{
+			HHIAtivos:            0,
+			ClassificacaoAtivos:  "BEM_DIVERSIFICADO",
+			DescricaoHHIAtivos:   "Carteira sem posições ativas ou sem patrimônio consolidado.",
+			HHISetores:           0,
+			ClassificacaoSetores: "BEM_DIVERSIFICADO",
+			DescricaoHHISetores:  "Sem concentração setorial.",
+			Setores:              []SetorConsolidado{},
+			Alertas:              []string{"Carteira sem ativos em custódia."},
+		}
+	}
+
+	// 1. Agrupamento por Ticker para HHI de Ativos (consolidando posições fracionadas em mais de uma corretora)
+	exposicaoPorTicker := make(map[string]float64)
+	for _, p := range posicoes {
+		tk := strings.ToUpper(strings.TrimSpace(p.Ticker))
+		exposicaoPorTicker[tk] += p.ValorAtualMercado
+	}
+
+	var hhiAtivos float64
+	var maiorAtivoTicker string
+	var maiorAtivoPct float64
+
+	for tk, val := range exposicaoPorTicker {
+		pct := (val / patrimonioTotal) * 100.0
+		hhiAtivos += pct * pct
+		if pct > maiorAtivoPct {
+			maiorAtivoPct = pct
+			maiorAtivoTicker = tk
+		}
+	}
+
+	// 2. Agrupamento por Setor
+	type acumuladorSetor struct {
+		nome            string
+		classePrincipal ClasseAtivo
+		valor           float64
+		tickers         []string
+	}
+	mapaSetores := make(map[string]*acumuladorSetor)
+
+	for _, p := range posicoes {
+		setorNome := strings.TrimSpace(p.Setor)
+		if setorNome == "" {
+			setorNome = "Outros"
+		}
+		tk := strings.ToUpper(strings.TrimSpace(p.Ticker))
+
+		ac, existe := mapaSetores[setorNome]
+		if !existe {
+			ac = &acumuladorSetor{
+				nome:            setorNome,
+				classePrincipal: p.Classe,
+				valor:           0,
+				tickers:         make([]string, 0),
+			}
+			mapaSetores[setorNome] = ac
+		}
+		ac.valor += p.ValorAtualMercado
+
+		jaTem := false
+		for _, t := range ac.tickers {
+			if t == tk {
+				jaTem = true
+				break
+			}
+		}
+		if !jaTem {
+			ac.tickers = append(ac.tickers, tk)
+		}
+	}
+
+	// 3. HHI dos Setores e lista consolidada
+	var hhiSetores float64
+	var maiorSetorNome string
+	var maiorSetorPct float64
+	setores := make([]SetorConsolidado, 0, len(mapaSetores))
+
+	for _, ac := range mapaSetores {
+		pct := (ac.valor / patrimonioTotal) * 100.0
+		hhiSetores += pct * pct
+
+		if pct > maiorSetorPct {
+			maiorSetorPct = pct
+			maiorSetorNome = ac.nome
+		}
+
+		status := "DIVERSIFICADO"
+		if pct > 30.0 {
+			status = "SOBRECONCENTRADO"
+		} else if pct > 20.0 {
+			status = "MODERADO"
+		}
+
+		setores = append(setores, SetorConsolidado{
+			Nome:                 ac.nome,
+			ClassePrincipal:      ac.classePrincipal,
+			ValorAtualMercado:    ac.valor,
+			PercentualNaCarteira: math.Round(pct*10) / 10,
+			QuantidadeAtivos:     len(ac.tickers),
+			Tickers:              ac.tickers,
+			StatusConcentracao:   status,
+		})
+	}
+
+	// Ordena setores por maior percentual na carteira (decrescente)
+	sort.Slice(setores, func(i, j int) bool {
+		return setores[i].PercentualNaCarteira > setores[j].PercentualNaCarteira
+	})
+
+	// 4. Classificações institucionais
+	classificacaoAtivos := "BEM_DIVERSIFICADO"
+	descricaoAtivos := "Excelente pulverização de risco não-sistemático entre emissores."
+	if hhiAtivos >= 2500 {
+		classificacaoAtivos = "CONCENTRADO"
+		descricaoAtivos = "Alta concentração. Carteira vulnerável à performance de poucos ativos."
+	} else if hhiAtivos >= 1500 {
+		classificacaoAtivos = "MODERADO"
+		descricaoAtivos = "Concentração moderada. Poucos ativos carregam parcela relevante do patrimônio."
+	}
+
+	classificacaoSetores := "BEM_DIVERSIFICADO"
+	descricaoSetores := "Boa descorrelação setorial entre múltiplos ciclos de mercado."
+	if hhiSetores >= 3000 {
+		classificacaoSetores = "CONCENTRADO"
+		descricaoSetores = "Forte dependência de um único setor econômico ou segmento de mercado."
+	} else if hhiSetores >= 1800 {
+		classificacaoSetores = "MODERADO"
+		descricaoSetores = "Exposição setorial moderada. Recomenda-se diversificar novos aportes."
+	}
+
+	// 5. Geração de alertas prudenciais
+	alertas := make([]string, 0)
+	for tk, val := range exposicaoPorTicker {
+		pct := (val / patrimonioTotal) * 100.0
+		if pct > 25.0 {
+			alertas = append(alertas, fmt.Sprintf("🚨 Risco severo: %s domina %.1f%% do patrimônio consolidado.", tk, pct))
+		} else if pct > 15.0 {
+			alertas = append(alertas, fmt.Sprintf("⚠️ Alerta prudencial: %s representa %.1f%% da carteira (acima do teto de 15%%).", tk, pct))
+		}
+	}
+
+	for _, set := range setores {
+		if set.PercentualNaCarteira > 50.0 {
+			alertas = append(alertas, fmt.Sprintf("🚨 Sobreconcentração setorial: '%s' representa %.1f%% do seu patrimônio.", set.Nome, set.PercentualNaCarteira))
+		} else if set.PercentualNaCarteira > 30.0 {
+			alertas = append(alertas, fmt.Sprintf("⚠️ Atenção setorial: '%s' concentra %.1f%% da carteira (acima do limite sugerido de 30%%).", set.Nome, set.PercentualNaCarteira))
+		}
+	}
+
+	if len(alertas) == 0 {
+		alertas = append(alertas, "✅ Carteira blindada: Nenhum ativo excede 15% e nenhum setor excede 30% do patrimônio.")
+	}
+
+	return &AnaliseConcentracaoHHI{
+		HHIAtivos:            math.Round(hhiAtivos*10) / 10,
+		ClassificacaoAtivos:  classificacaoAtivos,
+		DescricaoHHIAtivos:   descricaoAtivos,
+		HHISetores:           math.Round(hhiSetores*10) / 10,
+		ClassificacaoSetores: classificacaoSetores,
+		DescricaoHHISetores:  descricaoSetores,
+		MaiorAtivoTicker:     maiorAtivoTicker,
+		MaiorAtivoPercentual: math.Round(maiorAtivoPct*10) / 10,
+		MaiorSetorNome:       maiorSetorNome,
+		MaiorSetorPercentual: math.Round(maiorSetorPct*10) / 10,
+		Setores:              setores,
+		Alertas:              alertas,
+	}
 }
 
 // ListarTransacoes retorna o extrato de compras e vendas do usuário.

@@ -78,21 +78,52 @@ type CriarPosicaoRequest struct {
 // PosicaoConsolidada enriquece a posição física com a cotação, valuation e proventos acumulados.
 type PosicaoConsolidada struct {
 	Posicao
-	CotacaoAtual           float64 `json:"cotacao_atual"`
-	ValorAtualMercado      float64 `json:"valor_atual_mercado"`
-	LucroPrejuizoValor     float64 `json:"lucro_prejuizo_valor"`
-	RentabilidadePct       float64 `json:"rentabilidade_pct"`
-	PrecoTetoEstimado      float64 `json:"preco_teto_estimado"`
-	MargemSegurancaPct     float64 `json:"margem_seguranca_pct"`
-	ScoreFundamentalista   int     `json:"score_fundamentalista"`
-	SinalRebalanceamento   string  `json:"sinal_rebalanceamento"`   // 'COMPRAR_APORTE', 'AGUARDAR', 'REAVALIAR'
-	PercentualNaClasse     float64 `json:"percentual_na_classe"`     // Peso relativo do ativo dentro da sua classe (ex: 50.0% das Ações)
-	PercentualNaCarteira   float64 `json:"percentual_na_carteira"`   // Peso absoluto do ativo na carteira inteira (ex: 10.0% do Total)
-	TotalProventos         float64 `json:"total_proventos"`          // Total em R$ de proventos recebidos deste ativo
-	PrecoMedioDescontado   float64 `json:"preco_medio_descontado"`   // Preço Médio subtraindo os proventos recebidos por cota
-	LucroComProventos      float64 `json:"lucro_com_proventos"`      // Lucro Total = Ganho de Capital + Proventos
-	RentabilidadeTotalPct  float64 `json:"rentabilidade_total_pct"`  // Rentabilidade % considerando Valorização + Proventos
+	NomeAtivo               string  `json:"nome_ativo,omitempty"`
+	Setor                   string  `json:"setor,omitempty"`
+	Subsetor                string  `json:"subsetor,omitempty"`
+	Segmento                string  `json:"segmento,omitempty"`
+	CotacaoAtual            float64 `json:"cotacao_atual"`
+	ValorAtualMercado       float64 `json:"valor_atual_mercado"`
+	LucroPrejuizoValor      float64 `json:"lucro_prejuizo_valor"`
+	RentabilidadePct        float64 `json:"rentabilidade_pct"`
+	PrecoTetoEstimado       float64 `json:"preco_teto_estimado"`
+	MargemSegurancaPct      float64 `json:"margem_seguranca_pct"`
+	ScoreFundamentalista    int     `json:"score_fundamentalista"`
+	SinalRebalanceamento    string  `json:"sinal_rebalanceamento"`   // 'COMPRAR_APORTE', 'AGUARDAR', 'REAVALIAR'
+	PercentualNaClasse      float64 `json:"percentual_na_classe"`     // Peso relativo do ativo dentro da sua classe (ex: 50.0% das Ações)
+	PercentualNaCarteira    float64 `json:"percentual_na_carteira"`   // Peso absoluto do ativo na carteira inteira (ex: 10.0% do Total)
+	TotalProventos          float64 `json:"total_proventos"`          // Total em R$ de proventos recebidos deste ativo
+	PrecoMedioDescontado    float64 `json:"preco_medio_descontado"`   // Preço Médio subtraindo os proventos recebidos por cota
+	LucroComProventos       float64 `json:"lucro_com_proventos"`      // Lucro Total = Ganho de Capital + Proventos
+	RentabilidadeTotalPct   float64 `json:"rentabilidade_total_pct"`  // Rentabilidade % considerando Valorização + Proventos
 	ProventosYieldOnCostPct float64 `json:"proventos_yoc_pct"`       // Yield on Cost Histórico (% de proventos sobre o capital investido)
+}
+
+// SetorConsolidado agrupa os ativos por setor econômico / segmento oficial da B3.
+type SetorConsolidado struct {
+	Nome                 string      `json:"nome"`
+	ClassePrincipal      ClasseAtivo `json:"classe_principal"`
+	ValorAtualMercado    float64     `json:"valor_atual_mercado"`
+	PercentualNaCarteira float64     `json:"percentual_na_carteira"` // % do patrimônio total (ex: 28.5%)
+	QuantidadeAtivos     int         `json:"quantidade_ativos"`
+	Tickers              []string    `json:"tickers"`                // Lista de tickers participantes
+	StatusConcentracao   string      `json:"status_concentracao"`    // "DIVERSIFICADO", "MODERADO", "SOBRECONCENTRADO"
+}
+
+// AnaliseConcentracaoHHI consolida as métricas do Índice Herfindahl-Hirschman e alertas prudenciais.
+type AnaliseConcentracaoHHI struct {
+	HHIAtivos            float64            `json:"hhi_ativos"`             // 0 a 10.000 (Soma dos pesos dos ativos ao quadrado)
+	ClassificacaoAtivos  string             `json:"classificacao_ativos"`  // "BEM_DIVERSIFICADO" (< 1500), "MODERADO" (1500-2500), "CONCENTRADO" (>= 2500)
+	DescricaoHHIAtivos   string             `json:"descricao_hhi_ativos"`  // Texto explicativo institucional
+	HHISetores           float64            `json:"hhi_setores"`            // 0 a 10.000 (Soma dos pesos dos setores ao quadrado)
+	ClassificacaoSetores string             `json:"classificacao_setores"` // "BEM_DIVERSIFICADO", "MODERADO", "CONCENTRADO"
+	DescricaoHHISetores  string             `json:"descricao_hhi_setores"` // Texto explicativo institucional
+	MaiorAtivoTicker     string             `json:"maior_ativo_ticker"`     // Ticker de maior peso
+	MaiorAtivoPercentual float64            `json:"maior_ativo_pct"`        // % da carteira do maior ativo
+	MaiorSetorNome       string             `json:"maior_setor_nome"`       // Nome do maior setor
+	MaiorSetorPercentual float64            `json:"maior_setor_pct"`        // % da carteira do maior setor
+	Setores              []SetorConsolidado `json:"setores"`                // Lista ordenada por maior exposição financeira
+	Alertas              []string           `json:"alertas"`                // Alertas pedagógicos de risco
 }
 
 // ClasseConsolidada agrupa os dados de uma macro-classe para a visão hierárquica por níveis e gráficos de composição.
@@ -124,4 +155,5 @@ type ResumoCarteira struct {
 	TotalProventosRecebidos float64                 `json:"total_proventos_recebidos"`
 	LucroTotalComProventos  float64                 `json:"lucro_total_com_proventos"`
 	RentabilidadeTotalPct   float64                 `json:"rentabilidade_total_pct"`
+	AnaliseConcentracao     *AnaliseConcentracaoHHI `json:"analise_concentracao,omitempty"`
 }

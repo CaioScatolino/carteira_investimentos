@@ -19,6 +19,10 @@ export interface Posicao {
 }
 
 export interface PosicaoConsolidada extends Posicao {
+  nome_ativo?: string;
+  setor?: string;
+  subsetor?: string;
+  segmento?: string;
   cotacao_atual: number;
   valor_atual_mercado: number;
   lucro_prejuizo_valor: number;
@@ -34,6 +38,31 @@ export interface PosicaoConsolidada extends Posicao {
   lucro_com_proventos?: number;
   rentabilidade_total_pct?: number;
   proventos_yoc_pct?: number;
+}
+
+export interface SetorConsolidado {
+  nome: string;
+  classe_principal: ClasseAtivo;
+  valor_atual_mercado: number;
+  percentual_na_carteira: number;
+  quantidade_ativos: number;
+  tickers: string[];
+  status_concentracao: "DIVERSIFICADO" | "MODERADO" | "SOBRECONCENTRADO" | string;
+}
+
+export interface AnaliseConcentracaoHHI {
+  hhi_ativos: number;
+  classificacao_ativos: "BEM_DIVERSIFICADO" | "MODERADO" | "CONCENTRADO" | string;
+  descricao_hhi_ativos: string;
+  hhi_setores: number;
+  classificacao_setores: "BEM_DIVERSIFICADO" | "MODERADO" | "CONCENTRADO" | string;
+  descricao_hhi_setores: string;
+  maior_ativo_ticker: string;
+  maior_ativo_pct: number;
+  maior_setor_nome: string;
+  maior_setor_pct: number;
+  setores: SetorConsolidado[];
+  alertas: string[];
 }
 
 export interface ClasseConsolidada {
@@ -63,6 +92,7 @@ export interface ResumoCarteira {
   total_proventos_recebidos?: number;
   lucro_total_com_proventos?: number;
   rentabilidade_total_pct?: number;
+  analise_concentracao?: AnaliseConcentracaoHHI;
 }
 
 export interface CriarPosicaoRequest {
